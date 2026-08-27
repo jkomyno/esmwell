@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.src.json",
+  "include": ["src"],
+  "compilerOptions": {
+    // Specify an output folder for all emitted files.
+    "outDir": "build",
+    // See: https://github.com/egoist/tsup/issues/571#issuecomment-1760052931
+    "composite": false,
+    // Only output d.ts files and not JavaScript files.
+    "emitDeclarationOnly": false,
+    // ES2023 is the language level the runner accepts and emits; DOM globals
+    // (Worker, URL, Blob, …) are part of the runtime contract.
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  }
+}

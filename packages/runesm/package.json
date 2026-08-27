@@ -1,0 +1,50 @@
+{
+  "private": false,
+  "name": "runesm",
+  "version": "0.1.0",
+  "description": "ESM-only in-browser code runner with judge and REPL modes over a web-worker foundation",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jkomyno/runesm.git",
+    "directory": "packages/runesm"
+  },
+  "author": {
+    "name": "Alberto Schiabel",
+    "email": "alberto.schiabel@gmail.com"
+  },
+  "license": "MIT",
+  "files": [
+    "build",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "types": "./build/index.d.mts",
+  "__exports-comment": "// Import-only export map: runesm targets browsers and ships ESM exclusively",
+  "exports": {
+    ".": {
+      "import": {
+        "@jkomyno/source": "./src/index.ts",
+        "types": "./build/index.d.mts",
+        "default": "./build/index.mjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "clean": "rimraf build .turbo",
+    "build": "tsdown",
+    "build:watch": "tsdown --watch",
+    "check:exports": "attw --pack . --profile esm-only",
+    "typecheck": "pnpm typecheck:src && pnpm typecheck:test",
+    "typecheck:src": "tsc --noEmit -p tsconfig.build.json",
+    "typecheck:test": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit --passWithNoTests",
+    "test:integration": "vitest run --project integration --passWithNoTests"
+  },
+  "dependencies": {
+    "acorn": "catalog:"
+  }
+}
