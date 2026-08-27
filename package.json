@@ -1,0 +1,57 @@
+{
+  "private": true,
+  "type": "module",
+  "name": "@jkomyno/pnpm-monorepo-template",
+  "description": "Pragmatic TypeScript monorepo template with pnpm, Turborepo, and Vitest",
+  "repository": "https://github.com/jkomyno/pnpm-monorepo-template.git",
+  "author": {
+    "name": "Alberto Schiabel",
+    "email": "alberto.schiabel@gmail.com"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "turbo run build",
+    "build:watch": "turbo run build:watch",
+    "check:exports": "turbo run check:exports",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "format:ci": "oxfmt . --check",
+    "format": "oxfmt .",
+    "lint:ci": "pnpm format:ci && oxlint .",
+    "lint": "pnpm format && oxlint . --fix --fix-dangerously",
+    "lint:fix": "pnpm lint",
+    "test": "pnpm -r --if-present test",
+    "test:unit": "pnpm -r --if-present test:unit",
+    "test:integration": "pnpm -r --if-present test:integration",
+    "bench": "turbo run bench",
+    "bench:watch": "turbo run bench:watch",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install",
+    "release": "pnpm build && pnpm -r --filter='!@jkomyno/example' exec -- npm publish --provenance"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "@changesets/cli": "catalog:",
+    "@types/node": "catalog:",
+    "lefthook": "catalog:",
+    "lint-staged": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "pkg-pr-new": "catalog:",
+    "publint": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,cjs,mjs,cts,mts,json,jsonc,md,yml,yaml}": "oxfmt --check --no-error-on-unmatched-pattern",
+    "*.{js,jsx,ts,tsx,cjs,mjs,cts,mts}": "oxlint --no-error-on-unmatched-pattern"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "packageManager": "pnpm@11.3.0"
+}
