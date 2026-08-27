@@ -16,7 +16,7 @@ After meaningful changes, update the closest owning guidance when purpose, durab
 
 ## Project Identity
 
-This repository is a pragmatic TypeScript monorepo template built around pnpm workspaces, Turborepo, Vitest, tsdown, oxfmt, oxlint, Changesets, and mise. Preserve its value as a reusable starting point: examples should teach a pattern without assuming a specific product domain.
+This repository builds `runesm` — an ESM-only in-browser code runner with judge and REPL modes over one web-worker foundation — as a pnpm/Turborepo monorepo maintained with Vitest, tsdown, oxfmt, oxlint, Changesets, and mise. The library package lives in `packages/runesm`; a demo playground may live under `apps/`. Preserve the runner's invariants: user code runs as ES modules inside a worker, bare imports resolve via esm.sh (honor the `autoInstall`/`deps` options), and error messages stay self-contained and actionable.
 
 ## Tooling Rules
 

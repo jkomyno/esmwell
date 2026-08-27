@@ -1,8 +1,8 @@
 {
   "private": true,
   "type": "module",
-  "name": "@jkomyno/pnpm-monorepo-template",
-  "description": "Pragmatic TypeScript monorepo template with pnpm, Turborepo, and Vitest",
+  "name": "runesm",
+  "description": "ESM-only in-browser code runner with judge and REPL modes over a worker foundation",
   "repository": "https://github.com/jkomyno/pnpm-monorepo-template.git",
   "author": {
     "name": "Alberto Schiabel",
@@ -27,7 +27,7 @@
     "bench:watch": "turbo run bench:watch",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install",
-    "release": "pnpm build && pnpm -r --filter='!@jkomyno/example' exec -- npm publish --provenance"
+    "release": "pnpm build && pnpm -r exec -- npm publish --provenance"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",

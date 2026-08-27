@@ -1,8 +1,8 @@
-# pnpm-monorepo-template
+# runesm
 
-[![Github Actions](https://github.com/jkomyno/pnpm-monorepo-template/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/jkomyno/pnpm-monorepo-template/actions/workflows/ci.yaml)
+[![Github Actions](https://github.com/jkomyno/runesm/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/jkomyno/runesm/actions/workflows/ci.yaml)
 
-> Pragmatic template for a `TypeScript` monorepo with [`pnpm`](https://pnpm.io), [`turborepo`](https://turborepo.org), and [`vitest`](https://vitest.dev/).
+> ESM-only in-browser code runner with judge and REPL modes, over one web-worker foundation.
 
 The development toolchain is pinned in [`.mise.toml`](./.mise.toml), with tool artifacts locked in [`mise.lock`](./mise.lock).
 
@@ -22,42 +22,14 @@ The development toolchain is pinned in [`.mise.toml`](./.mise.toml), with tool a
 
 ## Getting Started
 
-Use this repository as a template when you want a fresh `TypeScript` monorepo with `pnpm`, `turborepo`, `vitest`, `oxfmt`, `oxlint`, Changesets, and GitHub Actions already wired together.
+`runesm` runs user-authored JavaScript, as ES modules, inside a web worker. It ships two modes over the same foundation:
 
-There are two common ways to create your own repository from it.
+- **judge mode** — run a module's named exports against expected values, with per-case results, captured console output, and hard timeouts.
+- **REPL mode** — a persistent session where each input sees the previous inputs' declarations, like a browser-native Node REPL.
 
-### Create a Repository from GitHub
+Bare imports in user code (e.g. `import { shuffle } from 'lodash-es'`) resolve automatically from [esm.sh](https://esm.sh); pin versions explicitly when you need deterministic resolution.
 
-1. Open [`jkomyno/pnpm-monorepo-template`](https://github.com/jkomyno/pnpm-monorepo-template).
-2. Click **Use this template**.
-3. Choose **Create a new repository**.
-4. Pick the owner, repository name, visibility, and whether you want to include all branches.
-5. Click **Create repository**.
-6. Clone your new repository:
-
-```bash
-git clone git@github.com:<your-github-user-or-org>/<your-new-repo>.git
-cd <your-new-repo>
-```
-
-### Create a Repository with `gh`
-
-If you prefer the GitHub CLI, create and clone the new repository in one command:
-
-```bash
-gh repo create <your-github-user-or-org>/<your-new-repo> \
-  --template jkomyno/pnpm-monorepo-template \
-  --private \
-  --clone
-
-cd <your-new-repo>
-```
-
-Use `--public` instead of `--private` if the repository should be public.
-
-### Set Up the Project Locally
-
-This template pins Node.js and pnpm in [`.mise.toml`](./.mise.toml). Install [mise](https://mise.jdx.dev/getting-started.html), then let it provision the repository toolchain:
+To work on the repository locally, install [mise](https://mise.jdx.dev/getting-started.html) and let it provision the pinned toolchain:
 
 ```bash
 mise trust
@@ -69,18 +41,10 @@ pnpm test
 
 Use mise as the source of truth when changing tool versions, and run `mise lock` after an update to refresh the locked tool artifacts. The `packageManager` field in [`package.json`](./package.json) mirrors the pnpm pin for compatibility with package-manager-aware tooling.
 
-After that, make the template yours:
-
-1. Replace the `@jkomyno/*` package scope in the local `package.json` files with your own npm scope.
-2. Update the `name`, `description`, `repository`, `author`, and package visibility fields in the root and package-level `package.json` files.
-3. Update README badges, author details, trusted-publisher examples, and links so they point to your new GitHub repository.
-4. Remove, rename, or replace the example packages in [`packages/`](packages/) once you know what your monorepo should contain.
-
-At this point the repository is ready for normal development. Use `pnpm build`, `pnpm test`, `pnpm lint:ci`, and `pnpm changeset` as the main day-to-day commands.
-
 ## What's Included
 
-- `pnpm` workspace, whose configuration is stored in [`pnpm-workspace.yaml`](./pnpm-workspace.yaml). Two example packages are included, [`common-utils`](packages/common-utils) and [`example`](packages/example), with the latter importing `common-utils` as a dependency. All local packages are decorated with a `@jkomyno/*` scope (you may want to substitute these instances in the `name` entries of any `package.json` with yours or your company's name).
+- The [`runesm`](packages/runesm) package: the in-browser code runner itself.
+- `pnpm` workspace, whose configuration is stored in [`pnpm-workspace.yaml`](./pnpm-workspace.yaml).
 - `tsdown` bundler, whose configuration is stored in [`tsdown.config.base.ts`](./tsdown.config.base.ts).
 - `turborepo`, whose configuration is stored in [`turbo.json`](./turbo.json)
 - centralized dependency versions through the `pnpm` catalog in [`pnpm-workspace.yaml`](./pnpm-workspace.yaml), plus install hardening with release-age gating and targeted transitive dependency overrides.
@@ -120,7 +84,7 @@ Releases use [npm trusted publishing](https://docs.npmjs.com/trusted-publishers)
 2. On [npmjs.com](https://www.npmjs.com), open the package → **Package settings** → **Trusted Publisher**.
 3. Choose **GitHub Actions** and set:
    - **Organization or user**: your GitHub org or username (e.g. `jkomyno`)
-   - **Repository**: this repo name (e.g. `pnpm-monorepo-template`)
+   - **Repository**: this repo name (e.g. `runesm`)
    - **Workflow filename**: `release.yaml` (must match exactly, including extension)
 4. Save. Future publishes from the **Release** workflow will use OIDC; no tokens required.
 
@@ -130,13 +94,13 @@ Repeat for each publishable package in the monorepo. Optional: under **Publishin
 
 Tests live in each package's `__tests__` directory. Put isolated, deterministic tests in `__tests__/unit` and package-boundary or adapter tests in `__tests__/integration`.
 
-`pnpm test` runs both groups locally and in CI. Keep required integration tests hermetic; put tests that need external infrastructure behind an explicit, opt-in script or workflow instead of the default verification path.
+`pnpm test` runs both groups locally and in CI, in the Node realm and without network access. Tests that need a real browser run through a separate opt-in script (`test:browser`). Keep required integration tests hermetic; put tests that need external infrastructure behind an explicit, opt-in script or workflow instead of the default verification path.
 
 ## FAQ
 
 1. How do I add a new package to the local workspace?
 
-- Create a folder in [`packages/`](packages/) with a `package.json` and `tsconfig.json`. Extend [`tsconfig.src.json`](./tsconfig.src.json) for publishable source builds and [`tsconfig.test.json`](./tsconfig.test.json) for packages that typecheck source and tests together. Use [`common-utils`](packages/common-utils) as the publishable-library example and [`example`](packages/example) as the private-package example.
+- Create a folder in [`packages/`](packages/) with a `package.json` and `tsconfig.json`. Extend [`tsconfig.src.json`](./tsconfig.src.json) for publishable source builds and [`tsconfig.test.json`](./tsconfig.test.json) for packages that typecheck source and tests together. Use [`runesm`](packages/runesm) as the publishable-library example.
 
 2. How do I add a new dependency that should be available to each package in the local workspace?
 
@@ -156,4 +120,4 @@ Give a ⭐️ if this project helped or inspired you!
 ## 📝 License
 
 Built with ❤️ by [Alberto Schiabel](https://github.com/jkomyno).<br />
-This project is [MIT](https://github.com/jkomyno/pnpm-monorepo-template/blob/main/LICENSE) licensed.
+This project is [MIT](https://github.com/jkomyno/runesm/blob/main/LICENSE) licensed.
