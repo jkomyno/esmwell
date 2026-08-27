@@ -1,4 +1,5 @@
 import type { Node } from 'acorn'
+import { lineOfNode, readNodeBoolean, readNodeChild, readNodeString, walkNodes } from './walk'
 
 /** Policy rules the gate enforces on user-submitted code. */
 export type PolicyRule = 'var' | 'eval' | 'function-constructor'
@@ -33,33 +34,37 @@ export class PolicyViolation extends Error {
 export function checkPolicy(ast: Node): PolicyViolation[] {
   const violations: PolicyViolation[] = []
 
-  visitNode(ast, null, '', (node, parent, key) => {
-    if (node.type === 'VariableDeclaration' && readString(node, 'kind') === 'var') {
+  walkNodes(ast, (node, parent, key) => {
+    if (node.type === 'VariableDeclaration' && readNodeString(node, 'kind') === 'var') {
       violations.push(
         new PolicyViolation(
           'var',
-          `var declarations are not allowed — use let or const instead (line ${lineOf(node)})`,
-          lineOf(node),
+          `var declarations are not allowed — use let or const instead (line ${lineOfNode(node)})`,
+          lineOfNode(node),
         ),
       )
       return
     }
 
-    if (node.type === 'Identifier' && readString(node, 'name') === 'eval' && isEvalReference(parent, key)) {
+    if (node.type === 'Identifier' && readNodeString(node, 'name') === 'eval' && isEvalReference(parent, key)) {
       violations.push(
-        new PolicyViolation('eval', `eval is not allowed in submitted code (line ${lineOf(node)})`, lineOf(node)),
+        new PolicyViolation(
+          'eval',
+          `eval is not allowed in submitted code (line ${lineOfNode(node)})`,
+          lineOfNode(node),
+        ),
       )
       return
     }
 
     if (node.type === 'CallExpression' || node.type === 'NewExpression' || node.type === 'OptionalCallExpression') {
-      const callee = readNode(node, 'callee')
-      if (callee !== null && callee.type === 'Identifier' && readString(callee, 'name') === 'Function') {
+      const callee = readNodeChild(node, 'callee')
+      if (callee !== null && callee.type === 'Identifier' && readNodeString(callee, 'name') === 'Function') {
         violations.push(
           new PolicyViolation(
             'function-constructor',
-            `Function constructor is not allowed in submitted code (line ${lineOf(callee)})`,
-            lineOf(callee),
+            `Function constructor is not allowed in submitted code (line ${lineOfNode(callee)})`,
+            lineOfNode(callee),
           ),
         )
       }
@@ -67,30 +72,6 @@ export function checkPolicy(ast: Node): PolicyViolation[] {
   })
 
   return violations
-}
-
-type Visitor = (node: Node, parent: Node | null, key: string) => void
-
-const isNode = (value: unknown): value is Node =>
-  typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string'
-
-/**
- * Depth-first traversal of every AST node, passing the parent node and the
- * property name the node was found under. Shared nodes (shorthand object
- * properties use the same node for key and value) are visited once.
- */
-function visitNode(node: Node, parent: Node | null, key: string, visitor: Visitor): void {
-  visitor(node, parent, key)
-  const visited = new Set<unknown>()
-  for (const [childKey, value] of Object.entries(node)) {
-    const children = Array.isArray(value) ? value : [value]
-    for (const child of children) {
-      if (isNode(child) && !visited.has(child)) {
-        visited.add(child)
-        visitNode(child, node, childKey, visitor)
-      }
-    }
-  }
 }
 
 const MEMBER_PROPERTY_PARENTS: ReadonlySet<string> = new Set(['MemberExpression', 'OptionalMemberExpression'])
@@ -119,24 +100,7 @@ function isEvalReference(parent: Node | null, key: string): boolean {
     // Computed keys contain real expressions (`{ [eval]: 1 }` references
     // eval); plain keys are just names, and a shorthand `{ eval }` reports
     // its value node as the reference.
-    return readBoolean(parent, 'computed')
+    return readNodeBoolean(parent, 'computed')
   }
   return true
-}
-
-const lineOf = (node: Node): number => node.loc?.start.line ?? 1
-
-const readString = (node: Node, property: string): string | undefined => {
-  const value = (node as unknown as Record<string, unknown>)[property]
-  return typeof value === 'string' ? value : undefined
-}
-
-const readBoolean = (node: Node, property: string): boolean => {
-  const value = (node as unknown as Record<string, unknown>)[property]
-  return value === true
-}
-
-const readNode = (node: Node, property: string): Node | null => {
-  const value = (node as unknown as Record<string, unknown>)[property]
-  return isNode(value) ? value : null
 }
