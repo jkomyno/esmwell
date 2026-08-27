@@ -6,6 +6,8 @@ export { resolveDependencies, resolveImportSpecifier, SpecifierResolutionError }
 export type { ResolutionFailureKind, ResolvedDependency, ResolvedSpecifier, ResolveOptions } from './resolve'
 export { runJudgeInRealm } from './bootstrap'
 export type { JudgeRealmOptions } from './bootstrap'
+export { createRunesm } from './main'
+export type { JudgeRunHandlers, RunesmOptions, RunesmSession, WorkerFactory, WorkerLike } from './main'
 export type {
   ConsoleChunk,
   ConsoleLevel,

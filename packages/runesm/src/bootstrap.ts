@@ -11,6 +11,8 @@ import type { ConsoleChunk, JudgeCase, JudgeCaseResult, JudgeRunResult, Serializ
 /** Options for one in-realm judge run. */
 export interface JudgeRealmOptions extends ResolveOptions {
   readonly cases: readonly JudgeCase[]
+  /** Streamed per console call, in addition to being collected in the result. */
+  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
 }
 
 /**
@@ -25,6 +27,7 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
   const restoreConsole = installConsoleCapture({
     write: (chunk) => {
       consoleChunks.push(chunk)
+      options.onConsoleChunk?.(chunk)
     },
   })
   const startedAt = performance.now()
