@@ -10,6 +10,8 @@ interface Fixture {
   boundReferences?: string[]
 }
 
+type ExpectationFields = 'topLevelDeclarations' | 'importedNames' | 'freeReferences' | 'boundReferences'
+
 /** Asserts the fixture table; unspecified fields are not checked. */
 const fixtures: Fixture[] = [
   {
@@ -224,17 +226,17 @@ describe('analyzeScope fixtures', () => {
   it.each(fixtures)('$name', (fixture) => {
     const analysis = analyzeScope(parseUserModule(fixture.code))
 
-    const actual = {
-      topLevelDeclarations: analysis.topLevelDeclarations,
-      importedNames: analysis.importedNames,
+    const actual: Record<ExpectationFields, string[]> = {
+      topLevelDeclarations: [...analysis.topLevelDeclarations],
+      importedNames: [...analysis.importedNames],
       freeReferences: analysis.references.filter((reference) => !reference.bound).map((reference) => reference.name),
       boundReferences: analysis.references.filter((reference) => reference.bound).map((reference) => reference.name),
     }
-    const expected: Partial<typeof actual> = {}
-    for (const key of Object.keys(actual) as Array<keyof typeof actual>) {
+    const expected: Partial<Record<ExpectationFields, string[]>> = {}
+    for (const key of Object.keys(actual) as ExpectationFields[]) {
       const value = fixture[key]
       if (value !== undefined) {
-        expected[key] = value as (typeof actual)[typeof key]
+        expected[key] = [...value]
       }
     }
     expect(actual).toMatchObject(expected)
