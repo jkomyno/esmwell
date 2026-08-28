@@ -15,6 +15,11 @@ export default defineConfig({
   // Browser-only, ESM-only output.
   format: ['esm'],
   target: 'es2023',
+  minify: true,
+  outputOptions: {
+    // Function and class names are observable through the public API and errors.
+    keepNames: true,
+  },
   // The exports map is import-only, so the node16 CJS resolution is
   // intentionally absent: validate the ESM surface instead.
   attw: {

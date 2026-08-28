@@ -59,7 +59,7 @@ when touching the runner, its build output, or the browser path:
 
 ```bash
 pnpm -C packages/runesm run test:browser  # real-browser suite; needs bun (pinned in .mise.toml) and a Chrome/WebKit backend, and reaches esm.sh
-pnpm -C packages/runesm run check:size    # 50 KB gzip budget over the built ESM output; run after pnpm build
+pnpm -C packages/runesm run check:size    # 30 KB gzip budget over the built ESM output; run after pnpm build
 ```
 
 For documentation-only changes, `pnpm lint:ci` is sufficient unless the documentation describes executable commands or configuration that also needs validation.

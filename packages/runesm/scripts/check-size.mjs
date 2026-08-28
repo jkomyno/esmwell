@@ -1,13 +1,12 @@
-// Asserts the gzip size of the unminified ESM build outputs stays within
-// the runner's budget. Unminified+gzip is a conservative upper bound for
-// the published minified size; acorn stays external (excluded by design).
+// Asserts the gzip size of the published minified ESM build outputs stays
+// within the runner's budget; acorn stays external (excluded by design).
 import { readdirSync, readFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const buildDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'build')
-const budgetBytes = 50 * 1024
+const budgetBytes = 30 * 1024
 
 const outputs = readdirSync(buildDir).filter((file) => file.endsWith('.mjs'))
 if (outputs.length === 0) {
