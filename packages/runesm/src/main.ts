@@ -389,7 +389,15 @@ class WorkerTransport {
 
       sessionWorker.addEventListener('message', onMessage)
       sessionWorker.addEventListener('error', onError)
-      sessionWorker.send({ ...message, id })
+      try {
+        sessionWorker.send({ ...message, id })
+      } catch (error) {
+        pending.finish({
+          kind: 'worker-error',
+          message: `could not send the request to the worker: ${error instanceof Error ? error.message : String(error)} — request payloads must contain only structured-cloneable values (no functions, symbols, or proxies)`,
+          console: pending.pendingChunks,
+        })
+      }
     })
   }
 

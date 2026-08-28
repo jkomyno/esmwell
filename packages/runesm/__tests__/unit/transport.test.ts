@@ -56,6 +56,18 @@ class FakeWorker implements WorkerLike {
   }
 }
 
+class ThrowOnceWorker extends FakeWorker {
+  private shouldThrow = true
+
+  override send(message: unknown): void {
+    if (this.shouldThrow) {
+      this.shouldThrow = false
+      throw new Error('DataCloneError: function could not be cloned')
+    }
+    super.send(message)
+  }
+}
+
 const okResult: JudgeRunResult = {
   status: 'pass',
   ok: true,
@@ -265,6 +277,33 @@ describe('session transport: worker errors', () => {
     expect(result.status).toBe('error')
     expect(result.error?.message).toContain('Failed to fetch worker script')
     expect(worker.terminated).toBe(true)
+  })
+
+  it('settles a synchronous send failure and keeps the worker reusable', async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = new ThrowOnceWorker()
+      const { session } = createSessionWith([worker], { timeoutMs: 20 })
+
+      const failed = await session.runJudge('code', [])
+      expect(failed).toMatchObject({
+        status: 'error',
+        error: { name: 'RunesmError', message: expect.stringContaining('could not send the request') },
+      })
+
+      await vi.advanceTimersByTimeAsync(20)
+      expect(worker.terminated).toBe(false)
+
+      const recovered = session.runJudge('export const solve = () => 1', [])
+      await Promise.resolve()
+      expect(worker.sent).toHaveLength(1)
+      worker.emitMessage({ kind: 'result', id: worker.sent[0]!.id, result: okResult })
+
+      await expect(recovered).resolves.toEqual(okResult)
+      expect(worker.terminated).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
