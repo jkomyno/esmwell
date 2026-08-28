@@ -227,7 +227,8 @@ const createRunnerConfig = (
   name: 'runesm',
   passWithNoTests: false,
   testNamePattern: undefined,
-  allowOnly: false,
+  // A browser playground has no CI-only guard; `.only` narrows the run like it does under `vitest --allowOnly`.
+  allowOnly: true,
   sequence: { seed: 1, hooks: 'list', setupFiles: 'list', concurrent: false, shuffle: false },
   chaiConfig: undefined,
   maxConcurrency: 1,

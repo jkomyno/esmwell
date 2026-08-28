@@ -35,7 +35,9 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
       deps: options.deps,
       autoInstall: options.autoInstall,
     })
-    const outcome = run.engine === 'vitest' ? await executeVitest(graph.entryUrls) : await executeJest(graph.entryUrls)
+    const outcome = requireRegisteredTests(
+      run.engine === 'vitest' ? await executeVitest(graph.entryUrls) : await executeJest(graph.entryUrls),
+    )
 
     return {
       status: outcome.error === undefined ? (outcome.ok ? 'pass' : 'fail') : 'error',
@@ -66,11 +68,30 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
   }
 }
 
-interface NormalizedEngineOutcome {
+export interface NormalizedEngineOutcome {
   readonly ok: boolean
   readonly engine: TestEngineInfo
   readonly tests: readonly TestCaseResult[]
   readonly error?: ReturnType<typeof serializeError>
+}
+
+/**
+ * A workspace that registered no tests is broken, not passing: a mistyped
+ * `describe`, an early `return`, or a callback that never ran leaves nothing
+ * to judge. Existing engine errors keep their original details.
+ */
+export const requireRegisteredTests = (outcome: NormalizedEngineOutcome): NormalizedEngineOutcome => {
+  if (outcome.error !== undefined || outcome.tests.length > 0) {
+    return outcome
+  }
+  return {
+    ...outcome,
+    ok: false,
+    error: {
+      name: 'NoTestsError',
+      message: `the ${outcome.engine.name} workspace registered no tests — check that each test file calls describe/it/test at module top level and that testFiles lists the right canonical ids`,
+    },
+  }
 }
 
 const executeVitest = async (entryUrls: readonly string[]): Promise<NormalizedEngineOutcome> => {

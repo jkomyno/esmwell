@@ -141,3 +141,79 @@ test('terminates a synchronous test loop and cleans its virtual graph', async ()
     session.close()
   }
 })
+
+test('allows focused tests on both engines', async () => {
+  for (const engine of ['vitest', 'jest'] as const) {
+    const session = createTestSession({
+      workerUrl: '/runesm/test-worker-entry.mjs',
+      serviceWorkerUrl: '/runesm/module-service-worker.mjs',
+      timeoutMs: 120_000,
+    })
+    try {
+      const testModule = engine === 'vitest' ? 'vitest' : '@jest/globals'
+      const result = await session.run({
+        engine,
+        modules: {
+          'tests/focused.test': `
+            import { it } from ${JSON.stringify(testModule)}
+            it('first', () => {})
+            it.only('focused', () => {})
+            it('last', () => {})
+          `,
+        },
+        testFiles: ['tests/focused.test'],
+      })
+      const statuses = result.tests.map((testResult) => testResult.status)
+
+      assert(result.status === 'pass', `${engine} should allow a focused test: ${JSON.stringify(result)}`)
+      assertEqual(
+        statuses.filter((status) => status === 'pass').length,
+        1,
+        `${engine} should run exactly one focused test`,
+      )
+      assert(
+        statuses.every((status) => status !== 'fail'),
+        `${engine} should not report a focused run as failed: ${statuses.join(', ')}`,
+      )
+    } finally {
+      session.close()
+    }
+  }
+})
+
+test('reports an empty workspace as an error on both engines', async () => {
+  for (const engine of ['vitest', 'jest'] as const) {
+    const session = createTestSession({
+      workerUrl: '/runesm/test-worker-entry.mjs',
+      serviceWorkerUrl: '/runesm/module-service-worker.mjs',
+      timeoutMs: 120_000,
+    })
+    try {
+      const testModule = engine === 'vitest' ? 'vitest' : '@jest/globals'
+      const result = await session.run({
+        engine,
+        modules: {
+          'tests/empty.test': `import { describe } from ${JSON.stringify(testModule)}`,
+        },
+        testFiles: ['tests/empty.test'],
+      })
+
+      assert(result.status === 'error', `${engine} should report an empty workspace as an error`)
+      assert(result.ok === false, `${engine} should not accept an empty workspace`)
+      if (engine === 'vitest') {
+        assert(result.error?.name === 'Error', `Vitest should keep its engine error: ${JSON.stringify(result)}`)
+        assert(
+          result.error.message.includes('No test suite found'),
+          `Vitest should explain its engine error: ${JSON.stringify(result)}`,
+        )
+      } else {
+        assert(
+          result.error?.name === 'NoTestsError',
+          `Jest's clean empty outcome should become a NoTestsError: ${JSON.stringify(result)}`,
+        )
+      }
+    } finally {
+      session.close()
+    }
+  }
+})

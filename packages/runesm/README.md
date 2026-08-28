@@ -91,7 +91,10 @@ Vitest `vi.fn`, Jest mock functions, and normalized results. Config files,
 plugins, watch mode, coverage, filesystem discovery, CJS, Node environments,
 and module mocking are not supported. Snapshots are currently in-memory for a
 single Vitest run. Jest assertion-count enforcement is unavailable because it
-depends on Jest's private environment adapter.
+depends on Jest's private environment adapter. A workspace that registers no
+tests is an error; a clean engine outcome with no registered tests becomes a
+`NoTestsError`, while an engine's own error details are preserved.
+`it.only`/`describe.only` narrow the run on both engines.
 
 ## Judge mode
 
