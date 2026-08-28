@@ -2,7 +2,7 @@
   "private": true,
   "name": "playground",
   "version": "0.1.0",
-  "description": "runesm judge-mode demo app",
+  "description": "Private judge and REPL demo for runesm",
   "type": "module",
   "scripts": {
     "clean": "rimraf dist .turbo",

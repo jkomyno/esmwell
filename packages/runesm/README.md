@@ -1,8 +1,8 @@
 # runesm
 
-An ESM-only in-browser code runner with judge and REPL modes, over one web-worker foundation.
+Run unbundled ESM in the browser with hard timeouts, dependency resolution, and normalized results.
 
-User code runs as ES2023 modules inside a dedicated worker: bare imports (`import isEven from 'is-even'`) resolve at runtime from [esm.sh](https://esm.sh), console output streams back while code executes, and runs that exceed their timeout are terminated — infinite loops become a timeout result, not a frozen page.
+`runesm` provides judge, persistent REPL, and lazy Vitest/Jest workspace APIs. Bare imports such as `import isEven from 'is-even'` resolve at runtime through [esm.sh](https://esm.sh), console output streams back while code executes, and an infinite loop becomes a typed timeout result instead of freezing the page.
 
 ## Install
 
@@ -11,6 +11,22 @@ pnpm add runesm
 ```
 
 The package ships ESM only (`.mjs`), with a single runtime dependency on [acorn](https://github.com/acornjs/acorn).
+
+## Execution model
+
+Judge and REPL sessions use two worker levels:
+
+```text
+page → coordinator worker → execution worker
+```
+
+The coordinator never evaluates submitted code. It owns the deadline and terminates the execution worker on timeout or fatal failure. Every judge run starts in a fresh execution worker. A REPL keeps one worker so declarations persist, then discards it on reset, timeout, or fatal failure.
+
+Test workspaces use one fresh page-owned worker per run. Their virtual module graph is backed by a scoped service worker, and direct ownership keeps that graph portable across Chromium and WebKit.
+
+Bindings installed by runesm, including `globalThis.process`, `globalThis.console`, and test-engine bridges, are non-writable and non-configurable. Submitted code cannot replace or delete them. Their intended contents can still be mutable, so `process.env.KEY = 'value'` remains supported.
+
+Worker isolation makes execution disposable and lets the host recover from synchronous infinite loops. It does not turn a browser worker into a process, VM, V8 isolate, or workerd security boundary. Submitted code retains browser worker capabilities allowed by the page, including same-origin and network access unless the host restricts them.
 
 ## Vitest and Jest workspaces
 
@@ -82,6 +98,8 @@ required outside localhost. Pass explicit URLs when a bundler relocates the
 files; a blob-built execution worker cannot participate in this mode. The
 service worker only answers runesm's versioned virtual-module path beneath its
 scope and leaves other requests untouched.
+
+Each test run creates and terminates its own worker. A timeout therefore clears engine registration state and the virtual module graph before the next run.
 
 ### Compatibility boundary
 
@@ -272,7 +290,7 @@ The browser suite executes this flow through the published worker entry and chec
 
 ## Policy
 
-Submitted code is rejected (with line numbers) for `var` declarations, `eval` references, and `Function`-constructor calls — before anything executes.
+Submitted code is rejected with line numbers for `var` declarations, `eval` references, and `Function` constructor calls before anything executes. Runtime property descriptors protect runesm-owned globals even when code reaches them through aliases or reflection.
 
 ## Error shape
 
@@ -297,20 +315,36 @@ These compose by chaining return values (`collectBareSpecifiers(parseUserModule(
 
 ## Workers and bundlers
 
-`createRunesm` loads `worker-entry.mjs` next to the main-thread module by default. Bundlers that relocate assets should build the worker themselves:
+`createRunesm` loads `worker-entry.mjs` and `execution-worker-entry.mjs` next to the main-thread module by default. Both scripts must be served from the website origin. A Content Security Policy must allow both through `worker-src`.
+
+Bundlers that relocate assets should emit both workers and pass the execution-worker URL explicitly. For Vite:
 
 ```ts
 import { adaptWorker, createRunesm } from 'runesm'
-import RunesmWorker from './runesm-worker?worker' // vite; the file does `import 'runesm/worker-entry'`
+import RunesmExecutionWorkerUrl from './runesm-execution-worker?worker&url'
+import RunesmWorker from './runesm-worker?worker'
 
-const session = createRunesm({ workerFactory: () => adaptWorker(new RunesmWorker()) })
+const session = createRunesm({
+  workerFactory: () => adaptWorker(new RunesmWorker()),
+  executionWorkerUrl: RunesmExecutionWorkerUrl,
+})
 ```
 
-`workerUrl` is the lighter escape hatch when a URL to the shipped entry is available.
+The two local entry files contain only these imports:
+
+```ts
+// runesm-worker.ts
+import 'runesm/worker-entry'
+
+// runesm-execution-worker.ts
+import 'runesm/execution-worker-entry'
+```
+
+`workerUrl` is the lighter escape hatch when a URL to the coordinator entry is available. `executionWorkerUrl` identifies the child entry. When copying published assets without a bundler, keep both `.mjs` files together so the default relative URL resolves.
 
 ## Testing your integration
 
-The package's own suite includes a real-browser harness ([`scripts/browser-test.ts`](./scripts/browser-test.ts), run with `bun`): it serves the built package, drives it in a headless WebView, and exercises the real worker against esm.sh. `pnpm test` stays offline and deterministic (data-URL imports only).
+The package's own suite includes a real-browser harness ([`scripts/browser-test.ts`](./scripts/browser-test.ts), run with `bun`): it serves the built package, drives it in a headless browser, and exercises the real workers against esm.sh. The current compatibility gate covers Chromium and WebKit. Firefox is not yet part of the claimed matrix. `pnpm test` stays offline and deterministic with data-URL imports only.
 
 ## License
 

@@ -14,6 +14,8 @@ find the full documentation for it [in the changesets repository](https://github
 
 ## Release flow
 
-- Pushing to `main` with new changesets triggers the **Release** workflow.
+- The **Release** workflow is disabled until the first npm package and trusted publisher are configured.
+- Once enabled, pushing to `main` with new changesets triggers the workflow.
 - It opens or updates a "Version Packages" PR with version bumps and changelog.
-- Merging that PR runs the release (build + publish to npm) using [npm trusted publishing (OIDC)](https://docs.npmjs.com/trusted-publishers)—no `NPM_TOKEN` needed. Configure the trusted publisher on npmjs.com per package (see the root README, "Publishing (OIDC)").
+- Merging that PR runs the release (build + publish to npm) using [npm trusted publishing (OIDC)](https://docs.npmjs.com/trusted-publishers), with no `NPM_TOKEN` needed. See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for the one-time setup.
+- Only `packages/runesm` is publishable. Private workspace and demo packages are neither versioned nor tagged.

@@ -17,7 +17,7 @@ env:
 
 jobs:
   release:
-    # Disabled by default in this template.
+    # Disabled until the first runesm package and trusted publisher exist.
     # To enable: set up npm trusted publishing (OIDC), remove this guard,
     # and uncomment the Changesets step below.
     if: false
