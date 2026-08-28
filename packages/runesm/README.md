@@ -123,7 +123,7 @@ const result = await session.runJudge(
 session.close()
 ```
 
-Results compare structurally (`NaN` equals `NaN`, `+0` ≠ `-0`, `Map`/`Set` ignore insertion order, TypedArrays compare byte-wise, prototypes must match).
+Results compare structurally (`NaN` equals `NaN`, `+0` ≠ `-0`, `Map`/`Set` ignore insertion order, TypedArrays compare byte-wise, prototypes must match). `RegExp` compares source and flags, boxed primitives compare their wrapped value, and `Error` compares class, `name`, `message`, and `cause` (never `stack`).
 
 ## REPL mode
 

@@ -1,9 +1,11 @@
 /**
  * Structural equality for judged values: primitives (with `Object.is`
  * semantics, so `NaN` equals `NaN` but `+0` does not equal `-0`), arrays,
- * plain objects (same prototype required), `Map`, `Set`, `Date`, and every
- * TypedArray class compared byte-wise. Functions compare by reference.
- * Cyclic structures are handled by tracking in-progress comparison pairs.
+ * plain objects (same prototype required), `Map`, `Set`, `Date`, `RegExp`
+ * (source and flags), boxed primitives (wrapped value), `Error` (name,
+ * message, and cause; stack ignored), and every TypedArray class compared
+ * byte-wise. Functions compare by reference. Cyclic structures are handled
+ * by tracking in-progress comparison pairs.
  */
 export function deepEqual(actual: unknown, expected: unknown): boolean {
   return deepEqualGuarded(actual, expected, new ComparisonPairs())
@@ -28,6 +30,30 @@ const deepEqualGuarded = (actual: unknown, expected: unknown, pairs: ComparisonP
       return expected instanceof Date && actual instanceof Date && Object.is(actual.getTime(), expected.getTime())
     }
 
+    if (actual instanceof RegExp || expected instanceof RegExp) {
+      return (
+        actual instanceof RegExp &&
+        expected instanceof RegExp &&
+        actual.source === expected.source &&
+        actual.flags === expected.flags
+      )
+    }
+
+    const actualBoxed = boxedPrimitiveValue(actual)
+    const expectedBoxed = boxedPrimitiveValue(expected)
+    if (actualBoxed !== undefined || expectedBoxed !== undefined) {
+      return (
+        actualBoxed !== undefined &&
+        expectedBoxed !== undefined &&
+        Object.getPrototypeOf(actual) === Object.getPrototypeOf(expected) &&
+        Object.is(actualBoxed, expectedBoxed)
+      )
+    }
+
+    if (actual instanceof Error || expected instanceof Error) {
+      return errorsEqual(actual, expected, pairs)
+    }
+
     if (isTypedArray(actual) || isTypedArray(expected)) {
       return typedArraysEqual(actual, expected)
     }
@@ -48,6 +74,51 @@ const deepEqualGuarded = (actual: unknown, expected: unknown, pairs: ComparisonP
   } finally {
     pairs.end(actual, expected)
   }
+}
+
+type PrimitiveValue = boolean | bigint | number | string | symbol
+
+/** Native `valueOf` methods act as brand checks for each primitive wrapper's internal slot. */
+const boxedPrimitiveValue = (value: object): PrimitiveValue | undefined => {
+  const tag = Object.prototype.toString.call(value)
+  switch (tag) {
+    case '[object Number]':
+      return readBoxedValue(() => Number.prototype.valueOf.call(value))
+    case '[object String]':
+      return readBoxedValue(() => String.prototype.valueOf.call(value))
+    case '[object Boolean]':
+      return readBoxedValue(() => Boolean.prototype.valueOf.call(value))
+    case '[object BigInt]':
+      return readBoxedValue(() => BigInt.prototype.valueOf.call(value))
+    case '[object Symbol]':
+      return readBoxedValue(() => Symbol.prototype.valueOf.call(value))
+    default:
+      return undefined
+  }
+}
+
+const readBoxedValue = (readValue: () => PrimitiveValue): PrimitiveValue | undefined => {
+  try {
+    return readValue()
+  } catch {
+    // A custom Symbol.toStringTag can imitate a wrapper, but cannot supply its internal slot.
+    return undefined
+  }
+}
+
+/** Errors compare by prototype, name, message, and deep cause; stack is environment noise. */
+const errorsEqual = (actual: object, expected: object, pairs: ComparisonPairs): boolean => {
+  if (!(actual instanceof Error) || !(expected instanceof Error)) {
+    return false
+  }
+  if (Object.getPrototypeOf(actual) !== Object.getPrototypeOf(expected)) {
+    return false
+  }
+  return (
+    actual.name === expected.name &&
+    actual.message === expected.message &&
+    deepEqualGuarded(actual.cause, expected.cause, pairs)
+  )
 }
 
 /**

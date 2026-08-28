@@ -63,6 +63,52 @@ const equalityCases: EqualityCase[] = [
   { name: 'both invalid dates', actual: new Date('nope'), expected: new Date('nah'), equal: true },
   { name: 'date vs number', actual: new Date(0), expected: 0, equal: false },
 
+  // RegExp: source and flags
+  { name: 'same regexp', actual: /a+/gi, expected: /a+/gi, equal: true },
+  { name: 'regexp differing in source', actual: /a/g, expected: /b/g, equal: false },
+  { name: 'regexp differing in flags', actual: /a/g, expected: /a/i, equal: false },
+  { name: 'regexp vs plain object', actual: /a/, expected: { lastIndex: 0 }, equal: false },
+
+  // Boxed primitives: wrapped value
+  { name: 'same boxed number', actual: new Number(1), expected: new Number(1), equal: true },
+  { name: 'different boxed numbers', actual: new Number(1), expected: new Number(2), equal: false },
+  {
+    name: 'boxed NaN equals boxed NaN',
+    actual: new Number(Number.NaN),
+    expected: new Number(Number.NaN),
+    equal: true,
+  },
+  { name: 'same boxed string', actual: new String('x'), expected: new String('x'), equal: true },
+  { name: 'same boxed bigint', actual: Object(1n), expected: Object(1n), equal: true },
+  { name: 'different boxed bigints', actual: Object(1n), expected: Object(2n), equal: false },
+  {
+    name: 'same boxed global symbol',
+    actual: Object(Symbol.for('shared-boxed')),
+    expected: Object(Symbol.for('shared-boxed')),
+    equal: true,
+  },
+  { name: 'distinct boxed symbols', actual: Object(Symbol('x')), expected: Object(Symbol('x')), equal: false },
+  { name: 'boxed vs primitive', actual: new Number(1), expected: 1, equal: false },
+  { name: 'boxed number vs boxed string', actual: new Number(1), expected: new String('1'), equal: false },
+
+  // Errors: name, message, cause; stack ignored
+  { name: 'same error', actual: new Error('boom'), expected: new Error('boom'), equal: true },
+  { name: 'error differing in message', actual: new Error('a'), expected: new Error('b'), equal: false },
+  { name: 'error differing in class', actual: new TypeError('x'), expected: new RangeError('x'), equal: false },
+  {
+    name: 'error with equal cause',
+    actual: new Error('x', { cause: { code: 1 } }),
+    expected: new Error('x', { cause: { code: 1 } }),
+    equal: true,
+  },
+  {
+    name: 'error with different cause',
+    actual: new Error('x', { cause: 1 }),
+    expected: new Error('x', { cause: 2 }),
+    equal: false,
+  },
+  { name: 'error vs plain object', actual: new Error('x'), expected: { message: 'x' }, equal: false },
+
   // Arrays
   { name: 'same arrays', actual: [1, 2, 3], expected: [1, 2, 3], equal: true },
   { name: 'nested arrays', actual: [1, [2, [3, [4]]]], expected: [1, [2, [3, [4]]]], equal: true },
