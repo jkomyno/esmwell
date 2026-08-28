@@ -40,6 +40,7 @@ This provides disposable browser realms and reliable timeout recovery. It is not
 ## Repository
 
 - [`packages/runesm`](./packages/runesm): publishable library and complete API guide
+- [`COMPATIBILITY.md`](./COMPATIBILITY.md): verified ECMAScript, package, and runtime compatibility matrix
 - [`apps/playground`](./apps/playground): private demo application
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): local setup, checks, and release procedure
 
