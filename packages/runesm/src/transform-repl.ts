@@ -2,7 +2,7 @@ import type { Node, Program } from 'acorn'
 import { analyzeScope } from './scope-analysis'
 import { resolveImportSpecifier } from './resolve'
 import type { ResolvedDependency, ResolveOptions } from './resolve'
-import { isAstNode, readNodeChild, readNodeChildren, readNodeString } from './walk'
+import { isAstNode, readNodeBoolean, readNodeChild, readNodeChildren, readNodeString } from './walk'
 
 /** The persistent scope object every REPL module shares. */
 export const SCOPE_BINDING = '__runesm'
@@ -31,6 +31,13 @@ interface SourceEdit {
   replacement: string
 }
 
+/** A top-level function declaration pulled out of the body and re-emitted ahead of it. */
+interface HoistedFunction {
+  readonly start: number
+  readonly end: number
+  readonly name: string
+}
+
 /**
  * Rewrites one REPL input into a module of the shape
  *
@@ -46,8 +53,12 @@ interface SourceEdit {
  * them), references that resolve to the input's top level — including
  * globals — become live scope reads, imports become dynamic-import
  * assignments resolved through the CDN policy, and top-level await works
- * inside the async wrapper. `export` statements are rejected: REPL inputs
- * declare values instead.
+ * inside the async wrapper. Top-level function declarations are hoisted
+ * ahead of the rest of the body so they stay callable before their textual
+ * position, matching normal function-declaration hoisting; class
+ * declarations are intentionally left in place since class bindings are in
+ * the temporal dead zone until evaluated. `export` statements are rejected:
+ * REPL inputs declare values instead.
  */
 export function transformReplInput(
   input: string,
@@ -70,12 +81,25 @@ export function transformReplInput(
   const edits: SourceEdit[] = []
   const dependencies: ResolvedDependency[] = []
   const seenDependencies = new Set<string>()
+  const hoistedFunctions: HoistedFunction[] = []
 
   ast.body.forEach((statement, index) => {
     if (statement.type === 'ImportDeclaration') {
       const replacement = rewriteImportStatement(statement, index, options, dependencies, seenDependencies)
       edits.push({ start: statement.start, end: statement.end, replacement })
       return
+    }
+    if (statement.type === 'FunctionDeclaration') {
+      const id = readNodeChild(statement, 'id')
+      const name = id !== null ? readNodeString(id, 'name') : undefined
+      if (id !== null && name !== undefined) {
+        // The declaration is removed from its textual position and
+        // re-emitted as a prologue assignment (see `splitHoistedPrologue`),
+        // so calling it before its textual position works.
+        hoistedFunctions.push({ start: statement.start, end: statement.end, name })
+        edits.push({ start: statement.start, end: statement.end, replacement: '' })
+        return
+      }
     }
     rewriteTopLevelDeclaration(statement, edits)
   })
@@ -104,11 +128,14 @@ export function transformReplInput(
     edits.push({ start: completion.start, end: completion.start, replacement: 'return ' })
   }
 
+  const { prologue, body } = splitHoistedPrologue(input, edits, hoistedFunctions)
+
   return {
     code: [
       `import { ${SCOPE_BINDING} } from ${quoteString(options.scopeModuleUrl)}`,
       `export const ${RESULT_EXPORT} = await (async () => {`,
-      applyEdits(input, edits),
+      ...(prologue.length > 0 ? [prologue] : []),
+      ...(body.length > 0 ? [body] : []),
       `})()`,
     ].join('\n'),
     dependencies,
@@ -126,6 +153,57 @@ const applyEdits = (code: string, edits: readonly SourceEdit[]): string => {
     result = result.slice(0, edit.start) + edit.replacement + result.slice(edit.end)
   }
   return result
+}
+
+/**
+ * Separates the edits that fall inside a hoisted function's own source range
+ * from the rest. Each hoisted function is rendered on its own, with only the
+ * edits enclosed by its range applied (offset to that range), and prepended
+ * as a `<scope>.<name> = <function>` assignment; everything else — including
+ * the edit that blanks out the function's original position — renders as
+ * the ordinary body.
+ */
+const splitHoistedPrologue = (
+  input: string,
+  edits: readonly SourceEdit[],
+  hoistedFunctions: readonly HoistedFunction[],
+): { prologue: string; body: string } => {
+  if (hoistedFunctions.length === 0) {
+    return { prologue: '', body: applyEdits(input, edits) }
+  }
+
+  // The edit that deletes a hoisted function's own statement spans its exact
+  // range; that one belongs to the body (it is what removes the function
+  // from its original position), not to the function's own rendering.
+  const enclosingFunction = (edit: SourceEdit): HoistedFunction | undefined =>
+    hoistedFunctions.find(
+      (fn) => edit.start >= fn.start && edit.end <= fn.end && !(edit.start === fn.start && edit.end === fn.end),
+    )
+
+  const bodyEdits: SourceEdit[] = []
+  const perFunctionEdits = new Map<HoistedFunction, SourceEdit[]>(hoistedFunctions.map((fn) => [fn, []]))
+
+  for (const edit of edits) {
+    const fn = enclosingFunction(edit)
+    if (fn === undefined) {
+      bodyEdits.push(edit)
+    } else {
+      perFunctionEdits.get(fn)?.push(edit)
+    }
+  }
+
+  const prologue = hoistedFunctions
+    .map((fn) => {
+      const relativeEdits = (perFunctionEdits.get(fn) ?? []).map((edit) => ({
+        start: edit.start - fn.start,
+        end: edit.end - fn.start,
+        replacement: edit.replacement,
+      }))
+      return `${SCOPE_BINDING}.${fn.name} = ${applyEdits(input.slice(fn.start, fn.end), relativeEdits)}`
+    })
+    .join('\n')
+
+  return { prologue, body: applyEdits(input, bodyEdits).trim() }
 }
 
 const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
@@ -155,12 +233,6 @@ function rewriteImportStatement(
   if (specifiers.length === 0) {
     return `await import(${url})`
   }
-  const namespaceSpecifier = specifiers.find((specifier) => specifier.type === 'ImportNamespaceSpecifier')
-  if (namespaceSpecifier !== undefined) {
-    const local = readNodeChild(namespaceSpecifier, 'local')
-    const name = local !== null ? readNodeString(local, 'name') : undefined
-    return name === undefined ? `await import(${url})` : `${SCOPE_BINDING}.${name} = await import(${url})`
-  }
 
   const lines: string[] = [`const ${moduleVar} = await import(${url})`]
   for (const specifier of specifiers) {
@@ -169,11 +241,18 @@ function rewriteImportStatement(
     if (localName === undefined) {
       continue
     }
-    if (specifier.type === 'ImportDefaultSpecifier') {
+    if (specifier.type === 'ImportNamespaceSpecifier') {
+      lines.push(`${SCOPE_BINDING}.${localName} = ${moduleVar}`)
+    } else if (specifier.type === 'ImportDefaultSpecifier') {
       lines.push(`${SCOPE_BINDING}.${localName} = ${moduleVar}.default`)
     } else {
       const imported = readNodeChild(specifier, 'imported')
-      const importedName = imported !== null ? readNodeString(imported, 'name') : undefined
+      const importedName =
+        imported === null
+          ? undefined
+          : imported.type === 'Literal'
+            ? readNodeString(imported, 'value')
+            : readNodeString(imported, 'name')
       if (importedName !== undefined) {
         lines.push(`${SCOPE_BINDING}.${localName} = ${moduleVar}[${quoteString(importedName)}]`)
       }
@@ -186,13 +265,22 @@ function rewriteImportStatement(
 function rewriteTopLevelDeclaration(statement: Node, edits: SourceEdit[]): void {
   if (statement.type === 'VariableDeclaration') {
     const firstDeclarator = readNodeChildren(statement, 'declarations')[0]
+    const firstId = firstDeclarator !== undefined ? readNodeChild(firstDeclarator, 'id') : null
+    // A rewritten ObjectPattern declarator is parenthesized and so starts
+    // with `(`; an ArrayPattern declarator starts with `[` unchanged. ASI
+    // never inserts a semicolon before either, so removing the `let`/`const`
+    // keyword outright would let the rewritten line fuse with the previous
+    // statement in semicolon-free multi-statement input. A leading `;` is
+    // valid in any statement position, so guard those two shapes.
+    const needsLeadingSemicolon =
+      firstId !== null && (firstId.type === 'ObjectPattern' || firstId.type === 'ArrayPattern')
     // Remove the `let`/`const` keyword (and the whitespace after it); each
     // declarator's binding becomes a scope member so the declaration turns
     // into an assignment.
     edits.push({
       start: statement.start,
       end: firstDeclarator !== undefined ? firstDeclarator.start : statement.start,
-      replacement: '',
+      replacement: needsLeadingSemicolon ? ';' : '',
     })
 
     for (const declarator of readNodeChildren(statement, 'declarations')) {
@@ -229,7 +317,7 @@ function rewriteTopLevelDeclaration(statement: Node, edits: SourceEdit[]): void 
     }
     return
   }
-  if (statement.type === 'FunctionDeclaration' || statement.type === 'ClassDeclaration') {
+  if (statement.type === 'ClassDeclaration') {
     const id = readNodeChild(statement, 'id')
     const name = id !== null ? readNodeString(id, 'name') : undefined
     if (id !== null && name !== undefined) {
@@ -250,9 +338,15 @@ function rewritePatternToMemberExpressions(pattern: Node, edits: SourceEdit[]): 
     }
     case 'ObjectPattern':
       for (const property of readNodeChildren(pattern, 'properties')) {
+        if (property.type === 'RestElement') {
+          // `{ a, ...rest }`: the rest property has no `key`/`value` — it is
+          // a RestElement in its own right, handled by the case below.
+          rewritePatternToMemberExpressions(property, edits)
+          continue
+        }
         const key = readNodeChild(property, 'key')
         const value = readNodeChild(property, 'value')
-        const shorthand = (property as unknown as Record<string, unknown>).shorthand === true
+        const shorthand = readNodeBoolean(property, 'shorthand')
         if (shorthand && key !== null) {
           // `{ a }` → `{ a: __runesm.a }`; `{ a = 1 }` → `{ a: __runesm.a = 1 }`.
           // The key and the binding identifier share their source range, so

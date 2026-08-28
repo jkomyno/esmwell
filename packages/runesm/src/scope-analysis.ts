@@ -1,5 +1,5 @@
 import type { Node, Program } from 'acorn'
-import { isAstNode } from './walk'
+import { isAstNode, readNodeBoolean, readNodeChild, readNodeChildren, readNodeString } from './walk'
 
 /**
  * A resolved identifier reference in reference position: property keys,
@@ -102,9 +102,9 @@ class Analyzer {
     if (node.type !== 'ImportDeclaration') {
       return
     }
-    for (const specifier of this.children(node, 'specifiers')) {
-      const local = this.child(specifier, 'local')
-      const name = local !== null ? this.identifierName(local) : undefined
+    for (const specifier of readNodeChildren(node, 'specifiers')) {
+      const local = readNodeChild(specifier, 'local')
+      const name = local !== null ? readNodeString(local, 'name') : undefined
       if (local !== null && name !== undefined) {
         scope.declares(name)
         this.importedNames.push(name)
@@ -121,8 +121,8 @@ class Analyzer {
 
   private declareStatement(node: Node, scope: Scope): void {
     if (node.type === 'VariableDeclaration') {
-      for (const declarator of this.children(node, 'declarations')) {
-        const id = this.child(declarator, 'id')
+      for (const declarator of readNodeChildren(node, 'declarations')) {
+        const id = readNodeChild(declarator, 'id')
         if (id !== null) {
           this.collectPatternBindings(id, scope)
         }
@@ -130,15 +130,15 @@ class Analyzer {
       return
     }
     if (node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration') {
-      const declaration = this.child(node, 'declaration')
+      const declaration = readNodeChild(node, 'declaration')
       if (declaration !== null) {
         this.declareStatement(declaration, scope)
       }
       return
     }
     if (node.type === 'ClassDeclaration' || node.type === 'FunctionDeclaration') {
-      const id = this.child(node, 'id')
-      const name = id !== null ? this.identifierName(id) : undefined
+      const id = readNodeChild(node, 'id')
+      const name = id !== null ? readNodeString(id, 'name') : undefined
       if (id !== null && name !== undefined && !scope.names.has(name)) {
         scope.declares(name)
         if (scope === this.globalScope) {
@@ -152,7 +152,7 @@ class Analyzer {
   private collectPatternBindings(pattern: Node, scope: Scope): void {
     switch (pattern.type) {
       case 'Identifier': {
-        const name = this.identifierName(pattern)
+        const name = readNodeString(pattern, 'name')
         if (name !== undefined) {
           scope.declares(name)
           if (scope === this.globalScope) {
@@ -162,29 +162,34 @@ class Analyzer {
         return
       }
       case 'ObjectPattern':
-        for (const property of this.children(pattern, 'properties')) {
-          const value = this.child(property, 'value')
+        for (const property of readNodeChildren(pattern, 'properties')) {
+          // A rest property carries its binding on `argument`, not `value`.
+          if (property.type === 'RestElement') {
+            this.collectPatternBindings(property, scope)
+            continue
+          }
+          const value = readNodeChild(property, 'value')
           if (value !== null) {
             this.collectPatternBindings(value, scope)
           }
         }
         return
       case 'ArrayPattern':
-        for (const element of this.children(pattern, 'elements')) {
+        for (const element of readNodeChildren(pattern, 'elements')) {
           if (element !== null) {
             this.collectPatternBindings(element, scope)
           }
         }
         return
       case 'RestElement': {
-        const argument = this.child(pattern, 'argument')
+        const argument = readNodeChild(pattern, 'argument')
         if (argument !== null) {
           this.collectPatternBindings(argument, scope)
         }
         return
       }
       case 'AssignmentPattern': {
-        const left = this.child(pattern, 'left')
+        const left = readNodeChild(pattern, 'left')
         if (left !== null) {
           this.collectPatternBindings(left, scope)
         }
@@ -215,7 +220,7 @@ class Analyzer {
   private visit(node: Node, scope: Scope, inShorthandProperty = false): void {
     switch (node.type) {
       case 'Identifier': {
-        const name = this.identifierName(node)
+        const name = readNodeString(node, 'name')
         if (name !== undefined) {
           const bindingScope = scope.bindingScope(name)
           this.references.push({
@@ -236,8 +241,8 @@ class Analyzer {
       case 'BlockStatement':
       case 'StaticBlock': {
         const blockScope = new Scope(scope, false)
-        this.declareStatements(this.children(node, 'body'), blockScope)
-        for (const statement of this.children(node, 'body')) {
+        this.declareStatements(readNodeChildren(node, 'body'), blockScope)
+        for (const statement of readNodeChildren(node, 'body')) {
           this.visit(statement, blockScope)
         }
         return
@@ -246,17 +251,17 @@ class Analyzer {
       case 'FunctionExpression':
       case 'ArrowFunctionExpression': {
         const paramScope = new Scope(scope, false)
-        const id = this.child(node, 'id')
-        const name = id !== null ? this.identifierName(id) : undefined
+        const id = readNodeChild(node, 'id')
+        const name = id !== null ? readNodeString(id, 'name') : undefined
         if (id !== null && name !== undefined) {
           // A named function expression binds its own name for its body.
           paramScope.declares(name)
         }
-        for (const param of this.children(node, 'params')) {
+        for (const param of readNodeChildren(node, 'params')) {
           this.collectPatternBindings(param, paramScope)
           this.visitPatternDefaults(param, paramScope)
         }
-        const body = this.child(node, 'body')
+        const body = readNodeChild(node, 'body')
         if (body !== null) {
           this.visitFunctionBody(body, paramScope)
         }
@@ -266,25 +271,25 @@ class Analyzer {
       case 'ClassExpression': {
         const classScope = node.type === 'ClassExpression' ? new Scope(scope, false) : scope
         if (classScope !== scope) {
-          const id = this.child(node, 'id')
-          const className = id !== null ? this.identifierName(id) : undefined
+          const id = readNodeChild(node, 'id')
+          const className = id !== null ? readNodeString(id, 'name') : undefined
           if (className !== undefined) {
             classScope.declares(className)
           }
         }
         // The extends clause evaluates outside the class-name binding.
-        const superClass = this.child(node, 'superClass')
+        const superClass = readNodeChild(node, 'superClass')
         if (superClass !== null) {
           this.visit(superClass, scope)
         }
-        const body = this.child(node, 'body')
+        const body = readNodeChild(node, 'body')
         if (body !== null) {
           this.visit(body, classScope)
         }
         return
       }
       case 'ForStatement': {
-        const init = this.child(node, 'init')
+        const init = readNodeChild(node, 'init')
         const headScope = this.forHeadScope(init, scope)
         if (init !== null) {
           if (init.type === 'VariableDeclaration') {
@@ -300,7 +305,7 @@ class Analyzer {
       }
       case 'ForInStatement':
       case 'ForOfStatement': {
-        const left = this.child(node, 'left')
+        const left = readNodeChild(node, 'left')
         const headScope = this.forHeadScope(left, scope)
         // The iterable evaluates before the binding exists.
         this.visitChild(node, scope, 'right')
@@ -314,7 +319,7 @@ class Analyzer {
       }
       case 'CatchClause': {
         const catchScope = new Scope(scope, false)
-        const param = this.child(node, 'param')
+        const param = readNodeChild(node, 'param')
         if (param !== null) {
           this.collectPatternBindings(param, catchScope)
           this.visitPatternDefaults(param, catchScope)
@@ -325,12 +330,12 @@ class Analyzer {
       case 'SwitchStatement': {
         const caseScope = new Scope(scope, false)
         this.visitChild(node, scope, 'discriminant')
-        for (const switchCase of this.children(node, 'cases')) {
-          this.declareStatements(this.children(switchCase, 'consequent'), caseScope)
+        for (const switchCase of readNodeChildren(node, 'cases')) {
+          this.declareStatements(readNodeChildren(switchCase, 'consequent'), caseScope)
         }
-        for (const switchCase of this.children(node, 'cases')) {
+        for (const switchCase of readNodeChildren(node, 'cases')) {
           this.visitChild(switchCase, scope, 'test')
-          for (const consequent of this.children(switchCase, 'consequent')) {
+          for (const consequent of readNodeChildren(switchCase, 'consequent')) {
             this.visit(consequent, caseScope)
           }
         }
@@ -340,18 +345,18 @@ class Analyzer {
       case 'PropertyDefinition': {
         // Plain keys are names; computed keys are real expressions. A
         // shorthand `{ x }` carries its reference in the value position.
-        if (this.isComputed(node)) {
+        if (readNodeBoolean(node, 'computed')) {
           this.visitChild(node, scope, 'key')
         }
-        const value = this.child(node, 'value')
+        const value = readNodeChild(node, 'value')
         if (value !== null) {
-          const shorthand = (node as unknown as Record<string, unknown>).shorthand === true
+          const shorthand = readNodeBoolean(node, 'shorthand')
           this.visit(value, scope, shorthand)
         }
         return
       }
       case 'MethodDefinition': {
-        if (this.isComputed(node)) {
+        if (readNodeBoolean(node, 'computed')) {
           this.visitChild(node, scope, 'key')
         }
         this.visitChild(node, scope, 'value')
@@ -360,8 +365,23 @@ class Analyzer {
       case 'MemberExpression':
       case 'OptionalMemberExpression': {
         this.visitChild(node, scope, 'object')
-        if (this.isComputed(node)) {
+        if (readNodeBoolean(node, 'computed')) {
           this.visitChild(node, scope, 'property')
+        }
+        return
+      }
+      case 'AssignmentPattern': {
+        // Forwards `inShorthandProperty` to the target so cover-initialized
+        // shorthand properties in assignment destructuring (`({ a = 1 } =
+        // obj)`, as opposed to a declaration) rewrite the same way the
+        // declaration path does.
+        const left = readNodeChild(node, 'left')
+        if (left !== null) {
+          this.visit(left, scope, inShorthandProperty)
+        }
+        const right = readNodeChild(node, 'right')
+        if (right !== null) {
+          this.visit(right, scope)
         }
         return
       }
@@ -398,33 +418,42 @@ class Analyzer {
   private visitPatternDefaults(pattern: Node, scope: Scope): void {
     switch (pattern.type) {
       case 'AssignmentPattern': {
-        const right = this.child(pattern, 'right')
+        const right = readNodeChild(pattern, 'right')
         if (right !== null) {
           this.deferredExpressions.push({ node: right, scope })
         }
-        const left = this.child(pattern, 'left')
+        const left = readNodeChild(pattern, 'left')
         if (left !== null) {
           this.visitPatternDefaults(left, scope)
         }
         return
       }
       case 'ObjectPattern':
-        for (const property of this.children(pattern, 'properties')) {
-          const value = this.child(property, 'value')
+        for (const property of readNodeChildren(pattern, 'properties')) {
+          // A computed key (`{ [k]: v }`) is a real expression, not a
+          // binding name; defer it so `k` is reported as a free reference
+          // and gets rewritten like any other program-level read.
+          if (readNodeBoolean(property, 'computed')) {
+            const key = readNodeChild(property, 'key')
+            if (key !== null) {
+              this.deferredExpressions.push({ node: key, scope })
+            }
+          }
+          const value = readNodeChild(property, 'value')
           if (value !== null) {
             this.visitPatternDefaults(value, scope)
           }
         }
         return
       case 'ArrayPattern':
-        for (const element of this.children(pattern, 'elements')) {
+        for (const element of readNodeChildren(pattern, 'elements')) {
           if (element !== null) {
             this.visitPatternDefaults(element, scope)
           }
         }
         return
       case 'RestElement': {
-        const argument = this.child(pattern, 'argument')
+        const argument = readNodeChild(pattern, 'argument')
         if (argument !== null) {
           this.visitPatternDefaults(argument, scope)
         }
@@ -438,8 +467,8 @@ class Analyzer {
   private visitFunctionBody(body: Node, paramScope: Scope): void {
     if (body.type === 'BlockStatement' || body.type === 'StaticBlock') {
       const blockScope = new Scope(paramScope, false)
-      this.declareStatements(this.children(body, 'body'), blockScope)
-      for (const statement of this.children(body, 'body')) {
+      this.declareStatements(readNodeChildren(body, 'body'), blockScope)
+      for (const statement of readNodeChildren(body, 'body')) {
         this.visit(statement, blockScope)
       }
       return
@@ -452,8 +481,8 @@ class Analyzer {
       return outer
     }
     const headScope = new Scope(outer, false)
-    for (const declarator of this.children(head, 'declarations')) {
-      const id = this.child(declarator, 'id')
+    for (const declarator of readNodeChildren(head, 'declarations')) {
+      const id = readNodeChild(declarator, 'id')
       if (id !== null) {
         this.collectPatternBindings(id, headScope)
         this.visitPatternDefaults(id, headScope)
@@ -464,9 +493,9 @@ class Analyzer {
 
   /** Visits the initializer expressions of a variable declaration's declarators. */
   private visitVariableDeclaration(node: Node, scope: Scope): void {
-    for (const declarator of this.children(node, 'declarations')) {
-      const id = this.child(declarator, 'id')
-      const init = this.child(declarator, 'init')
+    for (const declarator of readNodeChildren(node, 'declarations')) {
+      const id = readNodeChild(declarator, 'id')
+      const init = readNodeChild(declarator, 'init')
       if (id !== null) {
         this.visitPatternDefaults(id, scope)
       }
@@ -477,7 +506,7 @@ class Analyzer {
   }
 
   private visitChild(node: Node, fallbackScope: Scope, property: string): void {
-    const child = this.child(node, property)
+    const child = readNodeChild(node, property)
     if (child !== null) {
       this.visit(child, fallbackScope)
     }
@@ -498,22 +527,5 @@ class Analyzer {
         this.visit(value, scope)
       }
     }
-  }
-
-  private readonly children = (node: Node, property: string): Node[] => {
-    const value = (node as unknown as Record<string, unknown>)[property]
-    return Array.isArray(value) ? value.filter(isAstNode) : []
-  }
-
-  private readonly child = (node: Node, property: string): Node | null => {
-    const value = (node as unknown as Record<string, unknown>)[property]
-    return isAstNode(value) ? value : null
-  }
-
-  private readonly isComputed = (node: Node): boolean => (node as unknown as Record<string, unknown>).computed === true
-
-  private readonly identifierName = (node: Node): string | undefined => {
-    const name = (node as unknown as Record<string, unknown>).name
-    return typeof name === 'string' ? name : undefined
   }
 }

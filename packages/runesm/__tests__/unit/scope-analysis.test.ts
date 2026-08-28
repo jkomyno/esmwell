@@ -220,6 +220,19 @@ const fixtures: Fixture[] = [
     code: 'let a = 1\nfunction outer(a) {\n  const b = () => {\n    let a = 2\n    return a + b\n  }\n  return b\n}\nouter(a)',
     boundReferences: ['a', 'b', 'b', 'outer', 'a'],
   },
+  {
+    name: 'computed destructuring key is reported as a reference',
+    code: 'const { [k]: v } = o\nv + k',
+    topLevelDeclarations: ['v'],
+    freeReferences: ['o', 'k', 'k'],
+    boundReferences: ['v'],
+  },
+  {
+    name: 'cover-initialized name in assignment destructuring is a reference',
+    code: 'let a\n({ a = 1 } = obj)',
+    freeReferences: ['obj'],
+    boundReferences: ['a'],
+  },
 ]
 
 describe('analyzeScope fixtures', () => {
