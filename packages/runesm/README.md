@@ -12,6 +12,84 @@ pnpm add runesm
 
 The package ships ESM only (`.mjs`), with a single runtime dependency on [acorn](https://github.com/acornjs/acorn).
 
+## Vitest and Jest workspaces
+
+Run real current Vitest or Jest engine packages over a virtual ESM project.
+Canonical local ids take precedence over npm packages, so test files can use
+imports such as `import { impl } from 'src/impl'` without a filesystem:
+
+```ts
+import { createTestSession } from 'runesm'
+
+const tests = createTestSession({
+  workerUrl: '/assets/runesm/test-worker-entry.mjs',
+  serviceWorkerUrl: '/assets/runesm/module-service-worker.mjs',
+  deps: { zod: '4' },
+  autoInstall: false,
+  timeoutMs: 30_000,
+})
+
+const result = await tests.run({
+  engine: 'vitest', // or 'jest'
+  modules: {
+    'src/impl': `
+      import { z } from 'zod'
+      const Input = z.object({ value: z.number() })
+      export const double = (input) => Input.parse(input).value * 2
+    `,
+    'tests/impl.test': `
+      import { describe, expect, it } from 'vitest'
+      import { double } from 'src/impl'
+
+      describe('double', () => {
+        it('validates with Zod 4', () => {
+          expect(double({ value: 2 })).toBe(4)
+        })
+      })
+    `,
+  },
+  testFiles: ['tests/impl.test'],
+})
+
+// result.engine.version is the exact version selected from esm.sh.
+// result.tests contains normalized pass/fail/skip/todo cases.
+tests.close()
+```
+
+For Jest, import the same globals from `@jest/globals`. `jest.fn` and
+`jest.spyOn` use the official `jest-mock` package. Both engines and their
+assertion libraries load lazily from esm.sh; judge and REPL users do not pay
+their download cost. The current browser test payload is much larger than the
+runner core—roughly 2.1 MB uncompressed for Jest—so websites should start the
+download when a user opens or runs a test playground, not during initial page
+load.
+
+The virtual graph uses native browser ESM, including cycles, live bindings,
+relative imports, re-exports, and literal dynamic imports. Exact canonical ids
+under `src/` and `tests/` are treated as local; missing ids produce an
+actionable workspace error instead of resolving an npm package with the same
+name.
+
+### Hosting the test assets
+
+Test mode needs the published `test-worker-entry.mjs` and
+`module-service-worker.mjs` files served from the website's origin and from
+the same directory. That directory becomes the service-worker scope. HTTPS is
+required outside localhost. Pass explicit URLs when a bundler relocates the
+files; a blob-built execution worker cannot participate in this mode. The
+service worker only answers runesm's versioned virtual-module path beneath its
+scope and leaves other requests untouched.
+
+### Compatibility boundary
+
+This is an ESM playground API backed by official engine components, not the
+Vitest or Jest Node CLI. It supports suites, tests, hooks, upstream assertions,
+Vitest `vi.fn`, Jest mock functions, and normalized results. Config files,
+plugins, watch mode, coverage, filesystem discovery, CJS, Node environments,
+and module mocking are not supported. Snapshots are currently in-memory for a
+single Vitest run. Jest assertion-count enforcement is unavailable because it
+depends on Jest's private environment adapter.
+
 ## Judge mode
 
 Run a module once against named-export test cases:

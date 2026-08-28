@@ -36,6 +36,18 @@
         "default": "./build/worker-entry.mjs"
       }
     },
+    "./module-service-worker": {
+      "import": {
+        "@jkomyno/source": "./src/module-service-worker.ts",
+        "default": "./build/module-service-worker.mjs"
+      }
+    },
+    "./test-worker-entry": {
+      "import": {
+        "@jkomyno/source": "./src/test-worker-entry.ts",
+        "default": "./build/test-worker-entry.mjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

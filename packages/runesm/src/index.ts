@@ -5,12 +5,14 @@ export type { PolicyRule } from './policy'
 export { resolveDependencies, resolveImportSpecifier, SpecifierResolutionError } from './resolve'
 export type { ResolutionFailureKind, ResolvedDependency, ResolvedSpecifier, ResolveOptions } from './resolve'
 export { collectBareSpecifiers } from './deps'
-export { createRunesm, adaptWorker } from './main'
+export { createRunesm, createTestSession, adaptWorker } from './main'
 export type {
   ConsoleStreamHandlers,
   ReplSession,
   RunesmOptions,
   RunesmSession,
+  TestSession,
+  TestSessionOptions,
   WorkerFactory,
   WorkerLike,
 } from './main'
@@ -28,6 +30,18 @@ export type {
   ReplResetRequest,
   ReplResult,
   SerializedError,
+  TestRequest,
   WorkerRequest,
   WorkerResponse,
 } from './types'
+export type {
+  TestCaseResult,
+  TestCaseStatus,
+  TestEngineInfo,
+  TestEngineName,
+  TestEnginePackage,
+  TestModules,
+  TestRun,
+  TestRunResult,
+  TestRunStatus,
+} from './test-types'

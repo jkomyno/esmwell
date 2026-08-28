@@ -19,7 +19,7 @@ const packageRoot = resolve(import.meta.dir, '..')
 const buildRoot = join(packageRoot, 'build')
 const browserTestsRoot = join(packageRoot, '__tests__', 'browser')
 
-const OVERALL_TIMEOUT_MS = 120_000
+const OVERALL_TIMEOUT_MS = 300_000
 
 interface PageTestResult {
   name: string

@@ -3,9 +3,8 @@ import { baseConfig } from '../../tsdown.config.base.ts'
 
 export default defineConfig({
   ...baseConfig,
-  // Two entries: the main-thread API and the worker-side script the main
-  // thread loads by URL.
-  entry: ['src/index.ts', 'src/worker-entry.ts'],
+  // Main-thread API plus lazy execution- and module-service-worker assets.
+  entry: ['src/index.ts', 'src/worker-entry.ts', 'src/test-worker-entry.ts', 'src/module-service-worker.ts'],
   tsconfig: 'tsconfig.build.json',
   // Browser-only, ESM-only output.
   format: ['esm'],

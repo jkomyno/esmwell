@@ -1,5 +1,6 @@
 import type { PolicyRule } from './policy'
 import type { ResolutionFailureKind, ResolvedDependency } from './resolve'
+import type { TestRun, TestRunResult } from './test-types'
 
 /** A single judge-mode test case: one invocation of one named export. */
 export interface JudgeCase {
@@ -128,10 +129,22 @@ export interface ReplResetRequest {
   readonly id: number
 }
 
-export type WorkerRequest = JudgeRequest | ReplInputRequest | ReplResetRequest
+/** Main-thread → worker request: run a virtual ESM test workspace. */
+export interface TestRequest {
+  readonly kind: 'test'
+  readonly id: number
+  readonly run: TestRun
+  readonly graphId: string
+  readonly serviceWorkerScope: string
+  readonly deps?: Readonly<Record<string, string>>
+  readonly autoInstall?: boolean
+}
+
+export type WorkerRequest = JudgeRequest | ReplInputRequest | ReplResetRequest | TestRequest
 
 export type WorkerResponse =
   | { readonly kind: 'console'; readonly id: number; readonly chunk: ConsoleChunk }
   | { readonly kind: 'result'; readonly id: number; readonly result: JudgeRunResult }
   | { readonly kind: 'repl-result'; readonly id: number; readonly result: ReplResult }
   | { readonly kind: 'repl-ack'; readonly id: number }
+  | { readonly kind: 'test-result'; readonly id: number; readonly result: TestRunResult }

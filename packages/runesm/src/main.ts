@@ -1,4 +1,5 @@
 import type { ConsoleChunk, JudgeCase, JudgeRunResult, ReplResult, SerializedError, WorkerResponse } from './types'
+import type { TestRun, TestRunResult } from './test-types'
 
 /** The worker surface the session transport needs; satisfied by a real module Worker. */
 export interface WorkerLike {
@@ -50,6 +51,23 @@ export interface ReplSession {
   /** Starts a fresh scope; later evaluations do not see earlier state. */
   reset(): Promise<void>
   /** Terminates the worker and invalidates the session. */
+  close(): void
+}
+
+/** Options for lazy Vitest/Jest workspace runs. */
+export interface TestSessionOptions extends RunesmOptions {
+  /**
+   * Same-origin module service worker. Defaults to
+   * `module-service-worker.mjs` next to the main runesm module.
+   */
+  readonly serviceWorkerUrl?: string | URL
+}
+
+/** A test-workspace session; each run receives a fresh execution worker. */
+export interface TestSession {
+  /** Runs canonical ESM modules with the selected official upstream engine. */
+  run(run: TestRun, handlers?: ConsoleStreamHandlers): Promise<TestRunResult>
+  /** Prevents future runs. An in-flight run still settles normally. */
   close(): void
 }
 
@@ -130,6 +148,61 @@ export function createReplSession(options: RunesmOptions = {}): ReplSession {
   }
 }
 
+/**
+ * Creates a lazy browser test session. Test engines are downloaded only when
+ * `run` is called. Every call uses a fresh worker because Vitest and Jest keep
+ * process-wide registration state.
+ */
+export function createTestSession(options: TestSessionOptions = {}): TestSession {
+  let closed = false
+
+  return {
+    async run(run, handlers): Promise<TestRunResult> {
+      if (closed) {
+        throw new Error('runesm test session is closed')
+      }
+      const graphId = createGraphId()
+      const startedAt = performance.now()
+      let transport: WorkerTransport | undefined
+      try {
+        const serviceWorkerScope = await prepareModuleServiceWorker(options)
+        const testWorkerUrl = resolveTestWorkerUrl(options)
+        assertWorkerWithinScope(testWorkerUrl, serviceWorkerScope)
+        transport = new WorkerTransport({ ...options, workerUrl: testWorkerUrl })
+        const outcome = await transport.request(
+          {
+            kind: 'test',
+            run,
+            graphId,
+            serviceWorkerScope,
+            ...(options.deps === undefined ? {} : { deps: options.deps }),
+            ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
+          },
+          'test-result',
+          handlers,
+        )
+        return asTestResult(outcome, transport.timeoutMs)
+      } catch (error) {
+        return {
+          status: 'error',
+          ok: false,
+          tests: [],
+          console: [],
+          dependencies: [],
+          error: serializedMainError(error),
+          durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        }
+      } finally {
+        transport?.close()
+        await deleteTestGraphCache(graphId)
+      }
+    },
+    close(): void {
+      closed = true
+    },
+  }
+}
+
 /** What a transport request resolved to. */
 type TransportOutcome =
   | { kind: 'delivered'; payload: unknown; console: ConsoleChunk[] }
@@ -138,7 +211,7 @@ type TransportOutcome =
 
 interface PendingRequest {
   settle: (outcome: TransportOutcome) => void
-  resultKind: 'result' | 'repl-result' | 'repl-ack'
+  resultKind: 'result' | 'repl-result' | 'repl-ack' | 'test-result'
   handlers: ConsoleStreamHandlers | undefined
   pendingChunks: ConsoleChunk[]
   settled: boolean
@@ -252,7 +325,9 @@ class WorkerTransport {
         }
         if (response.kind === resultKind) {
           const payload =
-            response.kind === 'result' ? response.result : response.kind === 'repl-result' ? response.result : undefined
+            response.kind === 'result' || response.kind === 'repl-result' || response.kind === 'test-result'
+              ? response.result
+              : undefined
           pending.finish({ kind: 'delivered', payload, console: pending.pendingChunks })
           return
         }
@@ -396,6 +471,32 @@ const asReplResult = (outcome: TransportOutcome, timeoutMs: number): ReplResult 
   }
 }
 
+const asTestResult = (outcome: TransportOutcome, timeoutMs: number): TestRunResult => {
+  if (outcome.kind === 'delivered') {
+    return outcome.payload as TestRunResult
+  }
+  if (outcome.kind === 'timeout') {
+    return {
+      status: 'error',
+      ok: false,
+      tests: [],
+      console: outcome.console,
+      dependencies: [],
+      error: timeoutError(timeoutMs),
+      durationMs: timeoutMs,
+    }
+  }
+  return {
+    status: 'error',
+    ok: false,
+    tests: [],
+    console: outcome.console,
+    dependencies: [],
+    error: workerError(outcome.message),
+    durationMs: 0,
+  }
+}
+
 const timeoutResult = (timeoutMs: number, console: ConsoleChunk[]): JudgeRunResult => ({
   status: 'error',
   ok: false,
@@ -425,3 +526,75 @@ const workerError = (message: string): SerializedError => ({
   name: 'RunesmError',
   message,
 })
+
+const prepareModuleServiceWorker = async (options: TestSessionOptions): Promise<string> => {
+  if (typeof navigator === 'undefined' || navigator.serviceWorker === undefined) {
+    throw new Error('test workspaces require Service Worker support in a secure browser context')
+  }
+  const serviceWorkerUrl =
+    options.serviceWorkerUrl === undefined
+      ? new URL(/* @vite-ignore */ 'module-service-worker.mjs', import.meta.url)
+      : new URL(String(options.serviceWorkerUrl), globalThis.location?.href)
+  if (serviceWorkerUrl.origin !== globalThis.location?.origin) {
+    throw new Error('the test-workspace module service worker must be served from the website origin')
+  }
+  const scope = new URL('./', serviceWorkerUrl).href
+  const registration = await navigator.serviceWorker.register(serviceWorkerUrl, { type: 'module', scope })
+  await waitForActiveWorker(registration)
+  return registration.scope
+}
+
+const waitForActiveWorker = async (registration: ServiceWorkerRegistration): Promise<void> => {
+  if (registration.active !== null) {
+    return
+  }
+  const worker = registration.installing ?? registration.waiting
+  if (worker === null) {
+    throw new Error('the test-workspace module service worker did not start installing')
+  }
+  await new Promise<void>((resolve, reject) => {
+    const onStateChange = (): void => {
+      if (worker.state === 'activated') {
+        worker.removeEventListener('statechange', onStateChange)
+        resolve()
+      } else if (worker.state === 'redundant') {
+        worker.removeEventListener('statechange', onStateChange)
+        reject(new Error('the test-workspace module service worker became redundant during installation'))
+      }
+    }
+    worker.addEventListener('statechange', onStateChange)
+    onStateChange()
+  })
+}
+
+const resolveTestWorkerUrl = (options: TestSessionOptions): URL =>
+  options.workerUrl === undefined
+    ? new URL(/* @vite-ignore */ 'test-worker-entry.mjs', import.meta.url)
+    : new URL(String(options.workerUrl), globalThis.location?.href)
+
+const assertWorkerWithinScope = (workerUrl: URL, scope: string): void => {
+  if (!workerUrl.href.startsWith(scope)) {
+    throw new Error(
+      `the test execution worker must be served under the module service-worker scope '${scope}', but resolved to '${workerUrl.href}'`,
+    )
+  }
+}
+
+const createGraphId = (): string => {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+const deleteTestGraphCache = async (graphId: string): Promise<void> => {
+  if (typeof caches !== 'undefined') {
+    await caches.delete(`runesm:test-graph:v1:${graphId}`)
+  }
+}
+
+const serializedMainError = (error: unknown): SerializedError =>
+  error instanceof Error
+    ? { name: error.name, message: error.message, ...(error.stack === undefined ? {} : { stack: error.stack }) }
+    : { name: 'NonError', message: String(error) }
