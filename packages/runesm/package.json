@@ -2,7 +2,7 @@
   "private": false,
   "name": "runesm",
   "version": "0.0.0",
-  "description": "ESM-only in-browser code runner with judge and REPL modes over a web-worker foundation",
+  "description": "Run unbundled ESM in the browser with hard timeouts and normalized results",
   "type": "module",
   "repository": {
     "type": "git",
@@ -36,6 +36,12 @@
         "default": "./build/worker-entry.mjs"
       }
     },
+    "./execution-worker-entry": {
+      "import": {
+        "@jkomyno/source": "./src/execution-worker-entry.ts",
+        "default": "./build/execution-worker-entry.mjs"
+      }
+    },
     "./module-service-worker": {
       "import": {
         "@jkomyno/source": "./src/module-service-worker.ts",
@@ -66,5 +72,10 @@
   },
   "dependencies": {
     "acorn": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
   }
 }

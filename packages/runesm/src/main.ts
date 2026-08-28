@@ -26,6 +26,12 @@ export interface RunesmOptions {
    * should pass an explicit URL.
    */
   readonly workerUrl?: string | URL
+  /**
+   * Same-origin child worker that owns submitted code. Defaults to the
+   * execution entry shipped beside the package. Bundlers that relocate worker
+   * assets must pass the emitted child-worker URL explicitly.
+   */
+  readonly executionWorkerUrl?: string | URL
   /** Builds the workers; tests inject fakes here. */
   readonly workerFactory?: WorkerFactory
 }
@@ -36,7 +42,7 @@ export interface ConsoleStreamHandlers {
   readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
 }
 
-/** A main-thread judge session owning one module worker at a time. */
+/** A main-thread judge session backed by a coordinator and disposable execution workers. */
 export interface RunesmSession {
   /** Runs user code as a judged module. Runs are serialized per session. */
   runJudge(code: string, cases: readonly JudgeCase[], handlers?: ConsoleStreamHandlers): Promise<JudgeRunResult>
@@ -44,7 +50,7 @@ export interface RunesmSession {
   close(): void
 }
 
-/** A main-thread REPL session over the same worker transport. */
+/** A main-thread REPL session backed by a coordinator and one stateful execution worker. */
 export interface ReplSession {
   /** Evaluates one input against the persistent session scope. */
   evaluate(input: string, handlers?: ConsoleStreamHandlers): Promise<ReplResult>
@@ -78,6 +84,7 @@ export interface TestSession {
 }
 
 const DEFAULT_TIMEOUT_MS = 5000
+const SUPERVISOR_WATCHDOG_GRACE_MS = 1000
 
 /**
  * Test runs download the engine from esm.sh inside the same timed request as
@@ -87,13 +94,14 @@ const DEFAULT_TIMEOUT_MS = 5000
 const DEFAULT_TEST_TIMEOUT_MS = 60_000
 
 /**
- * Creates a judge session backed by a dedicated module worker. Console
- * output streams through `onConsoleChunk` while the run executes; a run that
- * exceeds `timeoutMs` terminates the worker and resolves to a timeout error
- * result (the next run starts a fresh worker).
+ * Creates a judge session backed by a trusted coordinator worker. Console
+ * output streams through `onConsoleChunk` while a fresh child executes the
+ * module. A run that exceeds `timeoutMs` terminates only that child and
+ * resolves to a timeout error result.
  */
 export function createRunesm(options: RunesmOptions = {}): RunesmSession {
-  const transport = new WorkerTransport(options)
+  const transport = new WorkerTransport(options, SUPERVISOR_WATCHDOG_GRACE_MS)
+  const executionWorkerUrl = resolveExecutionWorkerUrl(options.executionWorkerUrl, 'execution-worker-entry.mjs')
 
   return {
     runJudge(code, cases, handlers) {
@@ -106,6 +114,8 @@ export function createRunesm(options: RunesmOptions = {}): RunesmSession {
             kind: 'judge',
             code,
             cases,
+            timeoutMs: transport.timeoutMs,
+            executionWorkerUrl,
             ...(options.deps === undefined ? {} : { deps: options.deps }),
             ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
           },
@@ -121,13 +131,14 @@ export function createRunesm(options: RunesmOptions = {}): RunesmSession {
 }
 
 /**
- * Creates a REPL session backed by a dedicated module worker. Declarations,
- * imports, and reassignments persist across `evaluate` calls; `reset()`
- * starts a fresh scope. A hung evaluation terminates the worker — the next
- * evaluation starts fresh (state does not survive a timeout).
+ * Creates a REPL session backed by a trusted coordinator worker. Declarations,
+ * imports, and reassignments persist in one child across `evaluate` calls;
+ * `reset()` starts a fresh scope. A hung evaluation terminates the child, so
+ * the next evaluation starts fresh and state does not survive a timeout.
  */
 export function createReplSession(options: RunesmOptions = {}): ReplSession {
-  const transport = new WorkerTransport(options)
+  const transport = new WorkerTransport(options, SUPERVISOR_WATCHDOG_GRACE_MS)
+  const executionWorkerUrl = resolveExecutionWorkerUrl(options.executionWorkerUrl, 'execution-worker-entry.mjs')
   let closed = false
 
   return {
@@ -140,6 +151,8 @@ export function createReplSession(options: RunesmOptions = {}): ReplSession {
           {
             kind: 'repl-input',
             input,
+            timeoutMs: transport.timeoutMs,
+            executionWorkerUrl,
             ...(options.deps === undefined ? {} : { deps: options.deps }),
             ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
           },
@@ -223,7 +236,8 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
 /** What a transport request resolved to. */
 type TransportOutcome =
   | { kind: 'delivered'; payload: unknown; console: ConsoleChunk[] }
-  | { kind: 'timeout'; console: ConsoleChunk[] }
+  | { kind: 'execution-timeout'; console: ConsoleChunk[] }
+  | { kind: 'supervisor-timeout'; console: ConsoleChunk[] }
   | { kind: 'worker-error'; message: string; console: ConsoleChunk[] }
 
 interface PendingRequest {
@@ -251,6 +265,8 @@ class WorkerTransport {
 
   private readonly workerFactory: WorkerFactory
   private readonly workerUrl: string
+  private readonly watchdogMs: number
+  private readonly timeoutOutcomeKind: 'execution-timeout' | 'supervisor-timeout'
   private worker: WorkerLike | null = null
   private closed = false
   private nextRequestId = 1
@@ -258,8 +274,10 @@ class WorkerTransport {
   /** The one request currently in flight, if any (requests are serialized). */
   private pending: PendingRequest | null = null
 
-  constructor(options: RunesmOptions) {
+  constructor(options: RunesmOptions, watchdogGraceMs: number = 0) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.watchdogMs = this.timeoutMs + watchdogGraceMs
+    this.timeoutOutcomeKind = watchdogGraceMs === 0 ? 'execution-timeout' : 'supervisor-timeout'
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory
     this.workerUrl =
       options.workerUrl !== undefined
@@ -384,8 +402,8 @@ class WorkerTransport {
 
       pending.timer = setTimeout(() => {
         this.terminateWorker()
-        pending.finish({ kind: 'timeout', console: pending.pendingChunks })
-      }, this.timeoutMs)
+        pending.finish({ kind: this.timeoutOutcomeKind, console: pending.pendingChunks })
+      }, this.watchdogMs)
 
       sessionWorker.addEventListener('message', onMessage)
       sessionWorker.addEventListener('error', onError)
@@ -468,7 +486,10 @@ const asJudgeResult = (outcome: TransportOutcome, timeoutMs: number): JudgeRunRe
   if (outcome.kind === 'delivered') {
     return outcome.payload as JudgeRunResult
   }
-  if (outcome.kind === 'timeout') {
+  if (outcome.kind === 'supervisor-timeout') {
+    return workerErrorResult(supervisorTimeoutMessage(timeoutMs), outcome.console)
+  }
+  if (outcome.kind === 'execution-timeout') {
     return timeoutResult(timeoutMs, outcome.console)
   }
   return workerErrorResult(outcome.message, outcome.console)
@@ -478,7 +499,16 @@ const asReplResult = (outcome: TransportOutcome, timeoutMs: number): ReplResult 
   if (outcome.kind === 'delivered') {
     return outcome.payload as ReplResult
   }
-  if (outcome.kind === 'timeout') {
+  if (outcome.kind === 'supervisor-timeout') {
+    return {
+      ok: false,
+      error: workerError(supervisorTimeoutMessage(timeoutMs)),
+      console: outcome.console,
+      dependencies: [],
+      durationMs: 0,
+    }
+  }
+  if (outcome.kind === 'execution-timeout') {
     return {
       ok: false,
       error: timeoutError(timeoutMs),
@@ -500,7 +530,18 @@ const asTestResult = (outcome: TransportOutcome, timeoutMs: number): TestRunResu
   if (outcome.kind === 'delivered') {
     return outcome.payload as TestRunResult
   }
-  if (outcome.kind === 'timeout') {
+  if (outcome.kind === 'supervisor-timeout') {
+    return {
+      status: 'error',
+      ok: false,
+      tests: [],
+      console: outcome.console,
+      dependencies: [],
+      error: workerError(supervisorTimeoutMessage(timeoutMs)),
+      durationMs: 0,
+    }
+  }
+  if (outcome.kind === 'execution-timeout') {
     return {
       status: 'error',
       ok: false,
@@ -522,16 +563,6 @@ const asTestResult = (outcome: TransportOutcome, timeoutMs: number): TestRunResu
   }
 }
 
-const timeoutResult = (timeoutMs: number, console: ConsoleChunk[]): JudgeRunResult => ({
-  status: 'error',
-  ok: false,
-  cases: [],
-  console,
-  error: timeoutError(timeoutMs),
-  dependencies: [],
-  durationMs: timeoutMs,
-})
-
 const workerErrorResult = (message: string, console: ConsoleChunk[]): JudgeRunResult => ({
   status: 'error',
   ok: false,
@@ -542,15 +573,28 @@ const workerErrorResult = (message: string, console: ConsoleChunk[]): JudgeRunRe
   durationMs: 0,
 })
 
+const timeoutResult = (timeoutMs: number, console: ConsoleChunk[]): JudgeRunResult => ({
+  status: 'error',
+  ok: false,
+  cases: [],
+  console,
+  error: timeoutError(timeoutMs),
+  dependencies: [],
+  durationMs: timeoutMs,
+})
+
 const timeoutError = (timeoutMs: number): SerializedError => ({
   name: 'TimeoutError',
-  message: `execution timed out after ${timeoutMs}ms and was terminated`,
+  message: `execution timed out after ${timeoutMs}ms and its worker was terminated`,
 })
 
 const workerError = (message: string): SerializedError => ({
   name: 'RunesmError',
   message,
 })
+
+const supervisorTimeoutMessage = (timeoutMs: number): string =>
+  `the execution supervisor did not settle the request within ${timeoutMs}ms plus its watchdog grace period and was terminated`
 
 const prepareModuleServiceWorker = async (options: TestSessionOptions): Promise<string> => {
   if (typeof navigator === 'undefined' || navigator.serviceWorker === undefined) {
@@ -596,6 +640,11 @@ const resolveTestWorkerUrl = (options: TestSessionOptions): URL =>
   options.workerUrl === undefined
     ? new URL(/* @vite-ignore */ 'test-worker-entry.mjs', import.meta.url)
     : new URL(String(options.workerUrl), globalThis.location?.href)
+
+const resolveExecutionWorkerUrl = (value: string | URL | undefined, defaultFile: string): string =>
+  value === undefined
+    ? new URL(defaultFile, import.meta.url).href
+    : new URL(String(value), globalThis.location?.href ?? import.meta.url).href
 
 const assertWorkerWithinScope = (workerUrl: URL, scope: string): void => {
   if (!workerUrl.href.startsWith(scope)) {

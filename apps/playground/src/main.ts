@@ -1,5 +1,6 @@
 import { adaptWorker, collectBareSpecifiers, createReplSession, createRunesm, parseUserModule } from 'runesm'
 import type { ConsoleChunk, JudgeCase, JudgeRunResult, ReplResult, ReplSession } from 'runesm'
+import RunesmExecutionWorkerUrl from './runesm-execution-worker?worker&url'
 import RunesmWorker from './runesm-worker?worker'
 import { DEFAULT_CODE, DEMO_CASES } from './examples'
 
@@ -43,6 +44,7 @@ const collectPinnedDeps = (): Record<string, string> => {
 function createSession() {
   return createRunesm({
     workerFactory: () => adaptWorker(new RunesmWorker()),
+    executionWorkerUrl: RunesmExecutionWorkerUrl,
     deps: collectPinnedDeps(),
     timeoutMs: 10_000,
   })

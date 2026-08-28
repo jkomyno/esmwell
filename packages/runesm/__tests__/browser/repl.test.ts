@@ -94,3 +94,28 @@ test('REPL reset starts a fresh scope over the transport', async () => {
     session.close()
   }
 })
+
+test('REPL runtime globals stay protected for the lifetime of its child realm', async () => {
+  const session = createReplSession({
+    workerUrl: '/runesm/worker-entry.mjs',
+    timeoutMs: 5000,
+  })
+  try {
+    const attempted = await session.evaluate(`({
+      processSet: Reflect.set(globalThis, 'process', {}),
+      processDeleted: Reflect.deleteProperty(globalThis, 'process'),
+      consoleSet: Reflect.set(globalThis, 'console', {}),
+      consoleMethodSet: Reflect.set(globalThis.console, 'log', () => {}),
+    })`)
+    assertEqual(
+      attempted.value,
+      { processSet: false, processDeleted: false, consoleSet: false, consoleMethodSet: false },
+      'runtime bindings reject replacement',
+    )
+
+    const survived = await session.evaluate(`({ cwd: process.cwd(), console: globalThis.console === console })`)
+    assertEqual(survived.value, { cwd: '/', console: true }, 'protected globals remain usable')
+  } finally {
+    session.close()
+  }
+})

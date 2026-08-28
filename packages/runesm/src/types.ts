@@ -92,7 +92,15 @@ export interface JudgeRunResult {
 }
 
 /** Main-thread → worker request: run user code as a judged module. */
-export interface JudgeRequest {
+export interface SupervisedExecutionOptions {
+  /** Execution deadline enforced by the supervisor worker. */
+  readonly timeoutMs: number
+  /** Same-origin child worker that owns submitted code. */
+  readonly executionWorkerUrl?: string
+}
+
+/** Main-thread → supervisor request: run user code as a judged module. */
+export interface JudgeRequest extends SupervisedExecutionOptions {
   readonly kind: 'judge'
   /** Pairing id; responses echo it. */
   readonly id: number
@@ -114,8 +122,8 @@ export interface ReplResult {
   readonly durationMs: number
 }
 
-/** Main-thread → worker request: evaluate one REPL input. */
-export interface ReplInputRequest {
+/** Main-thread → supervisor request: evaluate one REPL input. */
+export interface ReplInputRequest extends SupervisedExecutionOptions {
   readonly kind: 'repl-input'
   readonly id: number
   readonly input: string
@@ -129,7 +137,7 @@ export interface ReplResetRequest {
   readonly id: number
 }
 
-/** Main-thread → worker request: run a virtual ESM test workspace. */
+/** Main-thread → supervisor request: run a virtual ESM test workspace. */
 export interface TestRequest {
   readonly kind: 'test'
   readonly id: number

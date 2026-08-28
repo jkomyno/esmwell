@@ -3,6 +3,7 @@ import { serializeError } from './bootstrap'
 import { TEST_API_GLOBAL } from './test-engine'
 import { runJestTests } from './test-engines/jest'
 import { runVitestInRealm } from './test-engines/vitest'
+import { defineRunesmGlobal } from './runtime-globals'
 import { materializeTestGraph } from './test-workspace'
 import type { ResolveOptions } from './resolve'
 import type { ConsoleChunk } from './types'
@@ -60,7 +61,6 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
       durationMs: elapsedMs(startedAt),
     }
   } finally {
-    delete testGlobal()[TEST_API_GLOBAL]
     if (graph !== undefined) {
       await graph.cleanup()
     }
@@ -98,7 +98,7 @@ const executeVitest = async (entryUrls: readonly string[]): Promise<NormalizedEn
   const result = await runVitestInRealm({
     files: entryUrls,
     importTestFile: async (filepath, context) => {
-      testGlobal()[TEST_API_GLOBAL] = await importUrl(context.vitestUrl)
+      installTestApi(await importUrl(context.vitestUrl))
       return importUrl(filepath)
     },
   })
@@ -131,7 +131,7 @@ const executeVitest = async (entryUrls: readonly string[]): Promise<NormalizedEn
 
 const executeJest = async (entryUrls: readonly string[]): Promise<NormalizedEngineOutcome> => {
   const result = await runJestTests(async (globals) => {
-    testGlobal()[TEST_API_GLOBAL] = globals
+    installTestApi(globals)
     for (const entryUrl of entryUrls) {
       await importUrl(entryUrl)
     }
@@ -169,8 +169,9 @@ const executeJest = async (entryUrls: readonly string[]): Promise<NormalizedEngi
   }
 }
 
-const testGlobal = (): typeof globalThis & Record<string, unknown> =>
-  globalThis as typeof globalThis & Record<string, unknown>
+const installTestApi = (value: unknown): void => {
+  defineRunesmGlobal(TEST_API_GLOBAL, value)
+}
 
 const importUrl = async (url: string): Promise<Record<string, unknown>> =>
   (await import(/* @vite-ignore */ url)) as Record<string, unknown>

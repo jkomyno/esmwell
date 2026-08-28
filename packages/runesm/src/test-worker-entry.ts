@@ -1,5 +1,6 @@
 import { installBrowserProcess } from './browser-process'
 import { serializeError } from './bootstrap'
+import { protectConsole } from './console'
 import { runTestsInRealm } from './test-runner'
 import type { TestRunResult } from './test-types'
 import type { TestRequest, WorkerResponse } from './types'
@@ -13,6 +14,7 @@ const scope = self as unknown as TestWorkerScope
 const postToMain = scope.postMessage.bind(scope)
 
 installBrowserProcess()
+protectConsole()
 
 scope.addEventListener('message', (event): void => {
   const request = event.data
@@ -43,7 +45,7 @@ const postResult = (id: number, result: TestRunResult): void => {
 }
 
 const testErrorResult = (error: unknown): TestRunResult => ({
-  status: 'error' as const,
+  status: 'error',
   ok: false,
   tests: [],
   console: [],

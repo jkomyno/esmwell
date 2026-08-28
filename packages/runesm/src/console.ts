@@ -1,4 +1,5 @@
 import type { ConsoleChunk, ConsoleLevel } from './types'
+import { defineRunesmGlobal } from './runtime-globals'
 
 /** Receives captured console output. */
 export interface ConsoleSink {
@@ -7,6 +8,45 @@ export interface ConsoleSink {
 
 /** How deep the serializer descends into nested structures. */
 const MAX_SERIALIZATION_DEPTH = 3
+const CONSOLE_LEVELS: readonly ConsoleLevel[] = ['log', 'info', 'warn', 'error', 'debug']
+
+let protectedConsole: Console | undefined
+let protectedConsoleSink: ConsoleSink | undefined
+let protectedConsoleCaptureActive = false
+
+/**
+ * Installs stable console methods before submitted code runs. The global
+ * binding and captured methods cannot be replaced or deleted. A lexical sink
+ * selects the active run without exposing runesm's capture state globally.
+ */
+export function protectConsole(): void {
+  if (protectedConsole !== undefined) {
+    return
+  }
+
+  const consoleObject = globalThis.console
+  for (const level of CONSOLE_LEVELS) {
+    const original = consoleObject[level].bind(consoleObject)
+    Object.defineProperty(consoleObject, level, {
+      configurable: false,
+      enumerable: true,
+      writable: false,
+      value: (...args: unknown[]): void => {
+        const sink = protectedConsoleSink
+        if (sink === undefined) {
+          original(...args)
+          return
+        }
+        sink.write({
+          level,
+          parts: args.map((argument) => serializeValue(argument)),
+        })
+      },
+    })
+  }
+  defineRunesmGlobal('console', consoleObject)
+  protectedConsole = consoleObject
+}
 
 /**
  * Serializes a value for display: primitives, strings (quoted inside
@@ -131,11 +171,22 @@ const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\'
  * during a run is captured instead of printed.
  */
 export function installConsoleCapture(sink: ConsoleSink): () => void {
+  if (protectedConsole !== undefined) {
+    if (protectedConsoleCaptureActive) {
+      throw new Error('console capture is already active in this execution worker')
+    }
+    protectedConsoleCaptureActive = true
+    protectedConsoleSink = sink
+    return () => {
+      protectedConsoleSink = undefined
+      protectedConsoleCaptureActive = false
+    }
+  }
+
   const consoleObject = globalThis.console
-  const levels: readonly ConsoleLevel[] = ['log', 'info', 'warn', 'error', 'debug']
   const originals = new Map<ConsoleLevel, (...args: unknown[]) => void>()
 
-  for (const level of levels) {
+  for (const level of CONSOLE_LEVELS) {
     const original = consoleObject[level] as unknown as (...args: unknown[]) => void
     originals.set(level, original.bind(consoleObject))
     consoleObject[level] = (...args: unknown[]) => {

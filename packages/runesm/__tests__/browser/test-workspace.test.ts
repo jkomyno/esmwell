@@ -37,6 +37,24 @@ const modulesFor = (engine: 'vitest' | 'jest') => ({
       it('uses native ESM cycles and live bindings', () => {
         expect(readCycle()).toBe('BA')
       })
+
+      it('protects the runesm test API binding', () => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, '__runesmTestApi')
+        expect(descriptor?.configurable).toBe(false)
+        expect(descriptor?.writable).toBe(false)
+        expect(Reflect.set(globalThis, '__runesmTestApi', null)).toBe(false)
+        expect(Reflect.deleteProperty(globalThis, '__runesmTestApi')).toBe(false)
+        expect(() => Object.defineProperty(globalThis, '__runesmTestApi', { value: null })).toThrow()
+        ${
+          engine === 'vitest'
+            ? `const workerDescriptor = Object.getOwnPropertyDescriptor(globalThis, '__vitest_worker__')
+        expect(workerDescriptor?.configurable).toBe(false)
+        expect(workerDescriptor?.writable).toBe(false)
+        expect(Reflect.set(globalThis, '__vitest_worker__', null)).toBe(false)
+        expect(Reflect.deleteProperty(globalThis, '__vitest_worker__')).toBe(false)`
+            : ''
+        }
+      })
     })
   `,
 })
@@ -65,7 +83,7 @@ test('runs current Vitest and Jest engines over local ESM modules with Zod 4', a
       )
       assertEqual(
         result.tests.map((testResult) => testResult.status),
-        ['pass', 'pass', 'fail', 'pass'],
+        ['pass', 'pass', 'fail', 'pass', 'pass'],
         `${engine} normalized test statuses`,
       )
       assert(

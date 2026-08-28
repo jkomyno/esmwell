@@ -40,7 +40,7 @@ export function createBrowserProcess(): BrowserProcess {
     removeListener: () => process,
     emit: () => false,
   }
-  return process
+  return Object.freeze(process)
 }
 
 /** Installs one process object when the runtime does not already provide one. */
@@ -49,12 +49,7 @@ export function installBrowserProcess(): void {
   if (typeof target.process === 'object' && target.process !== null) {
     return
   }
-  Object.defineProperty(target, 'process', {
-    configurable: true,
-    enumerable: false,
-    writable: false,
-    value: createBrowserProcess(),
-  })
+  defineRunesmGlobal('process', createBrowserProcess())
 }
 
 const PROCESS_MODULE_SOURCE = `
@@ -77,3 +72,4 @@ export const nextTick = process.nextTick
 /** A self-contained ESM facade whose default and named exports use globalThis.process. */
 export const browserProcessModuleUrl = (): string =>
   `data:text/javascript;charset=utf-8,${encodeURIComponent(PROCESS_MODULE_SOURCE)}`
+import { defineRunesmGlobal } from './runtime-globals'

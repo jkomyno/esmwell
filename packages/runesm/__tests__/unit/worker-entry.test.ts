@@ -1,7 +1,7 @@
 import type { createReplSessionInRealm, runJudgeInRealm } from 'src/bootstrap'
 import type { JudgeRunResult, WorkerRequest, WorkerResponse } from 'src/types'
 
-// worker-entry.ts reads `self` at module load time, so the worker scope
+// execution-worker-entry.ts reads `self` at module load time, so the worker scope
 // shim must be in place before the module is imported, and every test
 // needs its own fresh module instance (`replSession` is module-level
 // state). `vi.mock` replaces bootstrap for the whole file so judge and
@@ -16,6 +16,11 @@ vi.mock('src/bootstrap', () => ({
   }),
 }))
 
+vi.mock('src/console', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('src/console')>()
+  return { ...actual, protectConsole: vi.fn<typeof actual.protectConsole>() }
+})
+
 type MessageListener = (event: MessageEvent<WorkerRequest>) => void
 
 interface LoadedWorkerEntry {
@@ -26,7 +31,7 @@ interface LoadedWorkerEntry {
 }
 
 /**
- * Installs a fresh `self` shim, resets the module registry so `worker-entry`
+ * Installs a fresh `self` shim, resets the module registry so the execution entry
  * and its mocked `bootstrap` dependency load as new instances (no state or
  * mock call history carried over from a previous test), and returns the
  * listener the module registered plus the doubles it was built from.
@@ -38,11 +43,11 @@ async function loadWorkerEntry(): Promise<LoadedWorkerEntry> {
 
   vi.resetModules()
   const bootstrap = await import('src/bootstrap')
-  await import('src/worker-entry')
+  await import('src/execution-worker-entry')
 
   const registration = addEventListener.mock.calls.find(([type]) => type === 'message')
   if (registration === undefined) {
-    throw new Error('worker-entry did not register a message listener')
+    throw new Error('execution-worker-entry did not register a message listener')
   }
 
   return {
@@ -69,12 +74,12 @@ afterEach(() => {
   vi.resetModules()
 })
 
-describe('worker-entry: judge path failure', () => {
+describe('execution-worker-entry: judge path failure', () => {
   it('posts a well-formed failure response carrying the request id when the judge run rejects', async () => {
     const { listener, postMessage, runJudgeInRealm } = await loadWorkerEntry()
     runJudgeInRealm.mockReturnValue(Promise.reject(new Error('judge exploded')))
 
-    deliver(listener, { kind: 'judge', id: 7, code: 'export const s = () => 1', cases: [] })
+    deliver(listener, { kind: 'judge', id: 7, code: 'export const s = () => 1', cases: [], timeoutMs: 5000 })
     await flushMicrotasks()
 
     expect(postMessage).toHaveBeenCalledTimes(1)
@@ -90,7 +95,7 @@ describe('worker-entry: judge path failure', () => {
   })
 })
 
-describe('worker-entry: unrecognized request kind', () => {
+describe('execution-worker-entry: unrecognized request kind', () => {
   it('produces a response instead of staying silent', async () => {
     const { listener, postMessage } = await loadWorkerEntry()
 
@@ -112,7 +117,7 @@ describe('worker-entry: unrecognized request kind', () => {
   })
 })
 
-describe('worker-entry: postResponse fallback cascade', () => {
+describe('execution-worker-entry: postResponse fallback cascade', () => {
   const judgeResult: JudgeRunResult = {
     status: 'fail',
     ok: false,
@@ -136,7 +141,7 @@ describe('worker-entry: postResponse fallback cascade', () => {
       }
     })
 
-    deliver(listener, { kind: 'judge', id: 1, code: 'export const s = () => 1', cases: [] })
+    deliver(listener, { kind: 'judge', id: 1, code: 'export const s = () => 1', cases: [], timeoutMs: 5000 })
     await flushMicrotasks()
 
     expect(postMessage).toHaveBeenCalledTimes(2)
@@ -162,7 +167,7 @@ describe('worker-entry: postResponse fallback cascade', () => {
       }
     })
 
-    deliver(listener, { kind: 'judge', id: 2, code: 'export const s = () => 1', cases: [] })
+    deliver(listener, { kind: 'judge', id: 2, code: 'export const s = () => 1', cases: [], timeoutMs: 5000 })
     await flushMicrotasks()
 
     expect(postMessage).toHaveBeenCalledTimes(3)
@@ -172,7 +177,7 @@ describe('worker-entry: postResponse fallback cascade', () => {
       result: expect.objectContaining({
         status: 'error',
         ok: false,
-        error: expect.objectContaining({ message: 'worker response could not be sent to the main thread' }),
+        error: expect.objectContaining({ message: 'execution worker response could not be sent to the supervisor' }),
       }),
     })
   })

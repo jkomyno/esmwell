@@ -1,3 +1,5 @@
+import { defineRunesmGlobal } from '../runtime-globals'
+
 const ESM_SH_ORIGIN = 'https://esm.sh'
 const LATEST_RUNNER_URL = `${ESM_SH_ORIGIN}/@vitest/runner@latest`
 
@@ -271,11 +273,7 @@ const createWorkerState = (
 })
 
 const installWorkerState = (state: WorkerState): void => {
-  Object.defineProperty(globalThis, '__vitest_worker__', {
-    value: state,
-    writable: true,
-    configurable: true,
-  })
+  defineRunesmGlobal('__vitest_worker__', state)
 }
 
 const createSnapshotEnvironment = (snapshots: Map<string, string>): SnapshotEnvironment => ({

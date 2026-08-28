@@ -184,38 +184,53 @@ describe('session transport: console streaming', () => {
   })
 })
 
-describe('session transport: hard timeout', () => {
-  it('terminates the worker and resolves a TLE result with streamed console', async () => {
-    const worker = new FakeWorker()
-    const { session } = createSessionWith([worker], { timeoutMs: 30 })
+describe('session transport: supervisor watchdog', () => {
+  it('terminates an unresponsive supervisor after the execution deadline grace period', async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = new FakeWorker()
+      const { session } = createSessionWith([worker], { timeoutMs: 30 })
 
-    const pending = session.runJudge('while (true) {}', [])
-    await Promise.resolve()
-    worker.emitMessage({ kind: 'console', id: 1, chunk: { level: 'log', parts: ['started'] } })
+      const pending = session.runJudge('while (true) {}', [])
+      await Promise.resolve()
+      worker.emitMessage({ kind: 'console', id: 1, chunk: { level: 'log', parts: ['started'] } })
+      await vi.advanceTimersByTimeAsync(1029)
+      expect(worker.terminated).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
 
-    const result = await pending
-    expect(result.status).toBe('error')
-    expect(result.ok).toBe(false)
-    expect(result.error).toMatchObject({ name: 'TimeoutError' })
-    expect(result.error?.message).toContain('terminated')
-    expect(result.console).toEqual([{ level: 'log', parts: ['started'] }])
-    expect(worker.terminated).toBe(true)
+      const result = await pending
+      expect(result.status).toBe('error')
+      expect(result.ok).toBe(false)
+      expect(result.error).toMatchObject({ name: 'RunesmError' })
+      expect(result.error?.message).toContain('watchdog grace period')
+      expect(result.console).toEqual([{ level: 'log', parts: ['started'] }])
+      expect(worker.terminated).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('starts a fresh worker for the next run after a timeout', async () => {
-    const hung = new FakeWorker()
-    const responsive = new FakeWorker()
-    const { session } = createSessionWith([hung, responsive], { timeoutMs: 30 })
+  it('starts a fresh supervisor after the watchdog fires', async () => {
+    vi.useFakeTimers()
+    try {
+      const hung = new FakeWorker()
+      const responsive = new FakeWorker()
+      const { session } = createSessionWith([hung, responsive], { timeoutMs: 30 })
 
-    const timedOut = await session.runJudge('while (true) {}', [])
-    expect(timedOut.error?.name).toBe('TimeoutError')
-    expect(hung.terminated).toBe(true)
-    expect(responsive.terminated).toBe(false)
+      const pendingTimeout = session.runJudge('while (true) {}', [])
+      await vi.advanceTimersByTimeAsync(1030)
+      const timedOut = await pendingTimeout
+      expect(timedOut.error?.name).toBe('RunesmError')
+      expect(hung.terminated).toBe(true)
+      expect(responsive.terminated).toBe(false)
 
-    const pending = session.runJudge('export const solve = () => 1', [])
-    await Promise.resolve()
-    responsive.emitMessage({ kind: 'result', id: 2, result: okResult })
-    await expect(pending).resolves.toEqual(okResult)
+      const pending = session.runJudge('export const solve = () => 1', [])
+      await Promise.resolve()
+      responsive.emitMessage({ kind: 'result', id: 2, result: okResult })
+      await expect(pending).resolves.toEqual(okResult)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -415,13 +430,20 @@ describe('session transport: lifecycle', () => {
     expect(worker.terminated).toBe(true)
   })
 
-  it('still produces a TimeoutError and terminates the worker on an actual timeout', async () => {
-    const worker = new FakeWorker()
-    const { session } = createSessionWith([worker], { timeoutMs: 20 })
-
-    const result = await session.runJudge('while (true) {}', [])
-    expect(result.error).toMatchObject({ name: 'TimeoutError' })
-    expect(worker.terminated).toBe(true)
+  it('reports an unresponsive supervisor distinctly from an execution timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = new FakeWorker()
+      const { session } = createSessionWith([worker], { timeoutMs: 20 })
+      const pending = session.runJudge('while (true) {}', [])
+      await vi.advanceTimersByTimeAsync(1020)
+      const result = await pending
+      expect(result.error).toMatchObject({ name: 'RunesmError' })
+      expect(result.error?.message).toContain('supervisor')
+      expect(worker.terminated).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps a single settle when a result and the timeout land in the same tick', async () => {
@@ -530,20 +552,27 @@ describe('session transport: repl', () => {
     expect(settled).toBe(true)
   })
 
-  it('times out hung evaluations with a TLE result and recovers', async () => {
-    const hung = new FakeWorker()
-    const responsive = new FakeWorker()
-    const session = createReplSessionForTests([hung, responsive], { timeoutMs: 30 })
+  it('recovers with a fresh supervisor when the watchdog fires', async () => {
+    vi.useFakeTimers()
+    try {
+      const hung = new FakeWorker()
+      const responsive = new FakeWorker()
+      const session = createReplSessionForTests([hung, responsive], { timeoutMs: 30 })
 
-    const timedOut = await session.evaluate('while (true) {}')
-    expect(timedOut.ok).toBe(false)
-    expect(timedOut.error).toMatchObject({ name: 'TimeoutError' })
-    expect(hung.terminated).toBe(true)
+      const pendingTimeout = session.evaluate('while (true) {}')
+      await vi.advanceTimersByTimeAsync(1030)
+      const timedOut = await pendingTimeout
+      expect(timedOut.ok).toBe(false)
+      expect(timedOut.error).toMatchObject({ name: 'RunesmError' })
+      expect(hung.terminated).toBe(true)
 
-    const pending = session.evaluate('1 + 1')
-    await Promise.resolve()
-    responsive.emitMessage({ kind: 'repl-result', id: 2, result: { ...okReplResult, value: 2 } })
-    await expect(pending).resolves.toMatchObject({ ok: true, value: 2 })
+      const pending = session.evaluate('1 + 1')
+      await Promise.resolve()
+      responsive.emitMessage({ kind: 'repl-result', id: 2, result: { ...okReplResult, value: 2 } })
+      await expect(pending).resolves.toMatchObject({ ok: true, value: 2 })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects evaluations after close', async () => {
