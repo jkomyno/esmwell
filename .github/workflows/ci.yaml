@@ -66,6 +66,9 @@ jobs:
         env:
           BUN_CHROME_PATH: /usr/bin/google-chrome-stable
 
+      - name: '📏 Check size budget'
+        run: pnpm --filter runesm check:size
+
       - name: '📦 pkg.pr.new (preview release)'
         if: github.event_name == 'pull_request'
         run: pnpm exec pkg-pr-new publish './packages/*' --packageManager=pnpm
