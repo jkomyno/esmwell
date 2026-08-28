@@ -1,4 +1,6 @@
 import type { Node, Program } from 'acorn'
+import { applyEdits, quoteString } from './edits'
+import type { SourceEdit } from './edits'
 import { analyzeScope } from './scope-analysis'
 import { resolveImportSpecifier } from './resolve'
 import type { ResolvedDependency, ResolveOptions } from './resolve'
@@ -23,12 +25,6 @@ export interface ReplTransform {
   /** A complete module: it imports the scope object and exports the completion value. */
   readonly code: string
   readonly dependencies: ResolvedDependency[]
-}
-
-interface SourceEdit {
-  start: number
-  end: number
-  replacement: string
 }
 
 /** A top-level function declaration pulled out of the body and re-emitted ahead of it. */
@@ -147,14 +143,6 @@ const lastExpressionStatement = (ast: Program): Node | null => {
   return last !== undefined && last.type === 'ExpressionStatement' ? last : null
 }
 
-const applyEdits = (code: string, edits: readonly SourceEdit[]): string => {
-  let result = code
-  for (const edit of edits.toSorted((a, b) => b.start - a.start)) {
-    result = result.slice(0, edit.start) + edit.replacement + result.slice(edit.end)
-  }
-  return result
-}
-
 /**
  * Separates the edits that fall inside a hoisted function's own source range
  * from the rest. Each hoisted function is rendered on its own, with only the
@@ -205,8 +193,6 @@ const splitHoistedPrologue = (
 
   return { prologue, body: applyEdits(input, bodyEdits).trim() }
 }
-
-const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
 
 /** Rewrites one top-level import statement into dynamic-import scope assignments. */
 function rewriteImportStatement(

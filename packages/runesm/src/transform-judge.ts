@@ -1,14 +1,9 @@
 import type { Node, Program } from 'acorn'
+import { applyEdits, quoteString } from './edits'
+import type { SourceEdit } from './edits'
 import { resolveImportSpecifier } from './resolve'
 import type { ResolvedDependency, ResolveOptions } from './resolve'
 import { readNodeChild, readNodeString, walkNodes } from './walk'
-
-/** A source-range replacement computed from the AST. */
-interface SourceEdit {
-  start: number
-  end: number
-  replacement: string
-}
 
 /** The rewritten module source plus the dependencies it resolved to. */
 export interface JudgeTransform {
@@ -65,15 +60,3 @@ const moduleSourceNode = (node: Node): Node | null => {
       return null
   }
 }
-
-/** Applies non-overlapping edits back-to-front so earlier offsets stay valid. */
-const applyEdits = (code: string, edits: SourceEdit[]): string => {
-  let result = code
-  for (const edit of edits.toSorted((a, b) => b.start - a.start)) {
-    result = result.slice(0, edit.start) + edit.replacement + result.slice(edit.end)
-  }
-  return result
-}
-
-/** Serializes a URL as a single-quoted JavaScript string literal. */
-const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`

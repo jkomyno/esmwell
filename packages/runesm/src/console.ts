@@ -118,6 +118,11 @@ const IDENTIFIER_KEY_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 const formatKey = (key: string): string => (IDENTIFIER_KEY_PATTERN.test(key) ? key : quoteString(key))
 
+// Quotes a string for a human-facing preview, not for generated module
+// source — see `edits.ts`'s `quoteString`, used by the transform modules for
+// that purpose. The two bodies read the same today, but they serve
+// different contracts (display vs. valid-JS-syntax generation) and may
+// diverge, so keep them separate rather than merging them.
 const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
 
 /**
