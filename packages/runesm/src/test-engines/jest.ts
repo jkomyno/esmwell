@@ -1,5 +1,5 @@
 const ESM_SH_ORIGIN = 'https://esm.sh'
-const JEST_CIRCUS_LATEST_URL = `${ESM_SH_ORIGIN}/jest-circus@latest?bundle&target=es2022`
+const JEST_CIRCUS_LATEST_PROBE_URL = `${ESM_SH_ORIGIN}/jest-circus@latest`
 
 interface TestFunction {
   (name: string, implementation?: (...args: readonly unknown[]) => unknown, timeout?: number): void
@@ -131,7 +131,8 @@ const parseVersion = (modulePath: string): string => {
 }
 
 const resolveLatestJestVersion = async (): Promise<string> => {
-  const response = await fetch(JEST_CIRCUS_LATEST_URL)
+  // HEAD only reads the version header; GET would download a discarded bundle.
+  const response = await fetch(JEST_CIRCUS_LATEST_PROBE_URL, { method: 'HEAD' })
   if (!response.ok) {
     throw new Error(`could not resolve the latest Jest version from esm.sh (${response.status})`)
   }

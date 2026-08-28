@@ -26,7 +26,6 @@ const tests = createTestSession({
   serviceWorkerUrl: '/assets/runesm/module-service-worker.mjs',
   deps: { zod: '4' },
   autoInstall: false,
-  timeoutMs: 30_000,
 })
 
 const result = await tests.run({
@@ -55,6 +54,10 @@ const result = await tests.run({
 // result.tests contains normalized pass/fail/skip/todo cases.
 tests.close()
 ```
+
+Test sessions default to `timeoutMs: 60000` because the same budget covers
+the engine download and test run. Judge and REPL sessions keep the 5-second
+default.
 
 For Jest, import the same globals from `@jest/globals`. `jest.fn` and
 `jest.spyOn` use the official `jest-mock` package. Both engines and their

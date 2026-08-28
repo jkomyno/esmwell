@@ -57,6 +57,12 @@ export interface ReplSession {
 /** Options for lazy Vitest/Jest workspace runs. */
 export interface TestSessionOptions extends RunesmOptions {
   /**
+   * Hard timeout per run in milliseconds (default 60000 for test sessions).
+   * The budget covers the engine download from esm.sh and the test run itself,
+   * so keep it well above the judge default.
+   */
+  readonly timeoutMs?: number
+  /**
    * Same-origin module service worker. Defaults to
    * `module-service-worker.mjs` next to the main runesm module.
    */
@@ -72,6 +78,13 @@ export interface TestSession {
 }
 
 const DEFAULT_TIMEOUT_MS = 5000
+
+/**
+ * Test runs download the engine from esm.sh inside the same timed request as
+ * the user's tests, so the judge/REPL default would report a cold download
+ * as a user timeout.
+ */
+const DEFAULT_TEST_TIMEOUT_MS = 60_000
 
 /**
  * Creates a judge session backed by a dedicated module worker. Console
@@ -168,7 +181,11 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
         const serviceWorkerScope = await prepareModuleServiceWorker(options)
         const testWorkerUrl = resolveTestWorkerUrl(options)
         assertWorkerWithinScope(testWorkerUrl, serviceWorkerScope)
-        transport = new WorkerTransport({ ...options, workerUrl: testWorkerUrl })
+        transport = new WorkerTransport({
+          ...options,
+          timeoutMs: options.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS,
+          workerUrl: testWorkerUrl,
+        })
         const outcome = await transport.request(
           {
             kind: 'test',

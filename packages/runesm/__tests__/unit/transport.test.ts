@@ -1,7 +1,8 @@
 import { runJudgeInRealm } from 'src/bootstrap'
-import { createReplSession, createRunesm } from 'src/main'
+import { createReplSession, createRunesm, createTestSession } from 'src/main'
 import type { WorkerFactory, WorkerLike } from 'src/main'
 import type { JudgeRunResult, WorkerRequest, WorkerResponse } from 'src/types'
+import { vi } from 'vitest'
 
 type Listener = (event: unknown) => void
 
@@ -264,6 +265,63 @@ describe('session transport: worker errors', () => {
     expect(result.status).toBe('error')
     expect(result.error?.message).toContain('Failed to fetch worker script')
     expect(worker.terminated).toBe(true)
+  })
+})
+
+describe('test-session transport timeout', () => {
+  it('uses a 60-second default through createTestSession', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('location', new URL('https://example.test/assets/'))
+    vi.stubGlobal('navigator', {
+      serviceWorker: {
+        register: vi.fn<() => Promise<ServiceWorkerRegistration>>(() =>
+          Promise.resolve({
+            active: {},
+            scope: 'https://example.test/assets/',
+          } as ServiceWorkerRegistration),
+        ),
+      },
+    })
+    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+
+    try {
+      const worker = new FakeWorker()
+      const workerFactory: WorkerFactory = () => worker
+      const session = createTestSession({
+        serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs',
+        workerUrl: 'https://example.test/assets/test-worker-entry.mjs',
+        workerFactory,
+      })
+
+      let settled = false
+      const pending = session
+        .run({ engine: 'vitest', modules: { 'tests/a.test': '' }, testFiles: ['tests/a.test'] })
+        .then((result) => {
+          settled = true
+          return result
+        })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(worker.sent).toHaveLength(1)
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(settled).toBe(false)
+      expect(worker.terminated).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(54_999)
+      expect(settled).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(pending).resolves.toMatchObject({
+        status: 'error',
+        error: { name: 'TimeoutError', message: expect.stringContaining('60000ms') },
+      })
+      expect(worker.terminated).toBe(true)
+      session.close()
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
   })
 })
 
