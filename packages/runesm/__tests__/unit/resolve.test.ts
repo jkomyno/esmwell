@@ -93,18 +93,41 @@ describe('resolveImportSpecifier: subpath and specifier validation', () => {
     },
   )
 
-  it('rejects an inline npm-style version on a plain package name', () => {
-    const error = capture(() => resolve('lodash-es@4'))
-    expect(error).toBeInstanceOf(SpecifierResolutionError)
-    expect((error as SpecifierResolutionError).kind).toBe('unsupported')
-    expect((error as Error).message).toMatch(/inline version/)
-    expect((error as Error).message).toContain("import 'lodash-es'")
+  it('resolves an inline version with a subpath when autoInstall is off', () => {
+    expect(resolve('effect@beta/Option', { autoInstall: false })).toEqual({
+      url: 'https://esm.sh/effect@beta/Option',
+      dependency: {
+        specifier: 'effect@beta/Option',
+        name: 'effect',
+        version: 'beta',
+        url: 'https://esm.sh/effect@beta/Option',
+      },
+    })
   })
 
-  it('rejects an inline npm-style version on a scoped package name', () => {
-    const error = capture(() => resolve('@scope/pkg@1.2.3'))
+  it('resolves an inline version on a scoped package', () => {
+    expect(resolve('@scope/pkg@1.2.3/subpath', { autoInstall: false })).toEqual({
+      url: 'https://esm.sh/@scope/pkg@1.2.3/subpath',
+      dependency: {
+        specifier: '@scope/pkg@1.2.3/subpath',
+        name: '@scope/pkg',
+        version: '1.2.3',
+        url: 'https://esm.sh/@scope/pkg@1.2.3/subpath',
+      },
+    })
+  })
+
+  it('lets an inline version override deps', () => {
+    const resolved = resolve('effect@beta/Schema', { deps: { effect: '3.22.1' } })
+    expect(resolved.dependency?.version).toBe('beta')
+    expect(resolved.url).toBe('https://esm.sh/effect@beta/Schema')
+  })
+
+  it.each(['effect@', 'effect@@beta', '@scope/pkg@'])('rejects invalid inline version %j', (specifier) => {
+    const error = capture(() => resolve(specifier))
     expect(error).toBeInstanceOf(SpecifierResolutionError)
-    expect((error as Error).message).toContain("import '@scope/pkg'")
+    expect((error as SpecifierResolutionError).kind).toBe('unsupported')
+    expect((error as Error).message).toMatch(/inline package version/)
   })
 
   it('still resolves legitimate scoped packages and deep subpaths', () => {

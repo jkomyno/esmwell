@@ -75,10 +75,53 @@ The persistent scope is a plain object, so a few Node-REPL-like divergences are 
 ## Dependencies and autoInstall
 
 - Bare specifiers in `import` / `export … from` / literal dynamic `import()` rewrite to `https://esm.sh/{name}@{version}` at runtime — no manifest, no bundler.
-- `deps` pins exact versions; `autoInstall: true` (the default) resolves everything else to the CDN's latest.
+- `deps` pins exact versions; an inline version such as `effect@beta/Option` takes precedence; `autoInstall: true` (the default) resolves everything else to the CDN's latest.
 - `autoInstall: false` makes an unpinned bare import an error: `could not resolve 'x' — check the package name or add it to deps`.
 - Absolute URLs pass through untouched; relative specifiers error (user code runs from an in-memory URL); `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` → `globalThis.crypto`, `node:http` → `fetch()`, …).
 - Both modes surface the resolved dependency list (`name`, `version`, `url`) in their results so hosts can display what a run actually used.
+
+### Effect v4 beta
+
+Use the `beta` tag in each import because esm.sh's unqualified `latest` version is Effect v3. An exact version such as `effect@4.0.0-beta.107/Schema` works too. The core `effect` package runs directly in the browser worker; no `@effect/platform-*` package is needed:
+
+```ts
+const session = createRunesm({
+  autoInstall: false,
+  timeoutMs: 30_000,
+})
+
+const result = await session.runJudge(
+  `import * as Effect from 'effect@beta/Effect'
+   import * as Schema from 'effect@beta/Schema'
+
+   const User = Schema.Struct({ name: Schema.String })
+
+   export const solve = () => {
+     const user = Schema.decodeUnknownSync(User)({ name: 'runesm' })
+     const events = []
+     const program = Effect.scoped(
+       Effect.acquireRelease(
+         Effect.sync(() => { events.push('acquire'); return user }),
+         () => Effect.sync(() => { events.push('release') }),
+       ),
+     )
+     return new Promise((resolve) => {
+       Effect.runFork(program).addObserver((exit) =>
+         resolve({ name: exit.value.name, events }),
+       )
+     })
+   }`,
+  [
+    {
+      name: 'Effect v4 resource lifecycle',
+      exportName: 'solve',
+      expected: { name: 'runesm', events: ['acquire', 'release'] },
+    },
+  ],
+)
+```
+
+The real-browser suite covers `effect@beta/Schema`, `Effect.runFork`, and scoped `Effect.acquireRelease` against the published beta tag.
 
 ## WebAssembly packages
 

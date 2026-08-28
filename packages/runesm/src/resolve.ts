@@ -2,7 +2,7 @@
  * Options controlling how bare package specifiers resolve to CDN URLs.
  */
 export interface ResolveOptions {
-  /** Package name to pinned version, e.g. `{ 'lodash-es': '4.17.21' }`. */
+  /** Package name to pinned version, e.g. `{ 'lodash-es': '4.17.21' }`. Inline versions take precedence. */
   readonly deps?: Readonly<Record<string, string>>
   /**
    * Resolve bare specifiers that are not pinned in `deps` to the latest
@@ -50,7 +50,7 @@ export interface ResolvedSpecifier {
 
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
 
-/** Whether a specifier is a bare package name (possibly scoped, with subpath). */
+/** Whether a specifier is a bare package name (possibly versioned, scoped, or with a subpath). */
 export const isBareSpecifier = (specifier: string): boolean =>
   !specifier.startsWith('.') &&
   specifier !== '' &&
@@ -62,19 +62,35 @@ export const isBareSpecifier = (specifier: string): boolean =>
 export const isUrlSpecifier = (specifier: string): boolean => URL_SCHEME_PATTERN.test(specifier)
 
 /**
- * Splits a bare specifier into package name and optional subpath,
- * handling scoped packages: `@org/name/sub` → `@org/name` + `sub`.
+ * Splits a bare specifier into package name, optional inline version, and
+ * optional subpath, handling both `pkg@version/sub` and
+ * `@org/name@version/sub`.
  */
-export const parseBareSpecifier = (specifier: string): { name: string; subpath: string | undefined } => {
+export const parseBareSpecifier = (
+  specifier: string,
+): { name: string; version: string | undefined; subpath: string | undefined } => {
   const parts = specifier.split('/')
   if (specifier.startsWith('@')) {
     const scope = parts[0]
-    const pkg = parts[1]
-    if (scope !== undefined && pkg !== undefined) {
-      return { name: `${scope}/${pkg}`, subpath: parts.slice(2).join('/') || undefined }
+    const packageSegment = parts[1]
+    if (scope !== undefined && packageSegment !== undefined) {
+      const parsed = parsePackageSegment(packageSegment)
+      return {
+        name: `${scope}/${parsed.name}`,
+        version: parsed.version,
+        subpath: parts.slice(2).join('/') || undefined,
+      }
     }
   }
-  return { name: parts[0] ?? specifier, subpath: parts.slice(1).join('/') || undefined }
+  const parsed = parsePackageSegment(parts[0] ?? specifier)
+  return { ...parsed, subpath: parts.slice(1).join('/') || undefined }
+}
+
+const parsePackageSegment = (segment: string): { name: string; version: string | undefined } => {
+  const versionAt = segment.indexOf('@')
+  return versionAt === -1
+    ? { name: segment, version: undefined }
+    : { name: segment.slice(0, versionAt), version: segment.slice(versionAt + 1) }
 }
 
 /**
@@ -85,8 +101,8 @@ export const parseBareSpecifier = (specifier: string): { name: string; subpath: 
  * - a subpath with a `.`/`..`/empty segment, or a specifier containing `?`,
  *   `#`, or whitespace, errors: it would resolve a different package on the
  *   CDN than the one reported back to the caller
- * - an inline version suffix (npm's `package@version` syntax, e.g.
- *   `lodash-es@4`) errors: pin the version via `deps` instead
+ * - an inline version suffix (e.g. `effect@beta/Option`) takes precedence
+ *   over `deps` and works when `autoInstall` is disabled
  * - `node:*` specifiers error with a module-specific message describing the
  *   browser alternative (or its absence)
  * - other absolute URLs pass through unchanged
@@ -112,12 +128,12 @@ export function resolveImportSpecifier(specifier: string, options: ResolveOption
 
   assertNoInvalidChars(specifier)
 
-  const { name, subpath } = parseBareSpecifier(specifier)
+  const { name, version: inlineVersion, subpath } = parseBareSpecifier(specifier)
   assertValidSubpath(specifier, subpath)
-  assertNoInlineVersion(specifier, name)
+  assertValidInlineVersion(specifier, inlineVersion)
 
   const pinnedVersion = options.deps !== undefined ? lookupOwnString(options.deps, name) : undefined
-  if (pinnedVersion === undefined && options.autoInstall === false) {
+  if (inlineVersion === undefined && pinnedVersion === undefined && options.autoInstall === false) {
     throw new SpecifierResolutionError(
       'undeclared',
       specifier,
@@ -125,7 +141,7 @@ export function resolveImportSpecifier(specifier: string, options: ResolveOption
     )
   }
 
-  const version = pinnedVersion ?? 'latest'
+  const version = inlineVersion ?? pinnedVersion ?? 'latest'
   const url = esmShUrl(specifier, name, version, subpath)
   return {
     url,
@@ -203,33 +219,18 @@ const assertValidSubpath = (specifier: string, subpath: string | undefined): voi
   }
 }
 
-/**
- * Finds the index of an inline version suffix in a package name, e.g. the
- * `@` in `lodash-es@4` or in `@scope/pkg@1.2.3`. Scoped packages
- * legitimately start with `@`, so only an `@` found after that leading
- * scope segment counts.
- */
-const inlineVersionIndex = (name: string): number => {
-  const searchFrom = name.startsWith('@') ? Math.max(name.indexOf('/') + 1, 1) : 0
-  return name.indexOf('@', searchFrom)
-}
-
-/**
- * Rejects npm-install muscle memory like `import 'lodash-es@4'`: the
- * version would silently win over `deps` and would not match the reported
- * dependency version. Pin the version through `deps` instead.
- */
-const assertNoInlineVersion = (specifier: string, name: string): void => {
-  const at = inlineVersionIndex(name)
-  if (at === -1) {
+/** Rejects an empty or ambiguous inline version. */
+const assertValidInlineVersion = (specifier: string, version: string | undefined): void => {
+  if (version === undefined) {
     return
   }
-  const bareName = name.slice(0, at)
-  throw new SpecifierResolutionError(
-    'unsupported',
-    specifier,
-    `could not resolve '${specifier}' — bare specifiers cannot include an inline version like npm's 'package@version' syntax; import '${bareName}' and pin the version with the 'deps' option instead`,
-  )
+  if (version === '' || version.includes('@')) {
+    throw new SpecifierResolutionError(
+      'unsupported',
+      specifier,
+      `could not resolve '${specifier}' — the inline package version must be a non-empty npm version or tag`,
+    )
+  }
 }
 
 /** Own-property lookup that requires a string value and ignores anything found via the prototype chain (e.g. `constructor`, `toString`, `__proto__`). */
