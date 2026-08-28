@@ -58,7 +58,8 @@ await repl.evaluate('count++')
 const { value } = await repl.evaluate('count') // 1
 
 await repl.evaluate('const get = () => count')
-await repl.evaluate('count = 5')(await repl.evaluate('get()')).value // 5 — live binding
+await repl.evaluate('count = 5')
+const live = (await repl.evaluate('get()')).value // 5 — live binding
 
 await repl.reset() // fresh scope
 repl.close()

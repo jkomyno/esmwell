@@ -3,7 +3,7 @@
   "type": "module",
   "name": "runesm",
   "description": "ESM-only in-browser code runner with judge and REPL modes over a worker foundation",
-  "repository": "https://github.com/jkomyno/pnpm-monorepo-template.git",
+  "repository": "https://github.com/jkomyno/runesm.git",
   "author": {
     "name": "Alberto Schiabel",
     "email": "alberto.schiabel@gmail.com"
