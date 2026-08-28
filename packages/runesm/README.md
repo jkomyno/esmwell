@@ -84,6 +84,27 @@ The persistent scope is a plain object, so a few Node-REPL-like divergences are 
 
 Submitted code is rejected (with line numbers) for `var` declarations, `eval` references, and `Function`-constructor calls — before anything executes.
 
+## Error shape
+
+`SerializedError` (on `JudgeCaseResult.error`, `JudgeRunResult.error`, and `ReplResult.error`) always carries `name` and `message`, plus `stack` when the source error had one. `name` is the reliable discriminator; branch on it (`'PolicyViolation'`, `'UserSyntaxError'`, `'SpecifierResolutionError'`, `'TimeoutError'`, …) rather than parsing `message`. When the underlying error was one of this package's own structured error classes, its fields ride along too:
+
+- `PolicyViolation` → `rule` (`PolicyRule`) and `line`
+- `UserSyntaxError` → `line` and `column`
+- `SpecifierResolutionError` → `kind` (`ResolutionFailureKind`) and `specifier`
+
+These extra fields are optional and only present for the matching error kind — check `name` first, then read the fields that go with it.
+
+## Advanced: composition primitives
+
+`createRunesm` and `createReplSession` cover the supported way to run user code. The package also exports the lower-level pieces they're built from, for hosts that want to compose their own pipeline (for example: lint submitted code without executing it, or list the bare imports a snippet would need before running it — this is how the [playground](../../apps/playground) shows a dependency list before a run):
+
+- `parseUserModule(code)` — parses into an acorn AST, throwing `UserSyntaxError` on invalid syntax.
+- `checkPolicy(ast)` — returns the `PolicyViolation`s in a parsed module (see [Policy](#policy)).
+- `collectBareSpecifiers(ast)` — lists the bare import specifiers a parsed module references.
+- `resolveDependencies` / `resolveImportSpecifier` — resolve bare specifiers to CDN URLs, throwing `SpecifierResolutionError` on failure (see [Dependencies and autoInstall](#dependencies-and-autoinstall)).
+
+These compose by chaining return values (`collectBareSpecifiers(parseUserModule(code))`) without ever needing to name the acorn `Node`/`Program` type. If you do want to type an intermediate AST value yourself, add `acorn` as a direct dependency — this package does not re-export its types.
+
 ## Workers and bundlers
 
 `createRunesm` loads `worker-entry.mjs` next to the main-thread module by default. Bundlers that relocate assets should build the worker themselves:

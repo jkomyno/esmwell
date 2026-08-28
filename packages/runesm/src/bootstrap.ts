@@ -2,8 +2,9 @@ import { installConsoleCapture } from './console'
 import { deepEqual } from './deep-equal'
 import { createDataModuleUrl, createModuleUrl, importModule, readNamedExport } from './loader'
 import type { ModuleNamespace } from './loader'
-import { parseUserModule } from './parse'
-import { checkPolicy } from './policy'
+import { parseUserModule, UserSyntaxError } from './parse'
+import { checkPolicy, PolicyViolation } from './policy'
+import { SpecifierResolutionError } from './resolve'
 import type { ResolveOptions } from './resolve'
 import type { ResolvedDependency } from './resolve'
 import { transformJudgeModule } from './transform-judge'
@@ -130,11 +131,21 @@ const missingExportError = (exportName: string, module: ModuleNamespace): Error 
 
 export const serializeError = (error: unknown): SerializedError => {
   if (error instanceof Error) {
-    return {
+    const base: SerializedError = {
       name: error.name,
       message: error.message,
       ...(error.stack === undefined ? {} : { stack: error.stack }),
     }
+    if (error instanceof PolicyViolation) {
+      return { ...base, rule: error.rule, line: error.line }
+    }
+    if (error instanceof SpecifierResolutionError) {
+      return { ...base, kind: error.kind, specifier: error.specifier }
+    }
+    if (error instanceof UserSyntaxError) {
+      return { ...base, line: error.line, column: error.column }
+    }
+    return base
   }
   return {
     name: 'NonError',

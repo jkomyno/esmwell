@@ -1,4 +1,5 @@
-import type { ResolvedDependency } from './resolve'
+import type { PolicyRule } from './policy'
+import type { ResolutionFailureKind, ResolvedDependency } from './resolve'
 
 /** A single judge-mode test case: one invocation of one named export. */
 export interface JudgeCase {
@@ -8,18 +9,44 @@ export interface JudgeCase {
   readonly exportName: string
   /** Arguments to invoke the export with. Defaults to none. */
   readonly args?: readonly unknown[]
-  /** Expected return value, compared with structural deep equality. */
+  /**
+   * Expected return value, compared with structural deep equality.
+   *
+   * Omitting this field entirely means "pass if the export does not throw";
+   * the return value is not inspected. Setting it explicitly to `undefined`
+   * is a real expectation — the export must resolve to `undefined` — and is
+   * checked like any other value. These are different outcomes: a case built
+   * with `{ ...base, expected: undefined }` asserts the return value, it does
+   * not fall back to "no expectation". Omit the key (rather than setting it
+   * to `undefined`) when the return value should be ignored.
+   */
   readonly expected?: unknown
 }
 
 /** Per-case outcome. */
 export type JudgeCaseStatus = 'pass' | 'fail' | 'error'
 
-/** An error crossing the transport boundary, message plus stack when present. */
+/**
+ * An error crossing the transport boundary, message plus stack when present.
+ * `name` is the reliable discriminator. The remaining fields are only present
+ * when the source error was one of this package's structured error classes:
+ * `rule`/`line` come from `PolicyViolation`, `line`/`column` from
+ * `UserSyntaxError`, and `kind`/`specifier` from `SpecifierResolutionError`.
+ */
 export interface SerializedError {
   readonly name: string
   readonly message: string
   readonly stack?: string
+  /** Present for a `PolicyViolation`: the rule that fired. */
+  readonly rule?: PolicyRule
+  /** 1-based. Present for a `PolicyViolation` or a `UserSyntaxError`. */
+  readonly line?: number
+  /** Present for a `UserSyntaxError`: 0-based column. */
+  readonly column?: number
+  /** Present for a `SpecifierResolutionError`: why the specifier failed. */
+  readonly kind?: ResolutionFailureKind
+  /** Present for a `SpecifierResolutionError`: the specifier that failed. */
+  readonly specifier?: string
 }
 
 /** Result of invoking one case's export. */

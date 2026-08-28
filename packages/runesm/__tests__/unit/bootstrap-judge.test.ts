@@ -42,6 +42,16 @@ describe('runJudgeInRealm: case outcomes', () => {
     expect(result.cases[0]?.status).toBe('pass')
   })
 
+  it('fails an explicit undefined expectation against a non-undefined return, unlike an omitted expectation', async () => {
+    const result = await runJudge(`export const something = () => 1`, [
+      { name: 'explicit', exportName: 'something', expected: undefined },
+      { name: 'omitted', exportName: 'something' },
+    ])
+    expect(result.cases[0]).toMatchObject({ name: 'explicit', status: 'fail', actual: 1 })
+    expect(result.cases[0]).toHaveProperty('expected', undefined)
+    expect(result.cases[1]).toMatchObject({ name: 'omitted', status: 'pass' })
+  })
+
   it('awaits async exports', async () => {
     const result = await runJudge(`export const slow = async () => { await Promise.resolve(); return 'done' }`, [
       { name: 'slow', exportName: 'slow', expected: 'done' },
@@ -95,20 +105,21 @@ describe('runJudgeInRealm: module-level failures', () => {
     const result = await runJudge('const a = {', [])
     expect(result.status).toBe('error')
     expect(result.ok).toBe(false)
-    expect(result.error).toMatchObject({ name: 'UserSyntaxError' })
+    expect(result.error).toMatchObject({ name: 'UserSyntaxError', line: 1, column: 11 })
     expect(result.error?.message).toMatch(/line 1/)
   })
 
-  it('reports policy violations without running the module', async () => {
+  it('reports policy violations without running the module, with the rule and line intact', async () => {
     const result = await runJudge('var leaked = 1\nexport const solve = () => leaked', [
       { name: 'solve', exportName: 'solve', expected: 1 },
     ])
     expect(result.status).toBe('error')
     expect(result.error?.message).toContain('var declarations are not allowed')
+    expect(result.error).toMatchObject({ name: 'PolicyViolation', rule: 'var', line: 1 })
     expect(result.cases).toEqual([])
   })
 
-  it('reports resolution failures for undeclared packages under autoInstall off', async () => {
+  it('reports resolution failures for undeclared packages under autoInstall off, with the kind and specifier intact', async () => {
     const result = await runJudge(
       `import _ from 'lodash-es'\nexport const solve = () => 1`,
       [{ name: 'solve', exportName: 'solve', expected: 1 }],
@@ -116,6 +127,11 @@ describe('runJudgeInRealm: module-level failures', () => {
     )
     expect(result.status).toBe('error')
     expect(result.error?.message).toContain("could not resolve 'lodash-es'")
+    expect(result.error).toMatchObject({
+      name: 'SpecifierResolutionError',
+      kind: 'undeclared',
+      specifier: 'lodash-es',
+    })
   })
 
   it('reports module evaluation errors', async () => {

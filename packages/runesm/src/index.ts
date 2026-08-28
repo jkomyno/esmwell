@@ -5,8 +5,6 @@ export type { PolicyRule } from './policy'
 export { resolveDependencies, resolveImportSpecifier, SpecifierResolutionError } from './resolve'
 export type { ResolutionFailureKind, ResolvedDependency, ResolvedSpecifier, ResolveOptions } from './resolve'
 export { collectBareSpecifiers } from './deps'
-export { runJudgeInRealm } from './bootstrap'
-export type { JudgeRealmOptions } from './bootstrap'
 export { createRunesm, adaptWorker } from './main'
 export type {
   ConsoleStreamHandlers,

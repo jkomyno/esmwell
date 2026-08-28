@@ -1,8 +1,14 @@
+import { runJudgeInRealm } from 'src/bootstrap'
 import { createReplSession, createRunesm } from 'src/main'
 import type { WorkerFactory, WorkerLike } from 'src/main'
 import type { JudgeRunResult, WorkerRequest, WorkerResponse } from 'src/types'
 
 type Listener = (event: unknown) => void
+
+// Simulates the postMessage clone boundary between the worker and the main
+// thread, so a test can prove a value survives structured cloning rather than
+// just surviving a plain JS function call.
+const cloneAcrossBoundary = <T>(value: T): T => structuredClone(value)
 
 class FakeWorker implements WorkerLike {
   readonly sent: WorkerRequest[] = []
@@ -197,6 +203,51 @@ describe('session transport: hard timeout', () => {
     await Promise.resolve()
     responsive.emitMessage({ kind: 'result', id: 2, result: okResult })
     await expect(pending).resolves.toEqual(okResult)
+  })
+})
+
+describe('session transport: structured error fields', () => {
+  it('delivers a policy violation to the caller with its rule and line intact through a session', async () => {
+    const inRealm = await runJudgeInRealm('var leaked = 1\nexport const solve = () => leaked', {
+      cases: [{ name: 'solve', exportName: 'solve', expected: 1 }],
+    })
+    expect(inRealm.error).toMatchObject({ name: 'PolicyViolation', rule: 'var', line: 1 })
+
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker])
+
+    const pending = session.runJudge('var leaked = 1\nexport const solve = () => leaked', [
+      { name: 'solve', exportName: 'solve', expected: 1 },
+    ])
+    await Promise.resolve()
+    worker.emitMessage({ kind: 'result', id: 1, result: cloneAcrossBoundary(inRealm) })
+
+    const result = await pending
+    expect(result.error).toMatchObject({ name: 'PolicyViolation', rule: 'var', line: 1 })
+  })
+
+  it('delivers a resolution failure to the caller with its kind and specifier intact through a session', async () => {
+    const inRealm = await runJudgeInRealm(`import _ from 'lodash-es'\nexport const solve = () => 1`, {
+      cases: [{ name: 'solve', exportName: 'solve', expected: 1 }],
+      autoInstall: false,
+    })
+    expect(inRealm.error).toMatchObject({
+      name: 'SpecifierResolutionError',
+      kind: 'undeclared',
+      specifier: 'lodash-es',
+    })
+
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker], { autoInstall: false })
+
+    const pending = session.runJudge(`import _ from 'lodash-es'\nexport const solve = () => 1`, [
+      { name: 'solve', exportName: 'solve', expected: 1 },
+    ])
+    await Promise.resolve()
+    worker.emitMessage({ kind: 'result', id: 1, result: cloneAcrossBoundary(inRealm) })
+
+    const result = await pending
+    expect(result.error).toMatchObject({ name: 'SpecifierResolutionError', kind: 'undeclared', specifier: 'lodash-es' })
   })
 })
 

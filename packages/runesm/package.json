@@ -1,7 +1,7 @@
 {
   "private": false,
   "name": "runesm",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "ESM-only in-browser code runner with judge and REPL modes over a web-worker foundation",
   "type": "module",
   "repository": {
@@ -47,8 +47,8 @@
     "typecheck:src": "tsc --noEmit -p tsconfig.build.json",
     "typecheck:test": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "test:unit": "vitest run --project unit --passWithNoTests",
-    "test:integration": "vitest run --project integration --passWithNoTests",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "test:browser": "tsdown && bun run scripts/browser-test.ts",
     "check:size": "node scripts/check-size.mjs"
   },
