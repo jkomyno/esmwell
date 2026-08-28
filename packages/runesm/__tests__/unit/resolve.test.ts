@@ -50,6 +50,71 @@ describe('resolveImportSpecifier: bare specifiers', () => {
       "could not resolve 'unpinned' — check the package name or add it to deps",
     )
   })
+
+  it.each(['constructor', 'toString', 'valueOf', '__proto__'])(
+    'treats %j as undeclared under autoInstall: false, not as pinned via Object.prototype',
+    (specifier) => {
+      const error = capture(() => resolve(specifier, { deps: {}, autoInstall: false }))
+      expect(error).toBeInstanceOf(SpecifierResolutionError)
+      expect((error as SpecifierResolutionError).kind).toBe('undeclared')
+    },
+  )
+
+  it('asserts the resolved URL path still starts with the reported name@version', () => {
+    for (const resolved of [
+      resolve('lodash-es', { deps: { 'lodash-es': '4.17.21' } }),
+      resolve('@scope/pkg/entry/point'),
+      resolve('lodash-es/clone', { deps: { 'lodash-es': '4.17.21' } }),
+    ]) {
+      const dependency = resolved.dependency
+      if (dependency === undefined) {
+        throw new Error('expected a resolved dependency')
+      }
+      const pathname = new URL(dependency.url).pathname
+      expect(pathname.startsWith(`/${dependency.name}@${dependency.version}`)).toBe(true)
+    }
+  })
+})
+
+describe('resolveImportSpecifier: subpath and specifier validation', () => {
+  it.each(['a/..', 'a/../evil', 'a/../../evil', 'a/./sub', 'a//sub'])(
+    'rejects %j: subpath must not contain "..", ".", or empty segments',
+    (specifier) => {
+      expect(() => resolve(specifier)).toThrow(SpecifierResolutionError)
+      expect(() => resolve(specifier)).toThrow(/subpath must not contain/)
+    },
+  )
+
+  it.each(['pkg?x=1', 'pkg#frag', 'pkg/sub?x=1', 'pkg with space'])(
+    'rejects %j: specifiers cannot contain "?", "#", or whitespace',
+    (specifier) => {
+      expect(() => resolve(specifier)).toThrow(SpecifierResolutionError)
+      expect(() => resolve(specifier)).toThrow(/cannot contain/)
+    },
+  )
+
+  it('rejects an inline npm-style version on a plain package name', () => {
+    const error = capture(() => resolve('lodash-es@4'))
+    expect(error).toBeInstanceOf(SpecifierResolutionError)
+    expect((error as SpecifierResolutionError).kind).toBe('unsupported')
+    expect((error as Error).message).toMatch(/inline version/)
+    expect((error as Error).message).toContain("import 'lodash-es'")
+  })
+
+  it('rejects an inline npm-style version on a scoped package name', () => {
+    const error = capture(() => resolve('@scope/pkg@1.2.3'))
+    expect(error).toBeInstanceOf(SpecifierResolutionError)
+    expect((error as Error).message).toContain("import '@scope/pkg'")
+  })
+
+  it('still resolves legitimate scoped packages and deep subpaths', () => {
+    expect(resolve('@scope/pkg/sub').url).toBe('https://esm.sh/@scope/pkg@latest/sub')
+    expect(resolve('lodash-es/deep/nested/path').url).toBe('https://esm.sh/lodash-es@latest/deep/nested/path')
+  })
+
+  it('passes absolute urls through without validating them as specifiers', () => {
+    expect(resolve('https://esm.sh/pkg@1?x=1')).toEqual({ url: 'https://esm.sh/pkg@1?x=1' })
+  })
 })
 
 describe('resolveImportSpecifier: passthrough and rejection', () => {

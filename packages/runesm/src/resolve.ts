@@ -82,6 +82,11 @@ export const parseBareSpecifier = (specifier: string): { name: string; subpath: 
  * - bare package specifiers (and scoped, with subpaths) resolve via esm.sh —
  *   pinned to the version in `deps` when present, otherwise `latest` when
  *   `autoInstall` is enabled, and an error when it is not
+ * - a subpath with a `.`/`..`/empty segment, or a specifier containing `?`,
+ *   `#`, or whitespace, errors: it would resolve a different package on the
+ *   CDN than the one reported back to the caller
+ * - an inline version suffix (npm's `package@version` syntax, e.g.
+ *   `lodash-es@4`) errors: pin the version via `deps` instead
  * - `node:*` specifiers error with a module-specific message describing the
  *   browser alternative (or its absence)
  * - other absolute URLs pass through unchanged
@@ -105,8 +110,13 @@ export function resolveImportSpecifier(specifier: string, options: ResolveOption
     )
   }
 
+  assertNoInvalidChars(specifier)
+
   const { name, subpath } = parseBareSpecifier(specifier)
-  const pinnedVersion = options.deps?.[name]
+  assertValidSubpath(specifier, subpath)
+  assertNoInlineVersion(specifier, name)
+
+  const pinnedVersion = options.deps !== undefined ? lookupOwnString(options.deps, name) : undefined
   if (pinnedVersion === undefined && options.autoInstall === false) {
     throw new SpecifierResolutionError(
       'undeclared',
@@ -116,7 +126,7 @@ export function resolveImportSpecifier(specifier: string, options: ResolveOption
   }
 
   const version = pinnedVersion ?? 'latest'
-  const url = esmShUrl(name, version, subpath)
+  const url = esmShUrl(specifier, name, version, subpath)
   return {
     url,
     dependency: {
@@ -144,9 +154,91 @@ export function resolveDependencies(specifiers: Iterable<string>, options: Resol
   return dependencies
 }
 
-const esmShUrl = (name: string, version: string, subpath: string | undefined): string => {
+const esmShUrl = (specifier: string, name: string, version: string, subpath: string | undefined): string => {
   const base = `https://esm.sh/${name}@${version}`
-  return subpath === undefined ? base : `${base}/${subpath}`
+  const url = subpath === undefined ? base : `${base}/${subpath}`
+
+  // Belt-and-braces: the segments feeding this URL are already validated,
+  // but a normalized URL can still disagree with naive string concatenation
+  // (e.g. `.`/`..` collapsing). If it ever does, the reported dependency
+  // would lie about what actually loaded, so treat that as an internal bug
+  // rather than returning a mismatched URL.
+  const normalizedPath = new URL(url).pathname
+  const expectedPrefix = `/${name}@${version}`
+  if (!normalizedPath.startsWith(expectedPrefix)) {
+    throw new Error(
+      `internal error resolving '${specifier}': normalized URL '${url}' does not preserve the reported package prefix '${expectedPrefix}' — this is a bug in specifier validation`,
+    )
+  }
+
+  return url
+}
+
+const INVALID_SPECIFIER_CHARS_PATTERN = /[?#\s]/
+
+/** Rejects a specifier containing `?`, `#`, or whitespace anywhere. */
+const assertNoInvalidChars = (specifier: string): void => {
+  if (INVALID_SPECIFIER_CHARS_PATTERN.test(specifier)) {
+    throw new SpecifierResolutionError(
+      'unsupported',
+      specifier,
+      `could not resolve '${specifier}' — bare specifiers cannot contain '?', '#', or whitespace; the CDN URL would resolve a different package than the one reported`,
+    )
+  }
+}
+
+/** Rejects a subpath with a `.`, `..`, or empty segment (path traversal). */
+const assertValidSubpath = (specifier: string, subpath: string | undefined): void => {
+  if (subpath === undefined) {
+    return
+  }
+  for (const segment of subpath.split('/')) {
+    if (segment === '' || segment === '.' || segment === '..') {
+      throw new SpecifierResolutionError(
+        'unsupported',
+        specifier,
+        `could not resolve '${specifier}' — the subpath must not contain '.', '..', or empty segments`,
+      )
+    }
+  }
+}
+
+/**
+ * Finds the index of an inline version suffix in a package name, e.g. the
+ * `@` in `lodash-es@4` or in `@scope/pkg@1.2.3`. Scoped packages
+ * legitimately start with `@`, so only an `@` found after that leading
+ * scope segment counts.
+ */
+const inlineVersionIndex = (name: string): number => {
+  const searchFrom = name.startsWith('@') ? Math.max(name.indexOf('/') + 1, 1) : 0
+  return name.indexOf('@', searchFrom)
+}
+
+/**
+ * Rejects npm-install muscle memory like `import 'lodash-es@4'`: the
+ * version would silently win over `deps` and would not match the reported
+ * dependency version. Pin the version through `deps` instead.
+ */
+const assertNoInlineVersion = (specifier: string, name: string): void => {
+  const at = inlineVersionIndex(name)
+  if (at === -1) {
+    return
+  }
+  const bareName = name.slice(0, at)
+  throw new SpecifierResolutionError(
+    'unsupported',
+    specifier,
+    `could not resolve '${specifier}' — bare specifiers cannot include an inline version like npm's 'package@version' syntax; import '${bareName}' and pin the version with the 'deps' option instead`,
+  )
+}
+
+/** Own-property lookup that requires a string value and ignores anything found via the prototype chain (e.g. `constructor`, `toString`, `__proto__`). */
+const lookupOwnString = (record: Readonly<Record<string, string>>, key: string): string | undefined => {
+  if (!Object.hasOwn(record, key)) {
+    return undefined
+  }
+  const value = record[key]
+  return typeof value === 'string' ? value : undefined
 }
 
 /**
@@ -192,11 +284,11 @@ const NO_EQUIVALENT_POINTERS: Readonly<Record<string, string>> = {
 }
 
 const nodeModuleMessage = (specifier: string): string => {
-  const plannedAlternative = PLANNED_SHIMS[specifier]
+  const plannedAlternative = lookupOwnString(PLANNED_SHIMS, specifier)
   if (plannedAlternative !== undefined) {
     return `could not resolve '${specifier}' — no browser shim is available yet, but one is planned; meanwhile use ${plannedAlternative}`
   }
-  const pointer = NO_EQUIVALENT_POINTERS[specifier]
+  const pointer = lookupOwnString(NO_EQUIVALENT_POINTERS, specifier)
   if (pointer !== undefined) {
     return `could not resolve '${specifier}' — it has no browser equivalent: ${pointer}`
   }
