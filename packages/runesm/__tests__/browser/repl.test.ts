@@ -46,6 +46,40 @@ test('REPL session persists state across evaluations in the worker', async () =>
   }
 })
 
+test('REPL-reached WebIDL globals work through the persistent scope proxy', async () => {
+  // Regression coverage: the transform rewrites every free identifier to a
+  // member access on the shared scope proxy (`setTimeout` becomes
+  // `__runesm.setTimeout`), and WebIDL operations reject a receiver that
+  // isn't the real global. This only reproduces in a real worker realm.
+  const session = createReplSession({
+    workerUrl: '/runesm/worker-entry.mjs',
+    timeoutMs: 30_000,
+  })
+  try {
+    const encoded = await session.evaluate("btoa('hi')")
+    assert(encoded.ok === true, `btoa failed: ${encoded.error?.message}`)
+    assert(encoded.value === 'aGk=', `btoa('hi') should be 'aGk=', got ${JSON.stringify(encoded.value)}`)
+
+    const sleepDefined = await session.evaluate(
+      'const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))',
+    )
+    assert(sleepDefined.ok === true, `defining sleep failed: ${sleepDefined.error?.message}`)
+    const slept = await session.evaluate('await sleep(1)\n"awoke"')
+    assert(slept.ok === true, `setTimeout inside sleep() failed: ${slept.error?.message}`)
+    assert(slept.value === 'awoke', `sleep() should resolve, got ${JSON.stringify(slept.value)}`)
+
+    const cloned = await session.evaluate('structuredClone({ a: 1 })')
+    assert(cloned.ok === true, `structuredClone failed: ${cloned.error?.message}`)
+    assertEqual(cloned.value, { a: 1 }, 'structuredClone returns an equivalent clone')
+
+    const queued = await session.evaluate("await new Promise((resolve) => queueMicrotask(() => resolve('done')))")
+    assert(queued.ok === true, `queueMicrotask failed: ${queued.error?.message}`)
+    assert(queued.value === 'done', `queueMicrotask should resolve, got ${JSON.stringify(queued.value)}`)
+  } finally {
+    session.close()
+  }
+})
+
 test('REPL reset starts a fresh scope over the transport', async () => {
   const session = createReplSession({
     workerUrl: '/runesm/worker-entry.mjs',

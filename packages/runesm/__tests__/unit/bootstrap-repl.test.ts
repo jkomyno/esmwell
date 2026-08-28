@@ -175,4 +175,45 @@ describe('REPL rejections and capture', () => {
     const result = await evaluate(session, 'Math.max(1, 5)')
     expect(result.value).toBe(5)
   })
+
+  it('a global function reached through the scope is bound to the realm global', async () => {
+    const session = createReplSessionInRealm({})
+    const probe = globalThis as Record<string, unknown>
+    probe.replThisProbe = function (this: unknown): boolean {
+      return this === globalThis
+    }
+    try {
+      const result = await evaluate(session, 'replThisProbe()')
+      expect(result.value).toBe(true)
+    } finally {
+      delete probe.replThisProbe
+    }
+  })
+
+  it('a bound global function has stable identity across accesses', async () => {
+    const session = createReplSessionInRealm({})
+    const result = await evaluate(session, '__runesm.setTimeout === __runesm.setTimeout')
+    expect(result.value).toBe(true)
+  })
+
+  it('a user-declared value on the scope passes through unmodified', async () => {
+    const session = createReplSessionInRealm({})
+    await evaluate(session, 'function greet() {}')
+    const name = await evaluate(session, 'greet.name')
+    // Binding renames a function to "bound <name>"; an unwrapped
+    // declaration keeps its original name.
+    expect(name.value).toBe('greet')
+  })
+
+  it('a non-function global passes through without binding', async () => {
+    const session = createReplSessionInRealm({})
+    const result = await evaluate(session, 'Math')
+    expect(result.value).toBe(Math)
+  })
+
+  it('bound globals stay constructible', async () => {
+    const session = createReplSessionInRealm({})
+    const result = await evaluate(session, 'new __runesm.Map([[1, 2]]).get(1)')
+    expect(result.value).toBe(2)
+  })
 })

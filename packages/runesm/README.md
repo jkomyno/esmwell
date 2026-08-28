@@ -67,6 +67,11 @@ repl.close()
 
 Each input's completion value (its final expression) comes back as `value`; `export` statements are rejected with a clear error since REPL inputs declare values instead.
 
+The persistent scope is a plain object, so a few Node-REPL-like divergences are deliberate rather than accidental:
+
+- Re-declaring a name with `let` reassigns it instead of erroring, as does re-declaring a `const` — both `let` and `const` become scope assignments, so a later input can even reassign an earlier `const`.
+- Reading a name that was never declared returns `undefined` instead of throwing `ReferenceError`. This keeps `typeof someUndeclaredName` evaluating to `'undefined'`, matching the Node REPL, instead of throwing.
+
 ## Dependencies and autoInstall
 
 - Bare specifiers in `import` / `export … from` / literal dynamic `import()` rewrite to `https://esm.sh/{name}@{version}` at runtime — no manifest, no bundler.
