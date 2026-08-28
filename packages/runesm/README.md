@@ -129,12 +129,13 @@ Effect's `Path.layer` consults `globalThis.process.cwd()` for relative paths. ru
 
 The following entrypoints load, but their main operations need host services that a plain browser worker does not provide. They stay outside runesm's current compatibility layer rather than receiving misleading no-op implementations:
 
-| Capability                                                             | Observed error without a service                | What support would require                                                    |
-| ---------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
-| `effect/FileSystem`                                                    | `Service not found: effect/platform/FileSystem` | A virtual filesystem, path/URL semantics, persistence, and lifecycle contract |
-| `effect/Terminal` and interactive CLI prompts                          | `Service not found: effect/platform/Terminal`   | Bidirectional host I/O, cancellation, dimensions, and input-mode handling     |
-| HTTP servers, cluster runners, and sockets without a browser transport | Missing server/socket services                  | A host routing bridge and explicit network/listener lifecycle                 |
-| SQL, persistence, event log, and durable workflows                     | Missing storage/client services                 | A selected browser storage backend plus transaction and durability semantics  |
+| Capability                                                             | Observed error without a service                 | What support would require                                                    |
+| ---------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `effect/FileSystem`                                                    | `Service not found: effect/platform/FileSystem`  | A virtual filesystem, path/URL semantics, persistence, and lifecycle contract |
+| `effect/Terminal` and interactive CLI prompts                          | `Service not found: effect/platform/Terminal`    | Bidirectional host I/O, cancellation, dimensions, and input-mode handling     |
+| Fetch response `Set-Cookie` values                                     | Browser Fetch exposes an empty cookie collection | A privileged host/proxy that can observe forbidden response headers           |
+| HTTP servers, cluster runners, and sockets without a browser transport | Missing server/socket services                   | A host routing bridge and explicit network/listener lifecycle                 |
+| SQL, persistence, event log, and durable workflows                     | Missing storage/client services                  | A selected browser storage backend plus transaction and durability semantics  |
 
 Fetch-based HTTP clients and global WebSocket constructors remain usable because they build on browser-native APIs. `@effect/platform-*` packages are not part of the compatibility probe or runtime.
 
