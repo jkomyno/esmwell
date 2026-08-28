@@ -1,0 +1,299 @@
+import type { Node, Program } from 'acorn'
+import { analyzeScope } from './scope-analysis'
+import { resolveImportSpecifier } from './resolve'
+import type { ResolvedDependency, ResolveOptions } from './resolve'
+import { isAstNode, readNodeChild, readNodeChildren, readNodeString } from './walk'
+
+/** The persistent scope object every REPL module shares. */
+export const SCOPE_BINDING = '__runesm'
+
+/** The export the generated module exposes the completion value through. */
+export const RESULT_EXPORT = '__runesmResult'
+
+/** Error thrown for constructs the REPL cannot rewrite. */
+export class ReplTransformError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ReplTransformError'
+  }
+}
+
+/** One rewritten input plus the dependencies its imports resolved to. */
+export interface ReplTransform {
+  /** A complete module: it imports the scope object and exports the completion value. */
+  readonly code: string
+  readonly dependencies: ResolvedDependency[]
+}
+
+interface SourceEdit {
+  start: number
+  end: number
+  replacement: string
+}
+
+/**
+ * Rewrites one REPL input into a module of the shape
+ *
+ * ```js
+ * import { __runesm } from '<scopeModuleUrl>'
+ * export const __runesmResult = await (async () => {
+ *   …rewritten statements…
+ *   return <final expression>   // present when the input ends in an expression
+ * })()
+ * ```
+ *
+ * Top-level declarations become scope assignments (so later inputs see
+ * them), references that resolve to the input's top level — including
+ * globals — become live scope reads, imports become dynamic-import
+ * assignments resolved through the CDN policy, and top-level await works
+ * inside the async wrapper. `export` statements are rejected: REPL inputs
+ * declare values instead.
+ */
+export function transformReplInput(
+  input: string,
+  ast: Program,
+  options: ResolveOptions & { scopeModuleUrl: string },
+): ReplTransform {
+  for (const statement of ast.body) {
+    if (
+      statement.type === 'ExportNamedDeclaration' ||
+      statement.type === 'ExportDefaultDeclaration' ||
+      statement.type === 'ExportAllDeclaration'
+    ) {
+      throw new ReplTransformError(
+        'export statements are not supported in REPL input — declare values instead; they persist on the session scope',
+      )
+    }
+  }
+
+  const analysis = analyzeScope(ast)
+  const edits: SourceEdit[] = []
+  const dependencies: ResolvedDependency[] = []
+  const seenDependencies = new Set<string>()
+
+  ast.body.forEach((statement, index) => {
+    if (statement.type === 'ImportDeclaration') {
+      const replacement = rewriteImportStatement(statement, index, options, dependencies, seenDependencies)
+      edits.push({ start: statement.start, end: statement.end, replacement })
+      return
+    }
+    rewriteTopLevelDeclaration(statement, edits)
+  })
+
+  for (const reference of analysis.references) {
+    if (!reference.programLevel || reference.name === SCOPE_BINDING) {
+      continue
+    }
+    if (reference.inShorthandProperty) {
+      edits.push({
+        start: reference.start,
+        end: reference.end,
+        replacement: `${reference.name}: ${SCOPE_BINDING}.${reference.name}`,
+      })
+    } else {
+      edits.push({
+        start: reference.start,
+        end: reference.start,
+        replacement: `${SCOPE_BINDING}.`,
+      })
+    }
+  }
+
+  const completion = lastExpressionStatement(ast)
+  if (completion !== null) {
+    edits.push({ start: completion.start, end: completion.start, replacement: 'return ' })
+  }
+
+  return {
+    code: [
+      `import { ${SCOPE_BINDING} } from ${quoteString(options.scopeModuleUrl)}`,
+      `export const ${RESULT_EXPORT} = await (async () => {`,
+      applyEdits(input, edits),
+      `})()`,
+    ].join('\n'),
+    dependencies,
+  }
+}
+
+const lastExpressionStatement = (ast: Program): Node | null => {
+  const last = ast.body[ast.body.length - 1]
+  return last !== undefined && last.type === 'ExpressionStatement' ? last : null
+}
+
+const applyEdits = (code: string, edits: readonly SourceEdit[]): string => {
+  let result = code
+  for (const edit of edits.toSorted((a, b) => b.start - a.start)) {
+    result = result.slice(0, edit.start) + edit.replacement + result.slice(edit.end)
+  }
+  return result
+}
+
+const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
+
+/** Rewrites one top-level import statement into dynamic-import scope assignments. */
+function rewriteImportStatement(
+  statement: Node,
+  index: number,
+  options: ResolveOptions,
+  dependencies: ResolvedDependency[],
+  seen: Set<string>,
+): string {
+  const source = readNodeChild(statement, 'source')
+  const specifierValue = source !== null && source.type === 'Literal' ? readNodeString(source, 'value') : undefined
+  if (specifierValue === undefined) {
+    throw new ReplTransformError('import statements need a literal module specifier')
+  }
+  const resolved = resolveImportSpecifier(specifierValue, options)
+  if (resolved.dependency !== undefined && !seen.has(resolved.dependency.specifier)) {
+    seen.add(resolved.dependency.specifier)
+    dependencies.push(resolved.dependency)
+  }
+  const url = quoteString(resolved.url)
+  const moduleVar = `__runesm_mod_${index}`
+
+  const specifiers = readNodeChildren(statement, 'specifiers')
+  if (specifiers.length === 0) {
+    return `await import(${url})`
+  }
+  const namespaceSpecifier = specifiers.find((specifier) => specifier.type === 'ImportNamespaceSpecifier')
+  if (namespaceSpecifier !== undefined) {
+    const local = readNodeChild(namespaceSpecifier, 'local')
+    const name = local !== null ? readNodeString(local, 'name') : undefined
+    return name === undefined ? `await import(${url})` : `${SCOPE_BINDING}.${name} = await import(${url})`
+  }
+
+  const lines: string[] = [`const ${moduleVar} = await import(${url})`]
+  for (const specifier of specifiers) {
+    const local = readNodeChild(specifier, 'local')
+    const localName = local !== null ? readNodeString(local, 'name') : undefined
+    if (localName === undefined) {
+      continue
+    }
+    if (specifier.type === 'ImportDefaultSpecifier') {
+      lines.push(`${SCOPE_BINDING}.${localName} = ${moduleVar}.default`)
+    } else {
+      const imported = readNodeChild(specifier, 'imported')
+      const importedName = imported !== null ? readNodeString(imported, 'name') : undefined
+      if (importedName !== undefined) {
+        lines.push(`${SCOPE_BINDING}.${localName} = ${moduleVar}[${quoteString(importedName)}]`)
+      }
+    }
+  }
+  return `{ ${lines.join('; ')} }`
+}
+
+/** Rewrites one top-level declaration statement into scope assignments. */
+function rewriteTopLevelDeclaration(statement: Node, edits: SourceEdit[]): void {
+  if (statement.type === 'VariableDeclaration') {
+    const firstDeclarator = readNodeChildren(statement, 'declarations')[0]
+    // Remove the `let`/`const` keyword (and the whitespace after it); each
+    // declarator's binding becomes a scope member so the declaration turns
+    // into an assignment.
+    edits.push({
+      start: statement.start,
+      end: firstDeclarator !== undefined ? firstDeclarator.start : statement.start,
+      replacement: '',
+    })
+
+    for (const declarator of readNodeChildren(statement, 'declarations')) {
+      const id = readNodeChild(declarator, 'id')
+      const init = readNodeChild(declarator, 'init')
+      if (id === null) {
+        continue
+      }
+      if (id.type === 'Identifier') {
+        const name = readNodeString(id, 'name') ?? ''
+        if (init === null) {
+          edits.push({
+            start: declarator.start,
+            end: declarator.end,
+            replacement: `${SCOPE_BINDING}.${name} = undefined`,
+          })
+        } else {
+          edits.push({ start: id.start, end: id.end, replacement: `${SCOPE_BINDING}.${name}` })
+        }
+      } else {
+        if (init === null) {
+          // Destructuring declarations always have initializers in valid
+          // syntax; fail loudly rather than emit broken code.
+          throw new ReplTransformError('destructuring declarations need an initializer')
+        }
+        rewritePatternToMemberExpressions(id, edits)
+        if (id.type === 'ObjectPattern') {
+          // `{ __runesm.a } = src` at statement position parses as a block;
+          // parenthesize the declarator so it stays an assignment.
+          edits.push({ start: declarator.start, end: declarator.start, replacement: '(' })
+          edits.push({ start: declarator.end, end: declarator.end, replacement: ')' })
+        }
+      }
+    }
+    return
+  }
+  if (statement.type === 'FunctionDeclaration' || statement.type === 'ClassDeclaration') {
+    const id = readNodeChild(statement, 'id')
+    const name = id !== null ? readNodeString(id, 'name') : undefined
+    if (id !== null && name !== undefined) {
+      edits.push({ start: statement.start, end: statement.start, replacement: `${SCOPE_BINDING}.${name} = ` })
+    }
+  }
+}
+
+/** Rewrites binding identifiers inside a pattern into scope member expressions. */
+function rewritePatternToMemberExpressions(pattern: Node, edits: SourceEdit[]): void {
+  switch (pattern.type) {
+    case 'Identifier': {
+      const name = readNodeString(pattern, 'name')
+      if (name !== undefined) {
+        edits.push({ start: pattern.start, end: pattern.end, replacement: `${SCOPE_BINDING}.${name}` })
+      }
+      return
+    }
+    case 'ObjectPattern':
+      for (const property of readNodeChildren(pattern, 'properties')) {
+        const key = readNodeChild(property, 'key')
+        const value = readNodeChild(property, 'value')
+        const shorthand = (property as unknown as Record<string, unknown>).shorthand === true
+        if (shorthand && key !== null) {
+          // `{ a }` → `{ a: __runesm.a }`; `{ a = 1 }` → `{ a: __runesm.a = 1 }`.
+          // The key and the binding identifier share their source range, so
+          // rewriting the key once leaves the rest of the value untouched.
+          const keyName = readNodeString(key, 'name')
+          if (keyName !== undefined) {
+            edits.push({
+              start: key.start,
+              end: key.end,
+              replacement: `${keyName}: ${SCOPE_BINDING}.${keyName}`,
+            })
+          }
+          continue
+        }
+        if (value !== null) {
+          rewritePatternToMemberExpressions(value, edits)
+        }
+      }
+      return
+    case 'ArrayPattern':
+      for (const element of readNodeChildren(pattern, 'elements')) {
+        if (element !== null && isAstNode(element)) {
+          rewritePatternToMemberExpressions(element, edits)
+        }
+      }
+      return
+    case 'RestElement': {
+      const argument = readNodeChild(pattern, 'argument')
+      if (argument !== null) {
+        rewritePatternToMemberExpressions(argument, edits)
+      }
+      return
+    }
+    case 'AssignmentPattern': {
+      const left = readNodeChild(pattern, 'left')
+      if (left !== null) {
+        rewritePatternToMemberExpressions(left, edits)
+      }
+      return
+    }
+    default:
+      throw new ReplTransformError(`unsupported binding pattern: ${pattern.type}`)
+  }
+}

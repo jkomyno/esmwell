@@ -8,7 +8,15 @@ export { collectBareSpecifiers } from './deps'
 export { runJudgeInRealm } from './bootstrap'
 export type { JudgeRealmOptions } from './bootstrap'
 export { createRunesm, adaptWorker } from './main'
-export type { JudgeRunHandlers, RunesmOptions, RunesmSession, WorkerFactory, WorkerLike } from './main'
+export type {
+  ConsoleStreamHandlers,
+  ReplSession,
+  RunesmOptions,
+  RunesmSession,
+  WorkerFactory,
+  WorkerLike,
+} from './main'
+export { createReplSession } from './main'
 export type {
   ConsoleChunk,
   ConsoleLevel,
@@ -18,6 +26,9 @@ export type {
   JudgeRequest,
   JudgeRunResult,
   JudgeRunStatus,
+  ReplInputRequest,
+  ReplResetRequest,
+  ReplResult,
   SerializedError,
   WorkerRequest,
   WorkerResponse,

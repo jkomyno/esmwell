@@ -11,6 +11,14 @@ export interface IdentifierRef {
   readonly end: number
   /** True when a binding somewhere in the input covers the reference. */
   readonly bound: boolean
+  /**
+   * True when the reference resolves to the input's top-level scope — the
+   * binding itself (declaration or import) or nothing at all (a global).
+   * REPL rewriting turns exactly these into scope-object reads and writes.
+   */
+  readonly programLevel: boolean
+  /** True inside a shorthand property value: rewriting must emit `name: <ref>`. */
+  readonly inShorthandProperty: boolean
 }
 
 /** The result of analyzing one user input. */
@@ -27,7 +35,10 @@ export interface ScopeAnalysis {
 class Scope {
   readonly names = new Set<string>()
 
-  constructor(readonly parent: Scope | null) {}
+  constructor(
+    readonly parent: Scope | null,
+    readonly isProgram: boolean,
+  ) {}
 
   declares(name: string): void {
     this.names.add(name)
@@ -35,6 +46,14 @@ class Scope {
 
   resolve(name: string): boolean {
     return this.names.has(name) || (this.parent?.resolve(name) ?? false)
+  }
+
+  /** The nearest scope declaring `name`, or null when the reference is unbound. */
+  bindingScope(name: string): Scope | null {
+    if (this.names.has(name)) {
+      return this
+    }
+    return this.parent?.bindingScope(name) ?? null
   }
 }
 
@@ -58,7 +77,7 @@ class Analyzer {
   private readonly references: IdentifierRef[] = []
   private readonly topLevelDeclarations: string[] = []
   private readonly importedNames: string[] = []
-  private readonly globalScope = new Scope(null)
+  private readonly globalScope = new Scope(null, true)
 
   analyze(program: Program): ScopeAnalysis {
     // Imports bind first: module-level declarations are visible before
@@ -193,16 +212,19 @@ class Analyzer {
     }
   }
 
-  private visit(node: Node, scope: Scope): void {
+  private visit(node: Node, scope: Scope, inShorthandProperty = false): void {
     switch (node.type) {
       case 'Identifier': {
         const name = this.identifierName(node)
         if (name !== undefined) {
+          const bindingScope = scope.bindingScope(name)
           this.references.push({
             name,
             start: node.start,
             end: node.end,
-            bound: scope.resolve(name),
+            bound: bindingScope !== null,
+            programLevel: bindingScope === null || bindingScope.isProgram,
+            inShorthandProperty,
           })
         }
         return
@@ -213,7 +235,7 @@ class Analyzer {
       }
       case 'BlockStatement':
       case 'StaticBlock': {
-        const blockScope = new Scope(scope)
+        const blockScope = new Scope(scope, false)
         this.declareStatements(this.children(node, 'body'), blockScope)
         for (const statement of this.children(node, 'body')) {
           this.visit(statement, blockScope)
@@ -223,7 +245,7 @@ class Analyzer {
       case 'FunctionDeclaration':
       case 'FunctionExpression':
       case 'ArrowFunctionExpression': {
-        const paramScope = new Scope(scope)
+        const paramScope = new Scope(scope, false)
         const id = this.child(node, 'id')
         const name = id !== null ? this.identifierName(id) : undefined
         if (id !== null && name !== undefined) {
@@ -242,7 +264,7 @@ class Analyzer {
       }
       case 'ClassDeclaration':
       case 'ClassExpression': {
-        const classScope = node.type === 'ClassExpression' ? new Scope(scope) : scope
+        const classScope = node.type === 'ClassExpression' ? new Scope(scope, false) : scope
         if (classScope !== scope) {
           const id = this.child(node, 'id')
           const className = id !== null ? this.identifierName(id) : undefined
@@ -291,7 +313,7 @@ class Analyzer {
         return
       }
       case 'CatchClause': {
-        const catchScope = new Scope(scope)
+        const catchScope = new Scope(scope, false)
         const param = this.child(node, 'param')
         if (param !== null) {
           this.collectPatternBindings(param, catchScope)
@@ -301,7 +323,7 @@ class Analyzer {
         return
       }
       case 'SwitchStatement': {
-        const caseScope = new Scope(scope)
+        const caseScope = new Scope(scope, false)
         this.visitChild(node, scope, 'discriminant')
         for (const switchCase of this.children(node, 'cases')) {
           this.declareStatements(this.children(switchCase, 'consequent'), caseScope)
@@ -321,7 +343,11 @@ class Analyzer {
         if (this.isComputed(node)) {
           this.visitChild(node, scope, 'key')
         }
-        this.visitChild(node, scope, 'value')
+        const value = this.child(node, 'value')
+        if (value !== null) {
+          const shorthand = (node as unknown as Record<string, unknown>).shorthand === true
+          this.visit(value, scope, shorthand)
+        }
         return
       }
       case 'MethodDefinition': {
@@ -411,7 +437,7 @@ class Analyzer {
 
   private visitFunctionBody(body: Node, paramScope: Scope): void {
     if (body.type === 'BlockStatement' || body.type === 'StaticBlock') {
-      const blockScope = new Scope(paramScope)
+      const blockScope = new Scope(paramScope, false)
       this.declareStatements(this.children(body, 'body'), blockScope)
       for (const statement of this.children(body, 'body')) {
         this.visit(statement, blockScope)
@@ -425,7 +451,7 @@ class Analyzer {
     if (head === null || head.type !== 'VariableDeclaration') {
       return outer
     }
-    const headScope = new Scope(outer)
+    const headScope = new Scope(outer, false)
     for (const declarator of this.children(head, 'declarations')) {
       const id = this.child(declarator, 'id')
       if (id !== null) {

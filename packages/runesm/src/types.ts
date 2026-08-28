@@ -74,8 +74,37 @@ export interface JudgeRequest {
   readonly autoInstall?: boolean
 }
 
-export type WorkerRequest = JudgeRequest
+/** The outcome of one REPL evaluation. */
+export interface ReplResult {
+  readonly ok: boolean
+  /** Completion value: the input's final expression, when present. */
+  readonly value?: unknown
+  /** Present when the evaluation failed (syntax, policy, resolution, or runtime). */
+  readonly error?: SerializedError
+  readonly console: readonly ConsoleChunk[]
+  readonly dependencies: readonly ResolvedDependency[]
+  readonly durationMs: number
+}
+
+/** Main-thread → worker request: evaluate one REPL input. */
+export interface ReplInputRequest {
+  readonly kind: 'repl-input'
+  readonly id: number
+  readonly input: string
+  readonly deps?: Readonly<Record<string, string>>
+  readonly autoInstall?: boolean
+}
+
+/** Main-thread → worker request: start a fresh REPL scope. */
+export interface ReplResetRequest {
+  readonly kind: 'repl-reset'
+  readonly id: number
+}
+
+export type WorkerRequest = JudgeRequest | ReplInputRequest | ReplResetRequest
 
 export type WorkerResponse =
   | { readonly kind: 'console'; readonly id: number; readonly chunk: ConsoleChunk }
   | { readonly kind: 'result'; readonly id: number; readonly result: JudgeRunResult }
+  | { readonly kind: 'repl-result'; readonly id: number; readonly result: ReplResult }
+  | { readonly kind: 'repl-ack'; readonly id: number }

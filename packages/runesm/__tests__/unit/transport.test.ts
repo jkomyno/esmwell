@@ -1,4 +1,4 @@
-import { createRunesm } from 'src/main'
+import { createReplSession, createRunesm } from 'src/main'
 import type { WorkerFactory, WorkerLike } from 'src/main'
 import type { JudgeRunResult, WorkerRequest, WorkerResponse } from 'src/types'
 
@@ -242,3 +242,102 @@ describe('session transport: lifecycle', () => {
     expect(worker.terminated).toBe(false)
   })
 })
+
+describe('session transport: repl', () => {
+  const okReplResult = {
+    ok: true,
+    console: [],
+    dependencies: [],
+    durationMs: 1,
+  }
+
+  it('pairs repl inputs with results and streams console', async () => {
+    const worker = new FakeWorker()
+    const session = createReplSessionForTests([worker])
+
+    const chunks: string[] = []
+    const pending = session.evaluate('let n = 1', {
+      onConsoleChunk: (chunk) => {
+        chunks.push(chunk.parts.join(' '))
+      },
+    })
+    await Promise.resolve()
+
+    expect(worker.sent[0]).toMatchObject({ kind: 'repl-input', id: 1, input: 'let n = 1' })
+    worker.emitMessage({ kind: 'console', id: 1, chunk: { level: 'log', parts: ['declared'] } })
+    worker.emitMessage({ kind: 'repl-result', id: 1, result: { ...okReplResult, value: 1 } })
+
+    const result = await pending
+    expect(result.value).toBe(1)
+    expect(chunks).toEqual(['declared'])
+  })
+
+  it('forwards session options on repl inputs', async () => {
+    const worker = new FakeWorker()
+    const session = createReplSessionForTests([worker], { deps: { pkg: '1.0.0' }, autoInstall: false })
+
+    void session.evaluate('x').catch(() => undefined)
+    await Promise.resolve()
+    expect(worker.sent[0]).toMatchObject({ deps: { pkg: '1.0.0' }, autoInstall: false })
+  })
+
+  it('resolves reset once acknowledged', async () => {
+    const worker = new FakeWorker()
+    const session = createReplSessionForTests([worker])
+
+    let settled = false
+    const pending = session.reset().then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+
+    expect(worker.sent[0]).toMatchObject({ kind: 'repl-reset', id: 1 })
+    expect(settled).toBe(false)
+    worker.emitMessage({ kind: 'repl-ack', id: 1 })
+    await pending
+    expect(settled).toBe(true)
+  })
+
+  it('times out hung evaluations with a TLE result and recovers', async () => {
+    const hung = new FakeWorker()
+    const responsive = new FakeWorker()
+    const session = createReplSessionForTests([hung, responsive], { timeoutMs: 30 })
+
+    const timedOut = await session.evaluate('while (true) {}')
+    expect(timedOut.ok).toBe(false)
+    expect(timedOut.error).toMatchObject({ name: 'TimeoutError' })
+    expect(hung.terminated).toBe(true)
+
+    const pending = session.evaluate('1 + 1')
+    await Promise.resolve()
+    responsive.emitMessage({ kind: 'repl-result', id: 2, result: { ...okReplResult, value: 2 } })
+    await expect(pending).resolves.toMatchObject({ ok: true, value: 2 })
+  })
+
+  it('rejects evaluations after close', async () => {
+    const worker = new FakeWorker()
+    const session = createReplSessionForTests([worker])
+
+    const first = session.evaluate('x')
+    await Promise.resolve()
+    worker.emitMessage({ kind: 'repl-result', id: 1, result: okReplResult })
+    await first
+
+    session.close()
+    await expect(session.evaluate('x')).rejects.toThrow('session is closed')
+  })
+})
+
+function createReplSessionForTests(
+  workers: FakeWorker[],
+  options?: { deps?: Record<string, string>; autoInstall?: boolean; timeoutMs?: number },
+) {
+  const factory: WorkerFactory = () => {
+    const worker = workers.shift()
+    if (worker === undefined) {
+      throw new Error('no fake worker left')
+    }
+    return worker
+  }
+  return createReplSession({ workerFactory: factory, ...options })
+}

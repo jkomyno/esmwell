@@ -1,12 +1,14 @@
 import { installConsoleCapture } from './console'
 import { deepEqual } from './deep-equal'
-import { importModule, createModuleUrl, readNamedExport } from './loader'
+import { createDataModuleUrl, createModuleUrl, importModule, readNamedExport } from './loader'
 import type { ModuleNamespace } from './loader'
 import { parseUserModule } from './parse'
 import { checkPolicy } from './policy'
 import type { ResolveOptions } from './resolve'
+import type { ResolvedDependency } from './resolve'
 import { transformJudgeModule } from './transform-judge'
-import type { ConsoleChunk, JudgeCase, JudgeCaseResult, JudgeRunResult, SerializedError } from './types'
+import { RESULT_EXPORT, transformReplInput } from './transform-repl'
+import type { ConsoleChunk, JudgeCase, JudgeCaseResult, JudgeRunResult, ReplResult, SerializedError } from './types'
 
 /** Options for one in-realm judge run. */
 export interface JudgeRealmOptions extends ResolveOptions {
@@ -141,3 +143,102 @@ export const serializeError = (error: unknown): SerializedError => {
 }
 
 const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100
+
+/**
+ * The scope object every REPL module in a session shares: a transparent
+ * key-value store that falls back to the realm's globals for reads.
+ */
+const SCOPE_MODULE_SOURCE = `export const __runesm = new Proxy({}, {
+  get(target, key) {
+    if (key in target) return target[key]
+    return globalThis[key]
+  },
+  set(target, key, value) {
+    target[key] = value
+    return true
+  },
+})
+`
+
+/** Handlers for one REPL evaluation. */
+export interface ReplEvaluateHandlers {
+  /** Console chunks as they stream in, before the result. */
+  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
+}
+
+/** An in-realm REPL session: one persistent scope across evaluations. */
+export interface ReplRealmSession {
+  evaluate(input: string, handlers?: ReplEvaluateHandlers): Promise<ReplResult>
+  /** Starts a fresh scope; later evaluations do not see earlier state. */
+  reset(): void
+}
+
+/**
+ * Creates an in-realm REPL session. Each evaluation rewrites its input
+ * against the session's shared scope module, so declarations, imports, and
+ * reassignments persist across inputs; errors leave the session usable.
+ */
+let scopeGeneration = 0
+
+/** Scope modules are unique per session (and per reset): module registries cache by URL. */
+const createScopeModuleUrl = (): string => {
+  scopeGeneration += 1
+  return createDataModuleUrl(`${SCOPE_MODULE_SOURCE}\n/* scope ${scopeGeneration} */`)
+}
+
+export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSession {
+  let scopeModuleUrl = createScopeModuleUrl()
+  let generation = 0
+
+  return {
+    async evaluate(input: string, handlers?: ReplEvaluateHandlers): Promise<ReplResult> {
+      const consoleChunks: ConsoleChunk[] = []
+      const restoreConsole = installConsoleCapture({
+        write: (chunk) => {
+          consoleChunks.push(chunk)
+          handlers?.onConsoleChunk?.(chunk)
+        },
+      })
+      const startedAt = performance.now()
+      let moduleUrl: string | undefined
+
+      try {
+        const ast = parseUserModule(input)
+        const firstViolation = checkPolicy(ast)[0]
+        if (firstViolation !== undefined) {
+          throw firstViolation
+        }
+        const { code, dependencies } = transformReplInput(input, ast, { ...options, scopeModuleUrl })
+        // Identical input re-evaluated must execute again: module registries
+        // cache by URL, so every evaluation gets a unique one.
+        generation += 1
+        moduleUrl = createModuleUrl(`${code}\n/* evaluation ${generation} */`)
+        const module = await importModule(moduleUrl)
+        return {
+          ok: true,
+          ...(RESULT_EXPORT in module ? { value: module[RESULT_EXPORT] } : {}),
+          console: consoleChunks,
+          dependencies,
+          durationMs: elapsedMs(startedAt),
+        }
+      } catch (error) {
+        return {
+          ok: false,
+          error: serializeError(error),
+          console: consoleChunks,
+          dependencies: [] as ResolvedDependency[],
+          durationMs: elapsedMs(startedAt),
+        }
+      } finally {
+        if (moduleUrl !== undefined && moduleUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(moduleUrl)
+        }
+        restoreConsole()
+      }
+    },
+
+    reset(): void {
+      scopeModuleUrl = createScopeModuleUrl()
+    },
+  }
+}
