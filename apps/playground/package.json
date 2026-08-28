@@ -9,12 +9,14 @@
     "dev": "vite",
     "build": "vite build && node scripts/check-base.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "demo": "tcut demo.video.ts"
   },
   "dependencies": {
     "runesm": "workspace:*"
   },
   "devDependencies": {
+    "termcut": "^1.1.2",
     "vite": "catalog:"
   }
 }

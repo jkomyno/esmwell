@@ -121,6 +121,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/runesm
     devDependencies:
+      termcut:
+        specifier: ^1.1.2
+        version: 1.1.2(typescript@7.0.2)
       vite:
         specifier: 'catalog:'
         version: 8.1.4(@types/node@24.13.3)(yaml@2.9.0)
@@ -886,6 +889,18 @@ packages:
 
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
+
+  '@wterm/core@0.3.4':
+    resolution: {integrity: sha512-GZoAxybV6FY+o2L4VcZupipkcNKM4Dv4UGekRvuohDJ9oSAzwGgw4J8UGZlXllDLV0pKg3pmIGoukMat6EQ/pQ==}
+
+  '@wterm/dom@0.3.4':
+    resolution: {integrity: sha512-4TYaCJpAo9B3CMsCuApS65X7nExbMZ7QjcLbJCI0132hzccQ2EdG8NX2I2AELbGbDIeWNcDYD3ReqVtbEcQwqA==}
+
+  '@wterm/ghostty@0.3.4':
+    resolution: {integrity: sha512-oa53vgUFuNfIt+p8vvEeKlr8M4NRciEmHqY8pIXBxV3NRH6OGjMb1TiSxKBi+hySP61uXKqVbbu9YdW+7fWNMg==}
+
+  '@wterm/markdown@0.3.4':
+    resolution: {integrity: sha512-bv6WwbO3d/yrtO1P9ztq2n09bhTBDhDbZPGIiZtpCrwBBD7s2PIJnszsHuw64TZVxlbnVRVvpFVqevrx1zK8Sw==}
 
   '@yuku-codegen/binding-darwin-arm64@0.5.48':
     resolution: {integrity: sha512-yo96Oef12WzqnphInfz/eexVse3+kWgfGS5g2S3rFS3dcGn1ENW9xLFDZUP9rh+yP76DOq38wBoFi1+I9+6qBg==}
@@ -1914,6 +1929,13 @@ packages:
     resolution: {integrity: sha512-wK0Ri4fOGjv/XPy8SBHZChl8CM7uMc5VML7SqiQ0zG7+J5Vr+RMQDoHa2CNT6KHUnTGIXH34UDMkPzAUyapBZg==}
     engines: {node: '>=8'}
 
+  termcut@1.1.2:
+    resolution: {integrity: sha512-KC83ZqBvX9t9X1+OxItxO11m/ISdZ6AwCl+DrLl6NwO5kVAlp5evZekKG2jFVNYVSAwwDqXFXjcqF84qay1jcQ==}
+    engines: {bun: '>=1.4.0'}
+    hasBin: true
+    peerDependencies:
+      typescript: ^5
+
   thenify-all@1.6.0:
     resolution: {integrity: sha512-RNxQH/qI8/t3thXJDwcstUO4zeqo64+Uy/+sNVRBx4Xn2OX+OZ9oP+iJnNFqplFra2ZUVeKCSa2oVWi3T4uVmA==}
     engines: {node: '>=0.8'}
@@ -2836,6 +2858,18 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
+  '@wterm/core@0.3.4': {}
+
+  '@wterm/dom@0.3.4':
+    dependencies:
+      '@wterm/core': 0.3.4
+
+  '@wterm/ghostty@0.3.4':
+    dependencies:
+      '@wterm/core': 0.3.4
+
+  '@wterm/markdown@0.3.4': {}
+
   '@yuku-codegen/binding-darwin-arm64@0.5.48':
     optional: true
 
@@ -3706,6 +3740,14 @@ snapshots:
       supports-color: 7.2.0
 
   term-size@2.2.1: {}
+
+  termcut@1.1.2(typescript@7.0.2):
+    dependencies:
+      '@wterm/core': 0.3.4
+      '@wterm/dom': 0.3.4
+      '@wterm/ghostty': 0.3.4
+      '@wterm/markdown': 0.3.4
+      typescript: 7.0.2
 
   thenify-all@1.6.0:
     dependencies:

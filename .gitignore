@@ -284,3 +284,10 @@ build/
 
 # Build cache manifests
 *.tsbuildinfo
+
+### runesm demo recording ###
+# Recording intermediates from `pnpm --filter playground demo`. Only the
+# rendered GIF is committed; apps/playground/demo.video.ts is its source, and
+# a re-render needs the browser frames re-recorded anyway.
+docs/media/*.cast
+docs/media/*.browser/

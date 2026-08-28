@@ -28,6 +28,7 @@ Preserve the runner's invariants: submitted judge and REPL modules run only insi
 - Keep the pre-commit hook in `lefthook.yml` and its staged-file checks in the root `lint-staged` configuration.
 - Let oxfmt and oxlint enforce formatting and lint style.
 - Do not edit generated output, dependency directories, or lockfile sections by hand.
+- `docs/media/playground.gif` is generated, not hand-edited. Re-record it with `pnpm --filter playground demo` (tcut, defined by `apps/playground/demo.video.ts`) whenever the playground UI or its default example changes.
 
 ## TypeScript Rules
 
