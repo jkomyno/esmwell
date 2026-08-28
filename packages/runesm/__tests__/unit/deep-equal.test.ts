@@ -156,6 +156,34 @@ const equalityCases: EqualityCase[] = [
     equal: false,
   },
   { name: 'map vs object', actual: new Map(), expected: {}, equal: false },
+  {
+    // Keys are structurally equal across entries, but values are not for any
+    // valid pairing — a key-only matcher would wrongly accept this.
+    name: 'map entries with matching keys but mismatched values — false accept guard',
+    actual: new Map([
+      [{ id: 1 }, 'a'],
+      [{ id: 1 }, 'b'],
+    ]),
+    expected: new Map([
+      [{ id: 1 }, 'a'],
+      [{ id: 1 }, 'c'],
+    ]),
+    equal: false,
+  },
+  {
+    // A valid bijection exists even though both entries share the same
+    // structural key; the matcher must find it instead of over-consuming.
+    name: 'map entries with a shared duplicate key shape — false reject guard',
+    actual: new Map([
+      [{ id: 1 }, 'a'],
+      [{ id: 1 }, 'b'],
+    ]),
+    expected: new Map([
+      [{ id: 1 }, 'b'],
+      [{ id: 1 }, 'a'],
+    ]),
+    equal: true,
+  },
 
   // Sets
   { name: 'same sets', actual: new Set([1, 2, 3]), expected: new Set([1, 2, 3]), equal: true },
@@ -174,6 +202,23 @@ const equalityCases: EqualityCase[] = [
   { name: 'set member mismatch', actual: new Set([1]), expected: new Set([2]), equal: false },
   { name: 'set size mismatch', actual: new Set([1]), expected: new Set([1, 2]), equal: false },
   { name: 'set vs array', actual: new Set([1]), expected: [1], equal: false },
+  {
+    // A greedy, non-consuming matcher would let both actual members
+    // independently "find" expected's {a:1}, wrongly accepting this.
+    name: 'set members structurally equal but distinct — false accept guard',
+    actual: new Set([{ a: 1 }, { a: 1 }]),
+    expected: new Set([{ a: 1 }, { a: 2 }]),
+    equal: false,
+  },
+  {
+    // A greedy matcher can consume the one expected {a:1} for the first
+    // actual {a:1}, leaving the second actual {a:1} with no candidate even
+    // though a valid bijection exists (each expected member used once).
+    name: 'equal-size sets with a shared duplicate shape — false reject guard',
+    actual: new Set([{ a: 1 }, { a: 1 }]),
+    expected: new Set([{ a: 1 }, { a: 1 }]),
+    equal: true,
+  },
 
   // TypedArrays
   { name: 'equal uint8', actual: new Uint8Array([1, 2, 3]), expected: new Uint8Array([1, 2, 3]), equal: true },

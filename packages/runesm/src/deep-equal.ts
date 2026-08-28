@@ -112,6 +112,21 @@ const typedArraysEqual = (actual: object, expected: object): boolean => {
   return true
 }
 
+/**
+ * Whether a Map key or Set member can be matched against a collection with
+ * `has`/`get` (SameValueZero) instead of a linear deep-equal scan. This holds
+ * for every value where SameValueZero agrees with the `Object.is` semantics
+ * `deepEqual` uses for primitives — which is every primitive except the two
+ * zero signs, since `SameValueZero(0, -0)` is `true` but `Object.is(0, -0)`
+ * is `false`. Because a collection can hold at most one of `0`/`-0` (they
+ * collapse under SameValueZero at insertion time) and its non-zero primitive
+ * members are already mutually SameValueZero-distinct, a `has`/`get` match
+ * on one of these values can never be shared by two different actual
+ * members, so no consumption bookkeeping is needed for them.
+ */
+const canMatchByIdentity = (value: unknown): boolean =>
+  (typeof value !== 'object' || value === null) && !(typeof value === 'number' && value === 0)
+
 const mapsEqual = (actual: object, expected: object, pairs: ComparisonPairs): boolean => {
   if (!(actual instanceof Map) || !(expected instanceof Map)) {
     return false
@@ -119,14 +134,24 @@ const mapsEqual = (actual: object, expected: object, pairs: ComparisonPairs): bo
   if (actual.size !== expected.size) {
     return false
   }
+  // Entries whose key cannot be matched by identity are matched against this
+  // consumable pool, so a single expected entry cannot satisfy two distinct
+  // actual entries.
+  const remaining = [...expected.entries()].filter(([key]) => !canMatchByIdentity(key))
   for (const [key, value] of actual) {
-    const matchingEntry = [...expected.entries()].find(([otherKey]) => deepEqualGuarded(key, otherKey, pairs))
-    if (matchingEntry === undefined) {
+    if (canMatchByIdentity(key)) {
+      if (!expected.has(key) || !deepEqualGuarded(value, expected.get(key), pairs)) {
+        return false
+      }
+      continue
+    }
+    const matchIndex = remaining.findIndex(
+      ([otherKey, otherValue]) => deepEqualGuarded(key, otherKey, pairs) && deepEqualGuarded(value, otherValue, pairs),
+    )
+    if (matchIndex === -1) {
       return false
     }
-    if (!deepEqualGuarded(value, matchingEntry[1], pairs)) {
-      return false
-    }
+    remaining.splice(matchIndex, 1)
   }
   return true
 }
@@ -138,11 +163,24 @@ const setsEqual = (actual: object, expected: object, pairs: ComparisonPairs): bo
   if (actual.size !== expected.size) {
     return false
   }
+  // Members that cannot be matched by identity are matched against this
+  // consumable pool, so a single expected member cannot satisfy two distinct
+  // actual members (the greedy, non-consuming match this replaces could
+  // accept `new Set([{a:1},{a:1}])` against `new Set([{a:1},{a:2}])`, since
+  // both actual members would independently "find" the same `{a:1}`).
+  const remaining = [...expected.values()].filter((value) => !canMatchByIdentity(value))
   for (const member of actual) {
-    const hasMatch = [...expected.values()].some((other) => deepEqualGuarded(member, other, pairs))
-    if (!hasMatch) {
+    if (canMatchByIdentity(member)) {
+      if (!expected.has(member)) {
+        return false
+      }
+      continue
+    }
+    const matchIndex = remaining.findIndex((other) => deepEqualGuarded(member, other, pairs))
+    if (matchIndex === -1) {
       return false
     }
+    remaining.splice(matchIndex, 1)
   }
   return true
 }

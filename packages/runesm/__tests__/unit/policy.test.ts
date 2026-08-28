@@ -43,6 +43,7 @@ describe('policy gate: eval references', () => {
     { code: 'const o = { f: eval }', line: 1 },
     { code: 'const o = { [eval]: 1 }', line: 1 },
     { code: 'const a = 1\ncall(eval)', line: 2 },
+    { code: 'export { eval } from "some-pkg"', line: 1 },
   ])('rejects $code', ({ code, line }) => {
     const violations = violationsOf(code)
     expect(violations).toHaveLength(1)
@@ -59,6 +60,8 @@ describe('policy gate: eval references', () => {
     'class A { static eval = 1 }',
     'import { eval as readIt } from "some-module"',
     'eval: for (;;) { break eval }',
+    'export { foo as eval } from "some-pkg"',
+    'export * as eval from "some-pkg"',
   ])('allows %j', (code) => {
     expect(violationsOf(code)).toEqual([])
   })
@@ -69,6 +72,11 @@ describe('policy gate: Function constructor', () => {
     { code: "Function('return 1')", line: 1 },
     { code: 'new Function("a", "return a")', line: 1 },
     { code: 'const a = 1\nconst f = new Function("b")', line: 2 },
+    { code: 'Function`return 1`', line: 1 },
+    { code: 'Function.call(null, "return 1")', line: 1 },
+    { code: 'Function.apply(null, ["return 1"])', line: 1 },
+    { code: 'Function.bind(null)', line: 1 },
+    { code: 'const a = 1\nFunction.call(null, "return a")', line: 2 },
   ])('rejects $code', ({ code, line }) => {
     const violations = violationsOf(code)
     expect(violations).toHaveLength(1)
@@ -82,6 +90,9 @@ describe('policy gate: Function constructor', () => {
     'const captured = Function',
     'function Function() {}',
     'const fn = someFunction()',
+    'Function.length',
+    'Function.toString()',
+    'obj.call(Function, "return 1")',
   ])('allows %j', (code) => {
     expect(violationsOf(code)).toEqual([])
   })
