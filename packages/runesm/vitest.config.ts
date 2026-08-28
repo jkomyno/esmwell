@@ -11,6 +11,7 @@ export default defineConfig({
           ...baseTestConfig,
           name: 'unit',
           include: ['__tests__/unit/**/*.test.ts'],
+          passWithNoTests: false,
         },
       },
       {
@@ -20,6 +21,7 @@ export default defineConfig({
           ...baseTestConfig,
           name: 'integration',
           include: ['__tests__/integration/**/*.test.ts'],
+          passWithNoTests: false,
         },
       },
     ],

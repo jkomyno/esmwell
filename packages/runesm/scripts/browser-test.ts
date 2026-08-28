@@ -27,6 +27,16 @@ interface PageTestResult {
   error?: string
 }
 
+interface PageModuleCount {
+  name: string
+  count: number
+}
+
+interface PageSummary {
+  results: PageTestResult[]
+  moduleCounts: PageModuleCount[]
+}
+
 const javascriptType = 'text/javascript; charset=utf-8'
 
 const server = serve({
@@ -82,20 +92,31 @@ const serveBuildFile = async (relativePath: string): Promise<Response> => {
   return new Response(rewritten, { headers: { 'content-type': javascriptType } })
 }
 
-const testModuleNames = readdirSync(browserTestsRoot)
+// Recursive so a test file in a subdirectory is discovered rather than
+// silently dropped from the suite.
+const testModuleNames = (readdirSync(browserTestsRoot, { recursive: true }) as string[])
   .filter((name) => name.endsWith('.test.ts'))
-  .map((name) => name.slice(0, -'.ts'.length))
+  .map((name) => name.replace(/\\/g, '/').slice(0, -'.ts'.length))
 
 const pageHtml = (): string => `<!doctype html>
 <html>
   <head><meta charset="utf-8" /><title>runesm browser tests</title></head>
   <body>
     <script>
+      // Collected here (rather than only logged) so the runner can turn a
+      // page-level error or a late rejection into a failing result: neither
+      // is visible to the micro test-runner, which only sees exceptions
+      // thrown synchronously out of an awaited test body.
+      globalThis.__pageErrors = []
       window.addEventListener('error', (event) => {
-        console.error('page error:', event.message, 'at', event.filename, event.lineno)
+        const message = 'page error: ' + event.message + ' at ' + event.filename + ':' + event.lineno
+        console.error(message)
+        globalThis.__pageErrors.push(message)
       })
       window.addEventListener('unhandledrejection', (event) => {
-        console.error('unhandled rejection:', String(event.reason))
+        const message = 'unhandled rejection: ' + String(event.reason)
+        console.error(message)
+        globalThis.__pageErrors.push(message)
       })
     </script>
     <script type="module" src="/runner.js"></script>
@@ -107,9 +128,25 @@ const pageHtml = (): string => `<!doctype html>
  * imports each transpiled test module, runs them sequentially, and resolves
  * globalThis.__results (the harness awaits exactly this promise). The test
  * module names are baked in when the harness serves this script.
+ *
+ * Guards against three ways a suite can shrink or hang silently:
+ * - A module that throws on import is caught per-module and recorded as a
+ *   failing result, instead of aborting this whole top-level script (which
+ *   would leave globalThis.__results unset and stall the harness until
+ *   OVERALL_TIMEOUT_MS).
+ * - A module that registers zero tests (wrong suffix, empty file, a
+ *   registration call that silently no-ops) is caught by diffing the
+ *   registered-test count before/after each import.
+ * - A page-level error or unhandled rejection collected into
+ *   globalThis.__pageErrors (see pageHtml) is turned into a synthetic
+ *   failing result before globalThis.__results is published.
+ * A top-level try/catch is a last-resort net: any other unexpected throw
+ * still publishes a (failing) result instead of hanging the harness.
  */
 const runnerSource = (): string => `
 const tests = []
+const moduleCounts = []
+const results = []
 
 globalThis.test = (name, fn) => tests.push({ name, fn })
 globalThis.assert = (condition, message) => {
@@ -121,23 +158,52 @@ globalThis.assertEqual = (actual, expected, message) => {
   if (left !== right) throw new Error(message + ': expected ' + right + ' but got ' + left)
 }
 
-const moduleNames = ${JSON.stringify(testModuleNames)}
-for (const moduleName of moduleNames) {
-  await import('/tests/' + moduleName + '.js')
+const publish = () => {
+  const summary = { results, moduleCounts }
+  globalThis.__results = results
+  globalThis.__moduleCounts = moduleCounts
+  if (globalThis.__resolveSummary) globalThis.__resolveSummary(summary)
 }
 
-const results = []
-for (const { name, fn } of tests) {
-  try {
-    await fn()
-    results.push({ name, status: 'pass' })
-  } catch (error) {
-    results.push({ name, status: 'fail', error: String(error) })
+try {
+  const moduleNames = ${JSON.stringify(testModuleNames)}
+  for (const moduleName of moduleNames) {
+    const before = tests.length
+    try {
+      await import('/tests/' + moduleName + '.js')
+    } catch (error) {
+      moduleCounts.push({ name: moduleName, count: 0 })
+      results.push({ name: moduleName + ' (import)', status: 'fail', error: 'module failed to import: ' + String(error) })
+      continue
+    }
+    const registered = tests.length - before
+    moduleCounts.push({ name: moduleName, count: registered })
+    if (registered === 0) {
+      results.push({ name: moduleName + ' (registration)', status: 'fail', error: 'module registered zero tests' })
+    }
   }
-}
 
-globalThis.__results = results
-if (globalThis.__resolveResults) globalThis.__resolveResults(results)
+  for (const { name, fn } of tests) {
+    try {
+      await fn()
+      results.push({ name, status: 'pass' })
+    } catch (error) {
+      results.push({ name, status: 'fail', error: String(error) })
+    }
+  }
+
+  // Give a same-tick error/rejection a chance to land in __pageErrors before
+  // it is read below.
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  for (const pageError of globalThis.__pageErrors ?? []) {
+    results.push({ name: pageError, status: 'fail', error: pageError })
+  }
+
+  publish()
+} catch (error) {
+  results.push({ name: 'runner', status: 'fail', error: 'runner crashed: ' + String(error) })
+  publish()
+}
 `
 
 const formatConsoleArg = (argument: unknown): string => {
@@ -187,17 +253,25 @@ await view.navigate(`http://localhost:${server.port}/`)
 // exactly one call whose expression resolves when the suite completes.
 const summary = (await view.evaluate(`
   new Promise((resolve) => {
-    if (globalThis.__results !== undefined) resolve(globalThis.__results)
-    else globalThis.__resolveResults = resolve
+    if (globalThis.__results !== undefined) resolve({ results: globalThis.__results, moduleCounts: globalThis.__moduleCounts ?? [] })
+    else globalThis.__resolveSummary = resolve
   })
-`)) as PageTestResult[]
+`)) as PageSummary | undefined
 
 clearTimeout(overallTimeout)
 view.close()
 server.stop(true)
 
+const results = summary?.results ?? []
+const moduleCounts = summary?.moduleCounts ?? []
+
+console.log('\nmodules:')
+for (const moduleCount of moduleCounts) {
+  console.log(`  ${moduleCount.name}: ${moduleCount.count} test(s)`)
+}
+
 let failed = 0
-for (const result of summary ?? []) {
+for (const result of results) {
   if (result.status === 'pass') {
     console.log(`  ✓ ${result.name}`)
   } else {
@@ -207,7 +281,7 @@ for (const result of summary ?? []) {
   }
 }
 
-console.log(`\nbrowser tests: ${summary.length - failed} passed, ${failed} failed`)
-if (failed > 0 || (summary?.length ?? 0) === 0) {
+console.log(`\nbrowser tests: ${results.length - failed} passed, ${failed} failed`)
+if (failed > 0 || results.length === 0) {
   process.exitCode = 1
 }

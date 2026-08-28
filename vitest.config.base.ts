@@ -9,6 +9,10 @@ import { defineConfig } from 'vitest/config'
 export const baseTestConfig = {
   environment: 'node',
   globals: true,
+  // A project matching zero files must fail the run, not report success —
+  // otherwise a stale include glob or a misnamed test file silently drops
+  // an entire suite from CI.
+  passWithNoTests: false,
 } as const
 
 /**
