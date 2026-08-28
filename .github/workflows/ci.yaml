@@ -57,6 +57,15 @@ jobs:
       - name: '🧳 Run tests'
         run: pnpm test
 
+      # Chrome is preinstalled on GitHub's ubuntu runners; pin the path for
+      # the WebView chrome backend. One retry absorbs CDN hiccups (esm.sh).
+      - name: '🌐 Run browser tests'
+        run: |
+          pnpm --filter runesm test:browser || \
+            (echo '::warning::browser tests failed, retrying once' && pnpm --filter runesm test:browser)
+        env:
+          BUN_CHROME_PATH: /usr/bin/google-chrome-stable
+
       - name: '📦 pkg.pr.new (preview release)'
         if: github.event_name == 'pull_request'
         run: pnpm exec pkg-pr-new publish './packages/*' --packageManager=pnpm

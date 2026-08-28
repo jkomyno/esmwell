@@ -6,4 +6,8 @@
     "browser": true,
     "vitest": true,
   },
+  // Browser tests run page-side under the WebView harness (harness-provided
+  // globals, no vitest) and the harness itself runs under bun with APIs the
+  // node-realm rules don't know.
+  "ignorePatterns": ["**/node_modules", "**/build", "__tests__/browser", "scripts"],
 }

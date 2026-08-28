@@ -3,6 +3,7 @@ min_version = "2026.1.0"
 [tools]
 "npm:pnpm" = "11.3.0"
 node = "24.13.0"
+bun = "1.4"
 
 [settings]
 lockfile = true
