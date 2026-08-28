@@ -30,6 +30,12 @@
         "default": "./build/index.mjs"
       }
     },
+    "./worker-entry": {
+      "import": {
+        "@jkomyno/source": "./src/worker-entry.ts",
+        "default": "./build/worker-entry.mjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

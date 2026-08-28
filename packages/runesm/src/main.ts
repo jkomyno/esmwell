@@ -55,7 +55,12 @@ export function createRunesm(options: RunesmOptions = {}): RunesmSession {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const workerFactory = options.workerFactory ?? defaultWorkerFactory
   const workerUrl =
-    options.workerUrl !== undefined ? String(options.workerUrl) : new URL('worker-entry.mjs', import.meta.url).href
+    options.workerUrl !== undefined
+      ? String(options.workerUrl)
+      : // Bundlers try to resolve this at build time; the default only
+        // matters when the build output is served as-is (next to
+        // worker-entry.mjs), so it must stay a runtime resolution.
+        new URL(/* @vite-ignore */ 'worker-entry.mjs', import.meta.url).href
 
   let worker: WorkerLike | null = null
   let closed = false
@@ -174,10 +179,22 @@ export function createRunesm(options: RunesmOptions = {}): RunesmSession {
 
 const defaultWorkerFactory = (url: string): WorkerLike => {
   const worker = new Worker(url, { type: 'module' })
+  return adaptWorker(worker)
+}
+
+/**
+ * Adapts a real Worker (for example one built by a bundler's `?worker`
+ * import) to the surface the session transport expects.
+ */
+export function adaptWorker(worker: Worker): WorkerLike {
   const postToWorker = worker.postMessage.bind(worker)
   return {
-    send: (message: unknown) => postToWorker(message),
-    terminate: () => worker.terminate(),
+    send: (message: unknown) => {
+      postToWorker(message)
+    },
+    terminate: () => {
+      worker.terminate()
+    },
     addEventListener: (type: string, listener: (event: unknown) => void) => {
       worker.addEventListener(type, listener as EventListener)
     },

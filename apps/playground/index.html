@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>runesm playground</title>
+    <script>
+      window.addEventListener('error', (event) => {
+        console.error('page error:', event.message, 'at', event.filename, event.lineno)
+      })
+      window.addEventListener('unhandledrejection', (event) => {
+        console.error('unhandled rejection:', String(event.reason))
+      })
+    </script>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>runesm playground</h1>
+      <p class="subtitle">
+        User-authored ESM runs in a module worker; bare imports resolve from
+        <a href="https://esm.sh" rel="noreferrer">esm.sh</a>.
+      </p>
+    </header>
+    <main>
+      <section class="pane pane-editor">
+        <div class="pane-header">
+          <h2>Editor</h2>
+          <div class="actions">
+            <button id="run" type="button">Run</button>
+            <button id="judge" type="button" class="primary">Judge</button>
+          </div>
+        </div>
+        <textarea id="editor" spellcheck="false" aria-label="User code"></textarea>
+        <div class="deps">
+          <div class="pane-header">
+            <h2>Deps</h2>
+            <span class="hint">auto-detected imports · pin versions to override latest</span>
+          </div>
+          <ul id="deps-list"></ul>
+        </div>
+      </section>
+      <section class="pane pane-output">
+        <div class="pane-header">
+          <h2>Output</h2>
+          <span id="status" class="status"></span>
+        </div>
+        <div id="console" class="console"></div>
+        <div id="cases" class="cases"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

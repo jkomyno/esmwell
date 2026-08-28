@@ -115,6 +115,16 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.1.4(@types/node@24.13.3)(yaml@2.9.0))
 
+  apps/playground:
+    dependencies:
+      runesm:
+        specifier: workspace:*
+        version: link:../../packages/runesm
+    devDependencies:
+      vite:
+        specifier: 'catalog:'
+        version: 8.1.4(@types/node@24.13.3)(yaml@2.9.0)
+
   packages/runesm:
     dependencies:
       acorn:
