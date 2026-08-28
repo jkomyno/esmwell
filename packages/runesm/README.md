@@ -80,6 +80,53 @@ The persistent scope is a plain object, so a few Node-REPL-like divergences are 
 - Absolute URLs pass through untouched; relative specifiers error (user code runs from an in-memory URL); `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` → `globalThis.crypto`, `node:http` → `fetch()`, …).
 - Both modes surface the resolved dependency list (`name`, `version`, `url`) in their results so hosts can display what a run actually used.
 
+## WebAssembly packages
+
+User modules run in a browser worker with the native `WebAssembly` and `fetch` APIs. They can fetch and instantiate a `.wasm` URL directly, or use a package's browser/Web Worker entrypoint when that package provides one.
+
+Runtime-specific package entrypoints are not interchangeable. In particular, `@cf-wasm/og`'s default export resolves to its `workerd` build, which imports `.wasm` files using Cloudflare Workers module rules that browsers do not implement. Use the package's `others` entries and initialize their WebAssembly binaries explicitly:
+
+```js
+import { CustomFont, ImageResponse } from '@cf-wasm/og/others'
+import { t } from '@cf-wasm/og/html-to-react'
+import { initResvg } from '@cf-wasm/resvg/legacy/others'
+import { initSatori } from '@cf-wasm/satori/others'
+
+await Promise.all([
+  initResvg(fetch('https://esm.sh/@cf-wasm/resvg@0.4.0/legacy/resvg.wasm?raw')),
+  initSatori(fetch('https://esm.sh/@cf-wasm/satori@0.4.0/yoga.wasm?raw')),
+])
+
+export const renderImage = async () => {
+  const defaultFont = new CustomFont(
+    'sans serif',
+    fetch('https://cdn.jsdelivr.net/npm/@cf-wasm/og@0.5.0/dist/lib/noto-sans-v27-latin-regular.ttf.bin').then(
+      (response) => response.arrayBuffer(),
+    ),
+  )
+  return ImageResponse.async(t('<div style="display: flex">Hello from WebAssembly</div>'), {
+    width: 320,
+    height: 180,
+    defaultFont,
+  })
+}
+```
+
+Pin all three packages in the session because the submitted module imports each one directly:
+
+```ts
+createRunesm({
+  deps: {
+    '@cf-wasm/og': '0.5.0',
+    '@cf-wasm/resvg': '0.4.0',
+    '@cf-wasm/satori': '0.4.0',
+  },
+  autoInstall: false,
+})
+```
+
+The browser suite executes this flow through the published worker entry and checks the generated PNG signature. The CDN and asset URLs make that test intentionally network-dependent.
+
 ## Policy
 
 Submitted code is rejected (with line numbers) for `var` declarations, `eval` references, and `Function`-constructor calls — before anything executes.
