@@ -41,6 +41,12 @@ class FakeWorker implements WorkerLike {
       listener({ message } as ErrorEvent)
     }
   }
+
+  emitMessageError(): void {
+    for (const listener of this.listeners.get('messageerror') ?? []) {
+      listener({} as MessageEvent)
+    }
+  }
 }
 
 const okResult: JudgeRunResult = {
@@ -223,6 +229,84 @@ describe('session transport: lifecycle', () => {
     session.close()
     expect(worker.terminated).toBe(true)
     await expect(session.runJudge('code', [])).rejects.toThrow('session is closed')
+  })
+
+  it('settles an in-flight run within a tick when closed, not after the timeout', async () => {
+    const worker = new FakeWorker()
+    // A generous timeout makes a timeout-based settle unmistakable: if the
+    // assertions below observe a settled promise before this elapses, the
+    // settle did not come from the timer.
+    const { session } = createSessionWith([worker], { timeoutMs: 10_000 })
+
+    const pending = session.runJudge('while (true) {}', [])
+    await Promise.resolve()
+
+    session.close()
+
+    const result = await pending
+    expect(result.status).toBe('error')
+    expect(result.error?.name).not.toBe('TimeoutError')
+    expect(result.error?.message).toContain('closed')
+    expect(worker.terminated).toBe(true)
+  })
+
+  it('settles an in-flight run promptly on messageerror, with its own distinct message', async () => {
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker], { timeoutMs: 10_000 })
+
+    const pending = session.runJudge('code', [])
+    await Promise.resolve()
+
+    worker.emitMessageError()
+
+    const result = await pending
+    expect(result.status).toBe('error')
+    expect(result.error?.name).not.toBe('TimeoutError')
+    expect(result.error?.message).toContain('messageerror')
+    expect(result.error?.message).not.toContain('closed')
+    expect(worker.terminated).toBe(true)
+  })
+
+  it('still produces a TimeoutError and terminates the worker on an actual timeout', async () => {
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker], { timeoutMs: 20 })
+
+    const result = await session.runJudge('while (true) {}', [])
+    expect(result.error).toMatchObject({ name: 'TimeoutError' })
+    expect(worker.terminated).toBe(true)
+  })
+
+  it('keeps a single settle when a result and the timeout land in the same tick', async () => {
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker], { timeoutMs: 10 })
+
+    const pending = session.runJudge('code', [])
+    await Promise.resolve()
+
+    // Both a legitimate result and the timeout firing "at once": whichever
+    // wins, the settled flag must stop the other from double-settling.
+    worker.emitMessage({ kind: 'result', id: 1, result: okResult })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    const result = await pending
+    expect(result).toEqual(okResult)
+  })
+
+  it('settles a request with an unrecognized response kind instead of hanging', async () => {
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker], { timeoutMs: 10_000 })
+
+    const pending = session.runJudge('code', [])
+    await Promise.resolve()
+
+    // Simulates version skew: a response kind this build's transport does
+    // not treat as this request's resultKind.
+    worker.emitMessage({ kind: 'repl-ack', id: 1 } as unknown as WorkerResponse)
+
+    const result = await pending
+    expect(result.status).toBe('error')
+    expect(result.error?.name).not.toBe('TimeoutError')
+    expect(result.error?.message).toContain('repl-ack')
   })
 
   it('reuses one worker across successful runs', async () => {

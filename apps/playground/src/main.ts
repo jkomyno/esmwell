@@ -128,7 +128,16 @@ const renderResult = (result: JudgeRunResult): void => {
   )
 }
 
+/** True while a run is in flight, so a second click cannot close a session that still owns one. */
+let running = false
+
 const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
+  if (running) {
+    return
+  }
+  running = true
+  runButton.disabled = true
+  judgeButton.disabled = true
   consoleView.replaceChildren()
   casesView.replaceChildren()
   setStatus('running…', 'running')
@@ -143,6 +152,10 @@ const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
     line.className = 'line line-error'
     line.textContent = String(error)
     consoleView.append(line)
+  } finally {
+    running = false
+    runButton.disabled = false
+    judgeButton.disabled = false
   }
 }
 

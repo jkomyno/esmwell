@@ -144,6 +144,12 @@ interface PendingRequest {
   settled: boolean
   timer: ReturnType<typeof setTimeout> | undefined
   worker: WorkerLike
+  /** Settles this request exactly once: clears the timer, detaches the
+   * worker listeners, and resolves the caller's promise with `outcome`.
+   * Reassigned by `dispatch` once the worker listeners exist; callable from
+   * `close()` and the `messageerror` listener so a terminated worker still
+   * settles whichever request was in flight. */
+  finish: (outcome: TransportOutcome) => void
 }
 
 /**
@@ -159,6 +165,8 @@ class WorkerTransport {
   private closed = false
   private nextRequestId = 1
   private queue: Promise<unknown> = Promise.resolve()
+  /** The one request currently in flight, if any (requests are serialized). */
+  private pending: PendingRequest | null = null
 
   constructor(options: RunesmOptions) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -187,6 +195,14 @@ class WorkerTransport {
 
   close(): void {
     this.closed = true
+    const active = this.pending
+    if (active !== null) {
+      active.finish({
+        kind: 'worker-error',
+        message: 'the session was closed while this run was still in progress',
+        console: active.pendingChunks,
+      })
+    }
     this.terminateWorker()
   }
 
@@ -221,12 +237,8 @@ class WorkerTransport {
         settled: false,
         timer: undefined,
         worker: sessionWorker,
+        finish: () => {},
       }
-
-      pending.timer = setTimeout(() => {
-        this.terminateWorker()
-        finish(pending, { kind: 'timeout', console: pending.pendingChunks })
-      }, this.timeoutMs)
 
       const onMessage = (event: unknown): void => {
         const response = (event as MessageEvent<WorkerResponse>).data
@@ -241,26 +253,47 @@ class WorkerTransport {
         if (response.kind === resultKind) {
           const payload =
             response.kind === 'result' ? response.result : response.kind === 'repl-result' ? response.result : undefined
-          finish(pending, { kind: 'delivered', payload, console: pending.pendingChunks })
+          pending.finish({ kind: 'delivered', payload, console: pending.pendingChunks })
+          return
         }
+        // A response for this id whose kind neither is 'console' nor matches
+        // what this request expects (for example a worker bundle from a
+        // different cache generation replying with a kind this main-thread
+        // bundle doesn't recognize as the pairing). Settle promptly instead
+        // of leaving the caller to time out.
+        pending.finish({
+          kind: 'worker-error',
+          message: `worker responded with unexpected message kind '${String(response.kind)}' for this request`,
+          console: pending.pendingChunks,
+        })
       }
 
       const onError = (event: unknown): void => {
         const failure = (event as ErrorEvent).message
         this.terminateWorker()
-        finish(pending, { kind: 'worker-error', message: String(failure), console: pending.pendingChunks })
+        pending.finish({ kind: 'worker-error', message: String(failure), console: pending.pendingChunks })
       }
 
-      const finish = (request: PendingRequest, outcome: TransportOutcome): void => {
-        if (request.settled) {
+      pending.finish = (outcome: TransportOutcome): void => {
+        if (pending.settled) {
           return
         }
-        request.settled = true
-        clearTimeout(request.timer)
+        pending.settled = true
+        clearTimeout(pending.timer)
         sessionWorker.removeEventListener('message', onMessage)
         sessionWorker.removeEventListener('error', onError)
-        request.settle(outcome)
+        if (this.pending === pending) {
+          this.pending = null
+        }
+        pending.settle(outcome)
       }
+
+      this.pending = pending
+
+      pending.timer = setTimeout(() => {
+        this.terminateWorker()
+        pending.finish({ kind: 'timeout', console: pending.pendingChunks })
+      }, this.timeoutMs)
 
       sessionWorker.addEventListener('message', onMessage)
       sessionWorker.addEventListener('error', onError)
@@ -271,9 +304,19 @@ class WorkerTransport {
   private ensureWorker(): WorkerLike | null {
     if (this.worker === null && !this.closed) {
       const created = this.workerFactory(this.workerUrl)
-      created.addEventListener('messageerror', () => {
+      const onMessageError = (): void => {
+        created.removeEventListener('messageerror', onMessageError)
+        const active = this.pending
         this.terminateWorker()
-      })
+        if (active !== null) {
+          active.finish({
+            kind: 'worker-error',
+            message: 'the worker sent a message the main thread could not decode (messageerror)',
+            console: active.pendingChunks,
+          })
+        }
+      }
+      created.addEventListener('messageerror', onMessageError)
       this.worker = created
     }
     return this.worker
