@@ -176,6 +176,7 @@ const getReplSession = (): ReplSession => {
   if (replSession === null) {
     replSession = createReplSession({
       workerFactory: () => adaptWorker(new RunesmWorker()),
+      executionWorkerUrl: RunesmExecutionWorkerUrl,
       deps: collectPinnedDeps(),
       timeoutMs: 10_000,
     })
