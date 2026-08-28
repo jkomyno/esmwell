@@ -134,3 +134,68 @@ test('runs effect v4 beta CLI platform detection', async () => {
     `CLI platform detection should run: ${result.cases[0]?.error?.message ?? result.error?.message}`,
   )
 })
+
+// Guards the snippet published in the README and the playground demo: a
+// Schema decode inside Effect.gen, a yield* Console.log that must reach the
+// streamed console, and Effect.runFork observed to completion.
+test('runs the documented Schema + Console.log + runFork snippet', async () => {
+  const session = createRunesm({
+    workerUrl: '/runesm/worker-entry.mjs',
+    autoInstall: false,
+    timeoutMs: 30_000,
+  })
+  try {
+    const result = await session.runJudge(
+      `
+        import * as Console from 'effect@beta/Console'
+        import * as Effect from 'effect@beta/Effect'
+        import * as Schema from 'effect@beta/Schema'
+
+        const User = Schema.Struct({ name: Schema.String, age: Schema.Number })
+
+        export const solve = (input) => {
+          const program = Effect.gen(function* () {
+            const user = Schema.decodeUnknownSync(User)(input)
+            yield* Console.log(\`decoded \${user.name} (age \${user.age})\`)
+            return \`hello, \${user.name}\`
+          })
+
+          return new Promise((resolve) => {
+            Effect.runFork(program).addObserver((exit) => resolve(exit.value))
+          })
+        }
+      `,
+      [
+        {
+          name: 'greets a decoded user',
+          exportName: 'solve',
+          args: [{ name: 'runesm', age: 3 }],
+          expected: 'hello, runesm',
+        },
+        {
+          name: 'greets another user',
+          exportName: 'solve',
+          args: [{ name: 'effect', age: 4 }],
+          expected: 'hello, effect',
+        },
+      ],
+    )
+
+    assert(
+      result.ok === true,
+      `documented snippet should pass: ${result.cases[0]?.error?.message ?? result.error?.message}`,
+    )
+
+    const logged = result.console.map((chunk) => chunk.parts.join(' '))
+    assert(
+      logged.includes('decoded runesm (age 3)'),
+      `Console.log should stream through runesm: got ${JSON.stringify(logged)}`,
+    )
+    assert(
+      logged.includes('decoded effect (age 4)'),
+      `Console.log should stream for every case: got ${JSON.stringify(logged)}`,
+    )
+  } finally {
+    session.close()
+  }
+})
