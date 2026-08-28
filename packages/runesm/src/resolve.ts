@@ -112,7 +112,7 @@ const parsePackageSegment = (segment: string): { name: string; version: string |
  *   in-memory URL, so they have no meaningful base
  */
 export function resolveImportSpecifier(specifier: string, options: ResolveOptions): ResolvedSpecifier {
-  if (specifier === 'node:process') {
+  if (specifier === 'process' || specifier === 'node:process') {
     return { url: browserProcessModuleUrl() }
   }
   if (specifier.startsWith('node:')) {

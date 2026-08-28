@@ -77,7 +77,7 @@ The persistent scope is a plain object, so a few Node-REPL-like divergences are 
 - Bare specifiers in `import` / `export … from` / literal dynamic `import()` rewrite to `https://esm.sh/{name}@{version}` at runtime — no manifest, no bundler.
 - `deps` pins exact versions; an inline version such as `effect@beta/Option` takes precedence; `autoInstall: true` (the default) resolves everything else to the CDN's latest.
 - `autoInstall: false` makes an unpinned bare import an error: `could not resolve 'x' — check the package name or add it to deps`.
-- Absolute URLs pass through untouched; relative specifiers error (user code runs from an in-memory URL). `node:process` resolves to the worker's browser process object; other `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` → `globalThis.crypto`, `node:http` → `fetch()`, …).
+- Absolute URLs pass through untouched; relative specifiers error (user code runs from an in-memory URL). `process` and `node:process` resolve to the worker's browser process object; other `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` → `globalThis.crypto`, `node:http` → `fetch()`, …).
 - Both modes surface the resolved dependency list (`name`, `version`, `url`) in their results so hosts can display what a run actually used.
 
 ### Effect v4 beta
@@ -123,7 +123,7 @@ const result = await session.runJudge(
 
 The real-browser suite covers `effect@beta/Schema`, `Effect.runFork`, scoped `Effect.acquireRelease`, and all 156 published stable, testing, and top-level unstable entrypoints against the published beta tag.
 
-Effect's `Path.layer` consults `globalThis.process.cwd()` for relative paths. runesm installs the same browser-oriented object behind both `globalThis.process` and `node:process`: it reports `browser: true`, uses `/` as its fixed working directory, and deliberately leaves `versions.node` absent so dependencies can distinguish it from Node.
+Effect's `Path.layer` consults `globalThis.process.cwd()` for relative paths. runesm installs the same browser-oriented object behind `globalThis.process`, `process`, and `node:process`: it reports `browser: true`, uses `/` as its fixed working directory, and deliberately leaves `versions.node` absent so dependencies can distinguish it from Node.
 
 ### Effect host-capability ledger
 

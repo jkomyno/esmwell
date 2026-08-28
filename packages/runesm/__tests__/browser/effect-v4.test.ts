@@ -83,10 +83,11 @@ test('runs effect v4 beta Effect.acquireRelease in a scope', async () => {
 test('exposes one browser process through node:process and globalThis', async () => {
   const result = await runEffect(
     `
+      import bareProcess from 'process'
       import process, { browser, cwd } from 'node:process'
 
       export const solve = () => ({
-        sameObject: process === globalThis.process,
+        sameObject: bareProcess === process && process === globalThis.process,
         browser,
         cwd: cwd(),
         claimsNode: typeof process.versions.node === 'string',
