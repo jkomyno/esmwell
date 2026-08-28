@@ -1,7 +1,7 @@
 {
   "private": true,
   "type": "module",
-  "name": "runesm",
+  "name": "runesm-workspace",
   "description": "ESM-only in-browser code runner with judge and REPL modes over a worker foundation",
   "repository": "https://github.com/jkomyno/runesm.git",
   "author": {
@@ -27,7 +27,7 @@
     "bench:watch": "turbo run bench:watch",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install",
-    "release": "pnpm build && pnpm -r exec -- npm publish --provenance"
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",

@@ -81,4 +81,4 @@ jobs:
 
       - name: '📦 pkg.pr.new (preview release)'
         if: github.event_name == 'pull_request'
-        run: pnpm exec pkg-pr-new publish './packages/*' --packageManager=pnpm
+        run: pnpm exec pkg-pr-new publish './packages/runesm' --packageManager=pnpm
