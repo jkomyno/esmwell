@@ -1,6 +1,13 @@
 # runesm
 
+[![npm version](https://img.shields.io/npm/v/runesm?color=blue)](https://npmjs.com/package/runesm)
+[![npm downloads](https://img.shields.io/npm/dm/runesm?color=blue)](https://npm.chart.dev/runesm)
+[![install size](https://badgen.net/packagephobia/install/runesm?color=blue)](https://packagephobia.com/result?p=runesm)
+[![license](https://img.shields.io/npm/l/runesm?color=blue)](./LICENSE)
+
 Run unbundled ESM in the browser with hard timeouts, dependency resolution, and normalized results.
+
+![runesm playground running an Effect v4 program](./docs/media/playground.gif)
 
 `runesm` is an ESM-only browser library for three interactive-code workloads:
 
@@ -45,10 +52,6 @@ This provides disposable browser realms and reliable timeout recovery. It is not
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): local setup, checks, and release procedure
 
 Only `packages/runesm` is publishable. The workspace root and every package under `apps/` stay private and are excluded from Changesets publishing.
-
-## Status
-
-The package is preparing for its first npm release. The release workflow remains disabled until the initial package and npm trusted publisher are configured.
 
 ## License
 
