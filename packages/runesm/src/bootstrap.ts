@@ -35,6 +35,7 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
   })
   const startedAt = performance.now()
   let moduleUrl: string | undefined
+  let dependencies: ResolvedDependency[] = []
 
   try {
     const ast = parseUserModule(code)
@@ -43,9 +44,11 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
     if (firstViolation !== undefined) {
       throw firstViolation
     }
-    const { code: rewritten, dependencies } = transformJudgeModule(code, ast, options)
+    const transformed = transformJudgeModule(code, ast, options)
+    dependencies = transformed.dependencies
+    const rewritten = transformed.code
     moduleUrl = createModuleUrl(rewritten)
-    const module = await importModule(moduleUrl)
+    const module = await importSubmittedModule(moduleUrl, dependencies)
 
     const caseResults: JudgeCaseResult[] = []
     for (const testCase of options.cases) {
@@ -67,7 +70,7 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
       cases: [],
       console: consoleChunks,
       error: serializeError(error),
-      dependencies: [],
+      dependencies,
       durationMs: elapsedMs(startedAt),
     }
   } finally {
@@ -150,6 +153,52 @@ export const serializeError = (error: unknown): SerializedError => {
   return {
     name: 'NonError',
     message: typeof error === 'string' ? error : String(error),
+  }
+}
+
+/** A browser-level module fetch failure with the submitted packages restored as context. */
+class DependencyLoadError extends Error {
+  constructor(message: string, cause: unknown) {
+    super(message, { cause })
+    this.name = 'DependencyLoadError'
+  }
+}
+
+const OPAQUE_MODULE_LOAD_MESSAGES = [
+  /importing a module script failed/i,
+  /failed to fetch dynamically imported module/i,
+  /error loading dynamically imported module/i,
+  /failed to load module script/i,
+]
+
+/**
+ * Browser engines often hide a failed module graph behind a context-free
+ * TypeError. Restore the top-level packages and explain the browser/native
+ * boundary without claiming which transitive request failed.
+ */
+export const explainModuleLoadError = (error: unknown, dependencies: readonly ResolvedDependency[]): unknown => {
+  if (!(error instanceof Error) || dependencies.length === 0) {
+    return error
+  }
+  if (!OPAQUE_MODULE_LOAD_MESSAGES.some((pattern) => pattern.test(error.message))) {
+    return error
+  }
+
+  const packages = dependencies.map((dependency) => `'${dependency.specifier}' (${dependency.url})`).join(', ')
+  return new DependencyLoadError(
+    `could not load the submitted module's dependency graph in the browser worker; top-level package${dependencies.length === 1 ? '' : 's'}: ${packages}. The browser only reported: ${error.message} This commonly means a package or transitive dependency requires Node-API/native .node bindings or unsupported node:* APIs, esm.sh could not build or serve it, or the network/CSP blocked a module request. Node-API addons cannot run in a browser worker; use a browser/WebAssembly build, or run that package in Node.js or Bun. Check the browser network panel for the exact failed request.`,
+    error,
+  )
+}
+
+const importSubmittedModule = async (
+  moduleUrl: string,
+  dependencies: readonly ResolvedDependency[],
+): Promise<ModuleNamespace> => {
+  try {
+    return await importModule(moduleUrl)
+  } catch (error) {
+    throw explainModuleLoadError(error, dependencies)
   }
 }
 
@@ -245,6 +294,7 @@ export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSess
       })
       const startedAt = performance.now()
       let moduleUrl: string | undefined
+      let dependencies: ResolvedDependency[] = []
 
       try {
         const ast = parseUserModule(input)
@@ -252,12 +302,14 @@ export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSess
         if (firstViolation !== undefined) {
           throw firstViolation
         }
-        const { code, dependencies } = transformReplInput(input, ast, { ...options, scopeModuleUrl })
+        const transformed = transformReplInput(input, ast, { ...options, scopeModuleUrl })
+        dependencies = transformed.dependencies
+        const code = transformed.code
         // Identical input re-evaluated must execute again: module registries
         // cache by URL, so every evaluation gets a unique one.
         generation += 1
         moduleUrl = createModuleUrl(`${code}\n/* evaluation ${generation} */`)
-        const module = await importModule(moduleUrl)
+        const module = await importSubmittedModule(moduleUrl, dependencies)
         return {
           ok: true,
           ...(RESULT_EXPORT in module ? { value: module[RESULT_EXPORT] } : {}),
@@ -270,7 +322,7 @@ export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSess
           ok: false,
           error: serializeError(error),
           console: consoleChunks,
-          dependencies: [] as ResolvedDependency[],
+          dependencies,
           durationMs: elapsedMs(startedAt),
         }
       } finally {

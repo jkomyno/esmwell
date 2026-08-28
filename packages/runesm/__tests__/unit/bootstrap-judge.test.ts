@@ -1,4 +1,4 @@
-import { runJudgeInRealm } from 'src/bootstrap'
+import { explainModuleLoadError, runJudgeInRealm } from 'src/bootstrap'
 import type { JudgeCase, JudgeRunResult } from 'src/types'
 
 interface JudgeRunOptions {
@@ -138,6 +138,35 @@ describe('runJudgeInRealm: module-level failures', () => {
     const result = await runJudge(`throw new Error('module initialization failed')`, [])
     expect(result.status).toBe('error')
     expect(result.error).toMatchObject({ name: 'Error', message: 'module initialization failed' })
+  })
+})
+
+describe('module dependency load errors', () => {
+  const dependency = {
+    specifier: '@napi-rs/canvas@1.0.8',
+    name: '@napi-rs/canvas',
+    version: '1.0.8',
+    url: 'https://esm.sh/@napi-rs/canvas@1.0.8',
+  }
+
+  it('restores package context for an opaque browser module failure', () => {
+    const browserError = new TypeError('Importing a module script failed.')
+    const explained = explainModuleLoadError(browserError, [dependency])
+
+    expect(explained).toMatchObject({
+      name: 'DependencyLoadError',
+      cause: browserError,
+      message: expect.stringContaining("'@napi-rs/canvas@1.0.8'"),
+    })
+    expect(explained).toMatchObject({
+      message: expect.stringContaining('Node-API addons cannot run in a browser worker'),
+    })
+  })
+
+  it('preserves actionable package evaluation errors', () => {
+    const packageError = new Error('module initialization failed')
+
+    expect(explainModuleLoadError(packageError, [dependency])).toBe(packageError)
   })
 })
 
