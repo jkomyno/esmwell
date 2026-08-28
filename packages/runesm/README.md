@@ -77,7 +77,7 @@ The persistent scope is a plain object, so a few Node-REPL-like divergences are 
 - Bare specifiers in `import` / `export … from` / literal dynamic `import()` rewrite to `https://esm.sh/{name}@{version}` at runtime — no manifest, no bundler.
 - `deps` pins exact versions; an inline version such as `effect@beta/Option` takes precedence; `autoInstall: true` (the default) resolves everything else to the CDN's latest.
 - `autoInstall: false` makes an unpinned bare import an error: `could not resolve 'x' — check the package name or add it to deps`.
-- Absolute URLs pass through untouched; relative specifiers error (user code runs from an in-memory URL); `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` → `globalThis.crypto`, `node:http` → `fetch()`, …).
+- Absolute URLs pass through untouched; relative specifiers error (user code runs from an in-memory URL). `node:process` resolves to the worker's browser process object; other `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` → `globalThis.crypto`, `node:http` → `fetch()`, …).
 - Both modes surface the resolved dependency list (`name`, `version`, `url`) in their results so hosts can display what a run actually used.
 
 ### Effect v4 beta
@@ -121,7 +121,22 @@ const result = await session.runJudge(
 )
 ```
 
-The real-browser suite covers `effect@beta/Schema`, `Effect.runFork`, and scoped `Effect.acquireRelease` against the published beta tag.
+The real-browser suite covers `effect@beta/Schema`, `Effect.runFork`, scoped `Effect.acquireRelease`, and all 156 published stable, testing, and top-level unstable entrypoints against the published beta tag.
+
+Effect's `Path.layer` consults `globalThis.process.cwd()` for relative paths. runesm installs the same browser-oriented object behind both `globalThis.process` and `node:process`: it reports `browser: true`, uses `/` as its fixed working directory, and deliberately leaves `versions.node` absent so dependencies can distinguish it from Node.
+
+### Effect host-capability ledger
+
+The following entrypoints load, but their main operations need host services that a plain browser worker does not provide. They stay outside runesm's current compatibility layer rather than receiving misleading no-op implementations:
+
+| Capability                                                             | Observed error without a service                | What support would require                                                    |
+| ---------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| `effect/FileSystem`                                                    | `Service not found: effect/platform/FileSystem` | A virtual filesystem, path/URL semantics, persistence, and lifecycle contract |
+| `effect/Terminal` and interactive CLI prompts                          | `Service not found: effect/platform/Terminal`   | Bidirectional host I/O, cancellation, dimensions, and input-mode handling     |
+| HTTP servers, cluster runners, and sockets without a browser transport | Missing server/socket services                  | A host routing bridge and explicit network/listener lifecycle                 |
+| SQL, persistence, event log, and durable workflows                     | Missing storage/client services                 | A selected browser storage backend plus transaction and durability semantics  |
+
+Fetch-based HTTP clients and global WebSocket constructors remain usable because they build on browser-native APIs. `@effect/platform-*` packages are not part of the compatibility probe or runtime.
 
 ## WebAssembly packages
 

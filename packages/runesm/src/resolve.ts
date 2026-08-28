@@ -1,3 +1,5 @@
+import { browserProcessModuleUrl } from './browser-process'
+
 /**
  * Options controlling how bare package specifiers resolve to CDN URLs.
  */
@@ -110,6 +112,9 @@ const parsePackageSegment = (segment: string): { name: string; version: string |
  *   in-memory URL, so they have no meaningful base
  */
 export function resolveImportSpecifier(specifier: string, options: ResolveOptions): ResolvedSpecifier {
+  if (specifier === 'node:process') {
+    return { url: browserProcessModuleUrl() }
+  }
   if (specifier.startsWith('node:')) {
     throw new SpecifierResolutionError('node-module', specifier, nodeModuleMessage(specifier))
   }
@@ -256,7 +261,6 @@ const PLANNED_SHIMS: Readonly<Record<string, string>> = {
   'node:events': 'EventTarget or a userland emitter',
   'node:path': 'URL and string helpers',
   'node:perf_hooks': 'performance and PerformanceObserver',
-  'node:process': 'a host-injected environment object',
   'node:punycode': 'URL with the unicode hostname option',
   'node:querystring': 'URLSearchParams',
   'node:stream': 'ReadableStream and WritableStream',

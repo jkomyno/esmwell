@@ -162,6 +162,13 @@ describe('resolveImportSpecifier: passthrough and rejection', () => {
 })
 
 describe('resolveImportSpecifier: node modules', () => {
+  it('resolves node:process to the built-in browser facade', () => {
+    const resolved = resolve('node:process', { autoInstall: false })
+    expect(resolved.dependency).toBeUndefined()
+    expect(resolved.url).toMatch(/^data:text\/javascript;charset=utf-8,/)
+    expect(decodeURIComponent(resolved.url)).toContain('export default process')
+  })
+
   it.each(['node:events', 'node:crypto', 'node:zlib'])('marks %j as a planned shim', (specifier) => {
     const error = capture(() => resolve(specifier))
     expect(error).toBeInstanceOf(SpecifierResolutionError)

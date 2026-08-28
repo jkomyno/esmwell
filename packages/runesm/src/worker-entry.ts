@@ -1,5 +1,6 @@
 import { createReplSessionInRealm, runJudgeInRealm, serializeError } from './bootstrap'
 import type { ReplRealmSession } from './bootstrap'
+import { installBrowserProcess } from './browser-process'
 import { serializeValue } from './console'
 import type { JudgeRunResult, ReplResult, WorkerRequest, WorkerResponse } from './types'
 
@@ -10,6 +11,8 @@ interface WorkerScope {
 }
 
 const scope = self as unknown as WorkerScope
+
+installBrowserProcess()
 
 const postToMain = scope.postMessage.bind(scope)
 

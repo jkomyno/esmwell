@@ -79,3 +79,57 @@ test('runs effect v4 beta Effect.acquireRelease in a scope', async () => {
 
   assert(result.ok === true, `Effect.acquireRelease should run: ${result.error?.message}`)
 })
+
+test('exposes one browser process through node:process and globalThis', async () => {
+  const result = await runEffect(
+    `
+      import process, { browser, cwd } from 'node:process'
+
+      export const solve = () => ({
+        sameObject: process === globalThis.process,
+        browser,
+        cwd: cwd(),
+        claimsNode: typeof process.versions.node === 'string',
+      })
+    `,
+    { sameObject: true, browser: true, cwd: '/', claimsNode: false },
+  )
+
+  assert(result.ok === true, `node:process should match globalThis.process: ${result.error?.message}`)
+})
+
+test('runs effect v4 beta Path.resolve for relative paths', async () => {
+  const result = await runEffect(
+    `
+      import * as Effect from 'effect@beta/Effect'
+      import * as Path from 'effect@beta/Path'
+
+      export const solve = () => Effect.runPromise(
+        Effect.gen(function*() {
+          const path = yield* Path.Path
+          return path.resolve('workspace', 'file.ts')
+        }).pipe(Effect.provide(Path.layer)),
+      )
+    `,
+    '/workspace/file.ts',
+  )
+
+  assert(result.ok === true, `Path.resolve should run: ${result.cases[0]?.error?.message ?? result.error?.message}`)
+})
+
+test('runs effect v4 beta CLI platform detection', async () => {
+  const result = await runEffect(
+    `
+      import * as Effect from 'effect@beta/Effect'
+      import { Prompt } from 'effect@beta/unstable/cli'
+
+      export const solve = () => Effect.runPromise(Prompt.platformFigures).then((figures) => figures.tick)
+    `,
+    '✔',
+  )
+
+  assert(
+    result.ok === true,
+    `CLI platform detection should run: ${result.cases[0]?.error?.message ?? result.error?.message}`,
+  )
+})
