@@ -1,5 +1,5 @@
-import { adaptWorker, collectBareSpecifiers, createRunesm, parseUserModule } from 'runesm'
-import type { ConsoleChunk, JudgeCase, JudgeRunResult } from 'runesm'
+import { adaptWorker, collectBareSpecifiers, createReplSession, createRunesm, parseUserModule } from 'runesm'
+import type { ConsoleChunk, JudgeCase, JudgeRunResult, ReplResult, ReplSession } from 'runesm'
 import RunesmWorker from './runesm-worker?worker'
 import { DEFAULT_CODE, DEMO_CASES } from './examples'
 
@@ -10,6 +10,9 @@ const judgeButton = document.querySelector<HTMLButtonElement>('#judge')
 const statusLabel = document.querySelector<HTMLSpanElement>('#status')
 const consoleView = document.querySelector<HTMLDivElement>('#console')
 const casesView = document.querySelector<HTMLDivElement>('#cases')
+const replHistory = document.querySelector<HTMLDivElement>('#repl-history')
+const replInput = document.querySelector<HTMLInputElement>('#repl-input')
+const replResetButton = document.querySelector<HTMLButtonElement>('#repl-reset')
 
 if (
   editor === null ||
@@ -18,7 +21,10 @@ if (
   judgeButton === null ||
   statusLabel === null ||
   consoleView === null ||
-  casesView === null
+  casesView === null ||
+  replHistory === null ||
+  replInput === null ||
+  replResetButton === null
 ) {
   throw new Error('playground markup is missing required elements')
 }
@@ -148,6 +154,78 @@ judgeButton.addEventListener('click', () => {
   void execute(DEMO_CASES)
 })
 
+/** REPL state: one persistent worker session, recreated when pins change. */
+let replSession: ReplSession | null = null
+
+const getReplSession = (): ReplSession => {
+  if (replSession === null) {
+    replSession = createReplSession({
+      workerFactory: () => adaptWorker(new RunesmWorker()),
+      deps: collectPinnedDeps(),
+      timeoutMs: 10_000,
+    })
+  }
+  return replSession
+}
+
+const formatReplValue = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return `'${value}'`
+  }
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+const appendReplLine = (className: string, text: string): void => {
+  const line = document.createElement('div')
+  line.className = `repl-line ${className}`
+  line.textContent = text
+  replHistory.append(line)
+  replHistory.scrollTop = replHistory.scrollHeight
+}
+
+const renderReplResult = (input: string, result: ReplResult): void => {
+  appendReplLine('repl-line-input', input)
+  for (const chunk of result.console) {
+    appendReplLine('repl-line-log', chunk.parts.join(' '))
+  }
+  if (result.error !== undefined) {
+    appendReplLine('repl-line-error', `${result.error.name}: ${result.error.message}`)
+    return
+  }
+  if ('value' in result && result.value !== undefined) {
+    appendReplLine('repl-line-value', formatReplValue(result.value))
+  }
+}
+
+const submitRepl = async (): Promise<void> => {
+  const input = replInput.value.trim()
+  if (input === '') {
+    return
+  }
+  replInput.value = ''
+  try {
+    const result = await getReplSession().evaluate(input)
+    renderReplResult(input, result)
+  } catch (error) {
+    appendReplLine('repl-line-error', String(error))
+  }
+}
+
+document.querySelector<HTMLFormElement>('#repl-form')?.addEventListener('submit', (event) => {
+  event.preventDefault()
+  void submitRepl()
+})
+
+replResetButton.addEventListener('click', () => {
+  replSession?.close()
+  replSession = null
+  replHistory.replaceChildren()
+})
+
 const refreshDeps = (): void => {
   let specifiers: string[]
   try {
@@ -182,6 +260,10 @@ const refreshDeps = (): void => {
     version.placeholder = 'latest'
     version.value = previous[packageName] ?? ''
     version.setAttribute('aria-label', `version pin for ${packageName}`)
+    version.addEventListener('change', () => {
+      replSession?.close()
+      replSession = null
+    })
     item.append(version)
 
     depsList.append(item)

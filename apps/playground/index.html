@@ -48,6 +48,26 @@
         <div id="console" class="console"></div>
         <div id="cases" class="cases"></div>
       </section>
+      <section class="pane pane-repl">
+        <div class="pane-header">
+          <h2>REPL</h2>
+          <div class="actions">
+            <button id="repl-reset" type="button">Reset scope</button>
+          </div>
+        </div>
+        <div id="repl-history" class="repl-history" aria-live="polite"></div>
+        <form id="repl-form" class="repl-entry">
+          <span class="repl-prompt">›</span>
+          <input
+            id="repl-input"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="let count = 0 — then count++ — then count"
+            aria-label="REPL input"
+          />
+        </form>
+      </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

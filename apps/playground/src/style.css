@@ -40,8 +40,13 @@ main {
   flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: minmax(0, auto) auto;
   gap: 1rem;
   padding: 0 1.5rem 1.5rem;
+}
+
+.pane-repl {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 900px) {
@@ -253,5 +258,72 @@ button:hover {
 
 .case-detail {
   width: 100%;
+  color: #8b98a5;
+}
+
+.repl-history {
+  background: #161b21;
+  border: 1px solid #2a323b;
+  border-radius: 6px;
+  padding: 0.6rem;
+  max-height: 12rem;
+  overflow: auto;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.repl-history:empty::after {
+  content: 'declarations, imports, and values persist across inputs';
+  color: #6c7681;
+}
+
+.repl-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #161b21;
+  border: 1px solid #2a323b;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
+.repl-prompt {
+  color: #4ade80;
+}
+
+.repl-entry input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #d7dde3;
+  font: inherit;
+}
+
+.repl-line-input {
+  color: #d7dde3;
+}
+
+.repl-line-input::before {
+  content: '› ';
+  color: #4ade80;
+}
+
+.repl-line-value::before {
+  content: '= ';
+  color: #8b98a5;
+}
+
+.repl-line-error {
+  color: #f87171;
+}
+
+.repl-line-error::before {
+  content: '! ';
+}
+
+.repl-line-log {
   color: #8b98a5;
 }
