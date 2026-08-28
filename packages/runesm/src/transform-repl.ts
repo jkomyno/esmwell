@@ -93,7 +93,9 @@ export function transformReplInput(
         // re-emitted as a prologue assignment (see `splitHoistedPrologue`),
         // so calling it before its textual position works.
         hoistedFunctions.push({ start: statement.start, end: statement.end, name })
-        edits.push({ start: statement.start, end: statement.end, replacement: '' })
+        // A bare `;` keeps the neighbours separated: without it,
+        // semicolon-free input fuses `foo()\n\n[1]` into `foo()[1]`.
+        edits.push({ start: statement.start, end: statement.end, replacement: ';' })
         return
       }
     }
@@ -217,7 +219,9 @@ function rewriteImportStatement(
 
   const specifiers = readNodeChildren(statement, 'specifiers')
   if (specifiers.length === 0) {
-    return `await import(${url})`
+    // The trailing `;` keeps the following semicolon-free line from being
+    // parsed as part of the import expression.
+    return `await import(${url});`
   }
 
   const lines: string[] = [`const ${moduleVar} = await import(${url})`]

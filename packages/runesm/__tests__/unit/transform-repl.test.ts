@@ -20,12 +20,12 @@ describe('transformReplInput: declarations become scope assignments', () => {
     {
       name: 'function declaration keeps its name',
       input: 'function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2)\n}',
-      body: '__runesm.fib = function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2)\n}',
+      body: '__runesm.fib = function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2)\n}\n;',
     },
     {
-      name: 'class declaration keeps its name and live self-reference',
+      name: 'class declaration keeps its name and lexical self-reference',
       input: 'class Point {\n  norm() {\n    return new Point()\n  }\n}',
-      body: '__runesm.Point = class Point {\n  norm() {\n    return new __runesm.Point()\n  }\n}',
+      body: '__runesm.Point = class Point {\n  norm() {\n    return new Point()\n  }\n}',
     },
     {
       name: 'object destructuring with renaming and defaults',
@@ -73,7 +73,7 @@ describe('transformReplInput: references become live scope reads', () => {
     {
       name: 'nested scopes keep their own bindings',
       input: 'function f(a) {\n  return a\n}',
-      body: '__runesm.f = function f(a) {\n  return a\n}',
+      body: '__runesm.f = function f(a) {\n  return a\n}\n;',
     },
     {
       name: 'loop bindings stay local',
@@ -139,7 +139,7 @@ describe('transformReplInput: imports become dynamic assignments', () => {
   })
 
   it('rewrites bare side-effect imports', () => {
-    expect(transform(`import 'pkg'`)).toBe(wrap(`await import('https://esm.sh/pkg@latest')`))
+    expect(transform(`import 'pkg'`)).toBe(wrap(`await import('https://esm.sh/pkg@latest');`))
   })
 
   it('surfaces resolved dependencies and errors on resolution failure', () => {
@@ -195,26 +195,38 @@ describe('transformReplInput: ASI safety in semicolon-free multi-statement input
       wrap('__runesm.g = () => 1\n;({ a: __runesm.a } = { a: 2 })'),
     )
   })
+
+  it('does not fuse the statements around a hoisted function declaration', () => {
+    expect(transform('foo()\nfunction helper() {}\n[1, 2].map((n) => n)')).toBe(
+      wrap('__runesm.helper = function helper() {}\n__runesm.foo()\n;\nreturn [1, 2].map((n) => n)'),
+    )
+  })
+
+  it('terminates a side-effect import so the next line cannot fuse with it', () => {
+    expect(transform("import 'data:text/javascript,'\n[1, 2].length")).toBe(
+      wrap("await import('data:text/javascript,');\nreturn [1, 2].length"),
+    )
+  })
 })
 
 describe('transformReplInput: function declarations hoist', () => {
   it('emits a single top-level function ahead of a call that precedes it', () => {
     expect(transform('f()\nfunction f() {\n  return 1\n}')).toBe(
-      wrap('__runesm.f = function f() {\n  return 1\n}\n__runesm.f()'),
+      wrap('__runesm.f = function f() {\n  return 1\n}\n__runesm.f()\n;'),
     )
   })
 
   it('lets mutually calling top-level functions reference each other regardless of order', () => {
     expect(transform('a()\nb()\nfunction a() {\n  return b()\n}\nfunction b() {\n  return 1\n}')).toBe(
       wrap(
-        '__runesm.a = function a() {\n  return __runesm.b()\n}\n__runesm.b = function b() {\n  return 1\n}\n__runesm.a()\n__runesm.b()',
+        '__runesm.a = function a() {\n  return __runesm.b()\n}\n__runesm.b = function b() {\n  return 1\n}\n__runesm.a()\n__runesm.b()\n;\n;',
       ),
     )
   })
 
   it('keeps class declarations in place (no hoisting) since class bindings are in the temporal dead zone', () => {
     expect(transform('class Point {\n  norm() {\n    return new Point()\n  }\n}')).toBe(
-      wrap('__runesm.Point = class Point {\n  norm() {\n    return new __runesm.Point()\n  }\n}'),
+      wrap('__runesm.Point = class Point {\n  norm() {\n    return new Point()\n  }\n}'),
     )
   })
 })
@@ -230,6 +242,13 @@ describe('transformReplInput: assignment-position and computed-key patterns', ()
 })
 
 describe('REPL execution: rewrites hold under real evaluation, not just generated text', () => {
+  it('keeps statements separated around a hoisted function declaration', async () => {
+    const session = createReplSessionInRealm({})
+    const result = await session.evaluate('const foo = () => 1\nfoo()\nfunction helper() {}\n[1, 2].map((n) => n)')
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual([1, 2])
+  })
+
   it('a semicolon-free array-pattern declaration does not corrupt the previous line and both bindings persist', async () => {
     const session = createReplSessionInRealm({})
     const result = await session.evaluate('let f = () => 1\nlet [a] = [2]')

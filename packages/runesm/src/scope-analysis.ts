@@ -269,13 +269,15 @@ class Analyzer {
       }
       case 'ClassDeclaration':
       case 'ClassExpression': {
-        const classScope = node.type === 'ClassExpression' ? new Scope(scope, false) : scope
-        if (classScope !== scope) {
-          const id = readNodeChild(node, 'id')
-          const className = id !== null ? readNodeString(id, 'name') : undefined
-          if (className !== undefined) {
-            classScope.declares(className)
-          }
+        // A class body sees its own name through an inner, immutable binding
+        // (like a named function expression), so self-references — including
+        // static initializers, which run before any outer assignment lands —
+        // must stay lexical rather than become scope-object reads.
+        const classScope = new Scope(scope, false)
+        const id = readNodeChild(node, 'id')
+        const className = id !== null ? readNodeString(id, 'name') : undefined
+        if (className !== undefined) {
+          classScope.declares(className)
         }
         // The extends clause evaluates outside the class-name binding.
         const superClass = readNodeChild(node, 'superClass')

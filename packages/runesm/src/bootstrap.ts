@@ -208,30 +208,25 @@ const elapsedMs = (startedAt: number): number => Math.round((performance.now() -
  * The scope object every REPL module in a session shares: a transparent
  * key-value store that falls back to the realm's globals for reads.
  *
- * Globals reached through the proxy (e.g. `setTimeout`, `fetch`, `atob`)
- * would otherwise be called with the proxy itself as `this` — WebIDL
- * operations brand-check their receiver and reject anything that is not the
- * real global object. So function values from the fallback are wrapped in a
- * Proxy that forces `globalThis` as the call receiver while forwarding
- * everything else (static properties like `Promise.resolve`, `.prototype`,
- * construction) straight to the original function — a plain `.bind()` would
- * drop those static properties, since bound functions don't copy them. The
- * wrapper is memoized in a WeakMap so repeated reads return the identical
- * wrapper (stable identity) and stay constructible, so `new __runesm.Map()`
- * still works. Values already stored on the target — user declarations,
- * imports — are returned untouched.
+ * Receiver-sensitive globals reached through the proxy (e.g. `setTimeout`,
+ * `fetch`, `atob`) would otherwise be called with the proxy itself as `this`.
+ * These non-prototype callables are wrapped in a Proxy that forces
+ * `globalThis` as the call receiver. Prototype-bearing global callables do not
+ * need receiver rebinding and are returned untouched, preserving identity for
+ * comparisons such as `value.constructor === Array`. The wrapper is memoized
+ * in a WeakMap so repeated reads return the identical wrapper. Values already
+ * stored on the target — user declarations, imports — are also returned
+ * untouched.
  */
 const SCOPE_MODULE_SOURCE = `const __runesmBoundGlobals = new WeakMap()
 export const __runesm = new Proxy({}, {
   get(target, key) {
     if (key in target) return target[key]
     const value = globalThis[key]
-    // Unbound globals would receive the proxy as 'this' here and fail a
-    // WebIDL brand check (setTimeout, fetch, atob, ...). Wrap in a Proxy
-    // that forces the real global as the call receiver but forwards
-    // property access (e.g. Promise.resolve) and construction to the
-    // original function, memoized so identity stays stable across reads.
-    if (typeof value !== 'function') return value
+    // Preserve identity for prototype-bearing global callables, which do not
+    // need receiver rebinding. Wrap receiver-sensitive non-prototype callables
+    // so WebIDL operations receive the real global object as their receiver.
+    if (typeof value !== 'function' || Object.hasOwn(value, 'prototype')) return value
     let bound = __runesmBoundGlobals.get(value)
     if (bound === undefined) {
       bound = new Proxy(value, {

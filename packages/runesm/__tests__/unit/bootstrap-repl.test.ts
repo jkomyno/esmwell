@@ -51,6 +51,13 @@ describe('REPL persistence', () => {
     expect(boxed.value).toBe(true)
   })
 
+  it('a class static initializer can reference the class itself', async () => {
+    const session = createReplSessionInRealm({})
+    await evaluate(session, 'class Counter {\n  static instance = new Counter()\n}')
+    const read = await evaluate(session, 'Counter.instance instanceof Counter')
+    expect(read.value).toBe(true)
+  })
+
   it('destructuring declarations persist member by member', async () => {
     const session = createReplSessionInRealm({})
     await evaluate(session, 'const { a, b: renamed, c = 7 } = { a: 1, b: 2 }')
@@ -179,9 +186,11 @@ describe('REPL rejections and capture', () => {
   it('a global function reached through the scope is bound to the realm global', async () => {
     const session = createReplSessionInRealm({})
     const probe = globalThis as Record<string, unknown>
-    probe.replThisProbe = function (this: unknown): boolean {
-      return this === globalThis
-    }
+    probe.replThisProbe = {
+      replThisProbe(this: unknown): boolean {
+        return this === globalThis
+      },
+    }.replThisProbe
     try {
       const result = await evaluate(session, 'replThisProbe()')
       expect(result.value).toBe(true)
@@ -194,6 +203,14 @@ describe('REPL rejections and capture', () => {
     const session = createReplSessionInRealm({})
     const result = await evaluate(session, '__runesm.setTimeout === __runesm.setTimeout')
     expect(result.value).toBe(true)
+  })
+
+  it('global constructors keep their identity', async () => {
+    const session = createReplSessionInRealm({})
+    expect((await evaluate(session, '[].constructor === Array')).value).toBe(true)
+    expect((await evaluate(session, 'new Map().constructor === Map')).value).toBe(true)
+    expect((await evaluate(session, 'Promise.resolve(1) instanceof Promise')).value).toBe(true)
+    expect((await evaluate(session, 'class Sub extends Map {}\nnew Sub() instanceof Map')).value).toBe(true)
   })
 
   it('a user-declared value on the scope passes through unmodified', async () => {

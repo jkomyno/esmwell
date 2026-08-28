@@ -105,6 +105,13 @@ const fixtures: Fixture[] = [
     boundReferences: ['Widget', 'Widget'],
   },
   {
+    name: 'class declaration binds its own name for its body',
+    code: 'class A {\n  static self = A\n}',
+    topLevelDeclarations: ['A'],
+    freeReferences: [],
+    boundReferences: ['A'],
+  },
+  {
     name: 'class expression self-binding',
     code: 'const Tree = class Named {\n  static create() {\n    return new Named()\n  }\n}\nTree.create()',
     boundReferences: ['Named', 'Tree'],
