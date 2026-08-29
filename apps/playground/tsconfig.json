@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.test.json",
-  "include": ["src", "scripts", "vite.config.ts"],
+  "include": ["src", "scripts", "__tests__", "vite.config.ts"],
   "compilerOptions": {
     "composite": false,
     "noEmit": true,

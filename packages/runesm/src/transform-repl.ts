@@ -9,6 +9,9 @@ import { isAstNode, readNodeBoolean, readNodeChild, readNodeChildren, readNodeSt
 /** The persistent scope object every REPL module shares. */
 export const SCOPE_BINDING = '__runesm'
 
+/** A non-throwing view used only for direct `typeof identifier` reads. */
+const TYPEOF_SCOPE_BINDING = '__runesmTypeof'
+
 /** The export the generated module exposes the completion value through. */
 export const RESULT_EXPORT = '__runesmResult'
 
@@ -38,7 +41,7 @@ interface HoistedFunction {
  * Rewrites one REPL input into a module of the shape
  *
  * ```js
- * import { __runesm } from '<scopeModuleUrl>'
+ * import { __runesm, __runesmTypeof } from '<scopeModuleUrl>'
  * export const __runesmResult = await (async () => {
  *   …rewritten statements…
  *   return <final expression>   // present when the input ends in an expression
@@ -53,70 +56,69 @@ interface HoistedFunction {
  * ahead of the rest of the body so they stay callable before their textual
  * position, matching normal function-declaration hoisting; class
  * declarations are intentionally left in place since class bindings are in
- * the temporal dead zone until evaluated. `export` statements are rejected:
- * REPL inputs declare values instead.
+ * the temporal dead zone until evaluated. Named ESM declarations are treated
+ * like ordinary REPL declarations, so a module can seed the persistent scope.
  */
 export function transformReplInput(
   input: string,
   ast: Program,
   options: ResolveOptions & { scopeModuleUrl: string },
 ): ReplTransform {
-  for (const statement of ast.body) {
-    if (
-      statement.type === 'ExportNamedDeclaration' ||
-      statement.type === 'ExportDefaultDeclaration' ||
-      statement.type === 'ExportAllDeclaration'
-    ) {
-      throw new ReplTransformError(
-        'export statements are not supported in REPL input — declare values instead; they persist on the session scope',
-      )
-    }
-  }
-
   const analysis = analyzeScope(ast)
   const edits: SourceEdit[] = []
   const dependencies: ResolvedDependency[] = []
   const seenDependencies = new Set<string>()
   const hoistedFunctions: HoistedFunction[] = []
+  const erasedExportRanges: Array<{ start: number; end: number }> = []
 
   ast.body.forEach((statement, index) => {
-    if (statement.type === 'ImportDeclaration') {
-      const replacement = rewriteImportStatement(statement, index, options, dependencies, seenDependencies)
-      edits.push({ start: statement.start, end: statement.end, replacement })
+    const replStatement = unwrapExportStatement(statement, edits, erasedExportRanges)
+    if (replStatement === null) {
       return
     }
-    if (statement.type === 'FunctionDeclaration') {
-      const id = readNodeChild(statement, 'id')
+    if (replStatement.type === 'ImportDeclaration') {
+      const replacement = rewriteImportStatement(replStatement, index, options, dependencies, seenDependencies)
+      edits.push({ start: replStatement.start, end: replStatement.end, replacement })
+      return
+    }
+    if (replStatement.type === 'FunctionDeclaration') {
+      const id = readNodeChild(replStatement, 'id')
       const name = id !== null ? readNodeString(id, 'name') : undefined
       if (id !== null && name !== undefined) {
         // The declaration is removed from its textual position and
         // re-emitted as a prologue assignment (see `splitHoistedPrologue`),
         // so calling it before its textual position works.
-        hoistedFunctions.push({ start: statement.start, end: statement.end, name })
+        hoistedFunctions.push({ start: replStatement.start, end: replStatement.end, name })
         // A bare `;` keeps the neighbours separated: without it,
         // semicolon-free input fuses `foo()\n\n[1]` into `foo()[1]`.
-        edits.push({ start: statement.start, end: statement.end, replacement: ';' })
+        edits.push({ start: replStatement.start, end: replStatement.end, replacement: ';' })
         return
       }
     }
-    rewriteTopLevelDeclaration(statement, edits)
+    rewriteTopLevelDeclaration(replStatement, edits)
   })
 
   for (const reference of analysis.references) {
-    if (!reference.programLevel || reference.name === SCOPE_BINDING) {
+    if (
+      !reference.programLevel ||
+      reference.name === SCOPE_BINDING ||
+      reference.name === TYPEOF_SCOPE_BINDING ||
+      erasedExportRanges.some((range) => reference.start >= range.start && reference.end <= range.end)
+    ) {
       continue
     }
+    const scopeBinding = reference.directTypeof && !reference.bound ? TYPEOF_SCOPE_BINDING : SCOPE_BINDING
     if (reference.inShorthandProperty) {
       edits.push({
         start: reference.start,
         end: reference.end,
-        replacement: `${reference.name}: ${SCOPE_BINDING}.${reference.name}`,
+        replacement: `${reference.name}: ${scopeBinding}.${reference.name}`,
       })
     } else {
       edits.push({
         start: reference.start,
         end: reference.start,
-        replacement: `${SCOPE_BINDING}.`,
+        replacement: `${scopeBinding}.`,
       })
     }
   }
@@ -130,7 +132,7 @@ export function transformReplInput(
 
   return {
     code: [
-      `import { ${SCOPE_BINDING} } from ${quoteString(options.scopeModuleUrl)}`,
+      `import { ${SCOPE_BINDING}, ${TYPEOF_SCOPE_BINDING} } from ${quoteString(options.scopeModuleUrl)}`,
       `export const ${RESULT_EXPORT} = await (async () => {`,
       ...(prologue.length > 0 ? [prologue] : []),
       ...(body.length > 0 ? [body] : []),
@@ -138,6 +140,48 @@ export function transformReplInput(
     ].join('\n'),
     dependencies,
   }
+}
+
+/** Removes ESM export syntax while preserving declarations as REPL bindings. */
+function unwrapExportStatement(
+  statement: Node,
+  edits: SourceEdit[],
+  erasedRanges: Array<{ start: number; end: number }>,
+): Node | null {
+  if (statement.type === 'ExportAllDeclaration') {
+    throw new ReplTransformError('REPL input cannot use export * — import the bindings that should enter the scope')
+  }
+  if (statement.type === 'ExportNamedDeclaration') {
+    if (readNodeChild(statement, 'source') !== null) {
+      throw new ReplTransformError(
+        'REPL input cannot re-export from another module — import the bindings that should enter the scope',
+      )
+    }
+    const declaration = readNodeChild(statement, 'declaration')
+    if (declaration === null) {
+      erasedRanges.push({ start: statement.start, end: statement.end })
+      edits.push({ start: statement.start, end: statement.end, replacement: ';' })
+      return null
+    }
+    edits.push({ start: statement.start, end: declaration.start, replacement: '' })
+    return declaration
+  }
+  if (statement.type === 'ExportDefaultDeclaration') {
+    const declaration = readNodeChild(statement, 'declaration')
+    const id = declaration === null ? null : readNodeChild(declaration, 'id')
+    if (
+      declaration === null ||
+      (declaration.type !== 'FunctionDeclaration' && declaration.type !== 'ClassDeclaration') ||
+      id === null
+    ) {
+      throw new ReplTransformError(
+        'a default export needs a named function or class to become a persistent REPL binding',
+      )
+    }
+    edits.push({ start: statement.start, end: declaration.start, replacement: '' })
+    return declaration
+  }
+  return statement
 }
 
 const lastExpressionStatement = (ast: Program): Node | null => {

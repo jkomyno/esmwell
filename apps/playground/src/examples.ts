@@ -4,11 +4,20 @@ export const DEFAULT_CODE = `import * as Console from 'effect@beta/Console'
 import * as Effect from 'effect@beta/Effect'
 import * as Schema from 'effect@beta/Schema'
 
-// Bare imports resolve from esm.sh at runtime — no bundler, no install.
-// The inline @beta tag wins over the deps list below.
-const User = Schema.Struct({ name: Schema.String, age: Schema.Number })
+// Bare imports resolve from esm.sh at runtime.
+// No bundler, no install step. The inline @beta
+// tag wins over the pins in the deps list.
+const User = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number,
+})
 
-export const solve = (input) => {
+type UserInput = {
+  readonly name: string
+  readonly age: number
+}
+
+export const solve = (input: UserInput): Promise<string> => {
   const program = Effect.gen(function* () {
     const user = Schema.decodeUnknownSync(User)(input)
     yield* Console.log(\`decoded \${user.name} (age \${user.age})\`)
@@ -16,7 +25,9 @@ export const solve = (input) => {
   })
 
   return new Promise((resolve) => {
-    Effect.runFork(program).addObserver((exit) => resolve(exit.value))
+    Effect.runFork(program).addObserver((exit) => {
+      resolve(exit.value)
+    })
   })
 }
 `

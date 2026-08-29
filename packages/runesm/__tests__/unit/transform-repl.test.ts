@@ -8,9 +8,12 @@ const transform = (input: string, options?: { deps?: Record<string, string>; aut
   transformReplInput(input, parseUserModule(input), { scopeModuleUrl: SCOPE_URL, ...options }).code
 
 const wrap = (body: string): string =>
-  [`import { __runesm } from '${SCOPE_URL}'`, 'export const __runesmResult = await (async () => {', body, '})()'].join(
-    '\n',
-  )
+  [
+    `import { __runesm, __runesmTypeof } from '${SCOPE_URL}'`,
+    'export const __runesmResult = await (async () => {',
+    body,
+    '})()',
+  ].join('\n')
 
 describe('transformReplInput: declarations become scope assignments', () => {
   it.each([
@@ -89,6 +92,21 @@ describe('transformReplInput: references become live scope reads', () => {
       name: 'top-level await passes through',
       input: 'await Promise.resolve(42)',
       body: 'return await __runesm.Promise.resolve(42)',
+    },
+    {
+      name: 'direct typeof reads through the non-throwing scope view',
+      input: 'typeof missing',
+      body: 'return typeof __runesmTypeof.missing',
+    },
+    {
+      name: 'direct typeof keeps same-input declarations on the ordinary scope',
+      input: 'let present = 1\ntypeof present',
+      body: '__runesm.present = 1\nreturn typeof __runesm.present',
+    },
+    {
+      name: 'typeof a member still throws when its object is missing',
+      input: 'typeof missing.property',
+      body: 'return typeof __runesm.missing.property',
     },
     { name: 'plain completion value', input: '1 + 1', body: 'return 1 + 1' },
     {
@@ -172,14 +190,34 @@ describe('transformReplInput: imports become dynamic assignments', () => {
   })
 })
 
+describe('transformReplInput: ESM declarations seed the persistent scope', () => {
+  it('persists a named exported declaration', () => {
+    expect(transform('export const solve = (input) => input.value * 2')).toBe(
+      wrap('__runesm.solve = (input) => input.value * 2'),
+    )
+  })
+
+  it('persists named default function and class declarations', () => {
+    expect(transform('export default function run() { return 1 }')).toBe(
+      wrap('__runesm.run = function run() { return 1 }\n;'),
+    )
+    expect(transform('export default class Box {}')).toBe(wrap('__runesm.Box = class Box {}'))
+  })
+
+  it('erases a local export list after its declarations have persisted', () => {
+    expect(transform('const solve = () => 1\nexport { solve }')).toBe(wrap('__runesm.solve = () => 1\n;'))
+  })
+})
+
 describe('transformReplInput: rejections', () => {
-  it.each(['export const hidden = 1', 'export default function run() {}', `export * from 'pkg'`])(
-    'rejects %j',
-    (input) => {
-      expect(() => transform(input)).toThrow(ReplTransformError)
-      expect(() => transform(input)).toThrow(/export statements are not supported in REPL input/)
-    },
-  )
+  it.each([
+    ['export default 1', /default export needs a named function or class/],
+    [`export * from 'pkg'`, /cannot use export \*/],
+    [`export { value } from 'pkg'`, /cannot re-export/],
+  ])('rejects %j', (input, message) => {
+    expect(() => transform(input)).toThrow(ReplTransformError)
+    expect(() => transform(input)).toThrow(message)
+  })
 })
 
 describe('transformReplInput: ASI safety in semicolon-free multi-statement input', () => {

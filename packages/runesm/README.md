@@ -79,12 +79,13 @@ await repl.reset() // fresh scope
 repl.close()
 ```
 
-Each input's completion value (its final expression) comes back as `value`; `export` statements are rejected with a clear error since REPL inputs declare values instead.
+Each input's completion value (its final expression) comes back as `value`. Named exported declarations persist like ordinary REPL declarations, so an ESM module can seed the scope before interactive inputs. A local export list is accepted but adds no new binding; re-exports and default-export expressions without a named function or class are rejected with a clear error.
 
-The persistent scope is a plain object, so a few Node-REPL-like divergences are deliberate rather than accidental:
+The persistent scope is a plain object, so its declaration semantics deliberately differ from a JavaScript module:
 
 - Re-declaring a name with `let` reassigns it instead of erroring, as does re-declaring a `const` — both `let` and `const` become scope assignments, so a later input can even reassign an earlier `const`.
-- Reading a name that was never declared returns `undefined` instead of throwing `ReferenceError`. This keeps `typeof someUndeclaredName` evaluating to `'undefined'`, matching the Node REPL, instead of throwing.
+
+Identifier reads otherwise match a browser console: reading a name that was never declared reports `ReferenceError`, while `typeof someUndeclaredName` evaluates to `'undefined'`.
 
 ## Vitest and Jest workspaces
 

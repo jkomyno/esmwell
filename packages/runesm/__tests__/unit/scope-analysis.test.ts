@@ -269,4 +269,13 @@ describe('analyzeScope fixtures', () => {
     expect(reference?.start).toBe(14)
     expect(reference?.end).toBe(19)
   })
+
+  it('marks only identifiers that are direct typeof operands', () => {
+    const analysis = analyzeScope(parseUserModule('typeof missing\ntypeof missing.property\ntypeof missing()'))
+    expect(analysis.references.map(({ name, directTypeof }) => ({ name, directTypeof }))).toEqual([
+      { name: 'missing', directTypeof: true },
+      { name: 'missing', directTypeof: false },
+      { name: 'missing', directTypeof: false },
+    ])
+  })
 })

@@ -15,60 +15,80 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <header>
-      <h1>runesm playground</h1>
-      <p class="subtitle">
-        User-authored ESM runs in a module worker; bare imports resolve from
-        <a href="https://esm.sh" rel="noreferrer">esm.sh</a>.
+    <header class="masthead">
+      <h1 class="wordmark">runesm <span class="wordmark-qualifier">playground</span></h1>
+      <p class="claim">
+        Run EcmaScript in a browser sandbox, in a worker thread. Module imports are resolved to
+        <a href="https://esm.sh" rel="noreferrer">esm.sh</a> at runtime. Try editing the code below and see what
+        happens.
+      </p>
+      <p class="security-note">
+        Worker isolation contains hangs; it does not make hostile code safe.
+        <a
+          href="https://github.com/jkomyno/runesm/blob/main/COMPATIBILITY.md#is-the-worker-a-security-sandbox-for-hostile-code"
+          rel="noreferrer"
+          >Security model.</a
+        >
       </p>
     </header>
-    <main>
-      <section class="pane pane-editor">
-        <div class="pane-header">
-          <h2>Editor</h2>
-          <div class="actions">
-            <button id="run" type="button">Run</button>
-            <button id="judge" type="button" class="primary">Judge</button>
+
+    <main class="bench">
+      <div class="column">
+        <section class="pane pane--grow" aria-labelledby="label-editor">
+          <div class="pane-head">
+            <h2 class="pane-label" id="label-editor">Editor</h2>
+            <div class="editor-controls">
+              <p class="pane-note editor-shortcuts" id="editor-shortcuts">⌘↵ run · Ctrl+Space complete</p>
+              <div class="language-switch" role="group" aria-label="Source language">
+                <button type="button" class="language-option" data-language="ts" aria-pressed="true">.ts</button>
+                <button type="button" class="language-option" data-language="mjs" aria-pressed="false">.mjs</button>
+              </div>
+            </div>
           </div>
-        </div>
-        <textarea id="editor" spellcheck="false" aria-label="User code"></textarea>
-        <div class="deps">
-          <div class="pane-header">
-            <h2>Deps</h2>
-            <span class="hint">auto-detected imports · pin versions to override latest</span>
+          <div id="editor" class="editor-host"></div>
+          <div class="run-bar">
+            <button id="run" type="button" class="button button--secondary">Run module</button>
+            <button id="judge" type="button" class="button button--primary">Judge 2 cases</button>
           </div>
-          <ul id="deps-list"></ul>
-        </div>
-      </section>
-      <section class="pane pane-output">
-        <div class="pane-header">
-          <h2>Output</h2>
-          <span id="status" class="status"></span>
-        </div>
-        <div id="console" class="console"></div>
-        <div id="cases" class="cases"></div>
-      </section>
-      <section class="pane pane-repl">
-        <div class="pane-header">
-          <h2>REPL</h2>
-          <div class="actions">
-            <button id="repl-reset" type="button">Reset scope</button>
+        </section>
+
+        <section class="pane" aria-labelledby="label-deps">
+          <div class="pane-head">
+            <h2 class="pane-label" id="label-deps">Deps</h2>
+            <p class="pane-note">Pin a version to override latest.</p>
           </div>
-        </div>
-        <div id="repl-history" class="repl-history" aria-live="polite"></div>
-        <form id="repl-form" class="repl-entry">
-          <span class="repl-prompt">›</span>
-          <input
-            id="repl-input"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="let count = 0 — then count++ — then count"
-            aria-label="REPL input"
-          />
-        </form>
-      </section>
+          <ul id="deps-list" class="deps well"></ul>
+        </section>
+      </div>
+
+      <div class="column">
+        <section class="pane" aria-labelledby="label-output">
+          <div class="pane-head">
+            <h2 class="pane-label" id="label-output">Output</h2>
+            <p id="tape" class="tape" role="status"></p>
+          </div>
+          <div id="fault" class="fault" hidden></div>
+          <div id="console" class="console well" role="log" aria-label="Console output"></div>
+          <ul id="cases" class="cases"></ul>
+        </section>
+
+        <section class="pane pane--grow" aria-labelledby="label-repl">
+          <div class="pane-head">
+            <h2 class="pane-label" id="label-repl">Repl</h2>
+            <p class="pane-note" id="repl-shortcuts">→ accept suggestion · ↑↓ history · Ctrl+Space complete</p>
+            <div class="actions">
+              <button id="repl-reset" type="button" class="button button--secondary button--sm">Reset scope</button>
+            </div>
+          </div>
+          <div id="repl-history" class="repl-history well" role="log" aria-label="REPL history"></div>
+          <div class="repl-entry">
+            <span class="repl-caret" aria-hidden="true">&rsaquo;</span>
+            <div id="repl-input" class="repl-input"></div>
+          </div>
+        </section>
+      </div>
     </main>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

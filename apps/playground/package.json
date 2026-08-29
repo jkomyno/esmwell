@@ -9,14 +9,28 @@
     "dev": "vite",
     "build": "vite build && node scripts/check-base.mjs",
     "preview": "vite preview",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "demo": "tcut demo.video.ts"
+    "demo": "tcut demo.video.ts --from 200ms"
   },
   "dependencies": {
-    "runesm": "workspace:*"
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.9",
+    "@lezer/highlight": "^1.2.3",
+    "runesm": "workspace:*",
+    "typescript-legacy": "npm:typescript@5.9.3"
   },
   "devDependencies": {
+    "@fontsource-variable/archivo": "5.3.0",
+    "@fontsource-variable/martian-mono": "5.3.0",
     "termcut": "^1.1.2",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

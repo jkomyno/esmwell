@@ -19,6 +19,8 @@ export interface IdentifierRef {
   readonly programLevel: boolean
   /** True inside a shorthand property value: rewriting must emit `name: <ref>`. */
   readonly inShorthandProperty: boolean
+  /** True when this identifier is the direct operand of `typeof`. */
+  readonly directTypeof: boolean
 }
 
 /** The result of analyzing one user input. */
@@ -31,6 +33,8 @@ export interface ScopeAnalysis {
    * default values surface at their statement's boundary). */
   readonly references: readonly IdentifierRef[]
 }
+
+type ReferenceContext = 'plain' | 'shorthand' | 'direct-typeof'
 
 class Scope {
   readonly names = new Set<string>()
@@ -217,7 +221,7 @@ class Analyzer {
     }
   }
 
-  private visit(node: Node, scope: Scope, inShorthandProperty = false): void {
+  private visit(node: Node, scope: Scope, referenceContext: ReferenceContext = 'plain'): void {
     switch (node.type) {
       case 'Identifier': {
         const name = readNodeString(node, 'name')
@@ -229,7 +233,8 @@ class Analyzer {
             end: node.end,
             bound: bindingScope !== null,
             programLevel: bindingScope === null || bindingScope.isProgram,
-            inShorthandProperty,
+            inShorthandProperty: referenceContext === 'shorthand',
+            directTypeof: referenceContext === 'direct-typeof',
           })
         }
         return
@@ -353,7 +358,7 @@ class Analyzer {
         const value = readNodeChild(node, 'value')
         if (value !== null) {
           const shorthand = readNodeBoolean(node, 'shorthand')
-          this.visit(value, scope, shorthand)
+          this.visit(value, scope, shorthand ? 'shorthand' : 'plain')
         }
         return
       }
@@ -379,11 +384,19 @@ class Analyzer {
         // declaration path does.
         const left = readNodeChild(node, 'left')
         if (left !== null) {
-          this.visit(left, scope, inShorthandProperty)
+          this.visit(left, scope, referenceContext)
         }
         const right = readNodeChild(node, 'right')
         if (right !== null) {
           this.visit(right, scope)
+        }
+        return
+      }
+      case 'UnaryExpression': {
+        const argument = readNodeChild(node, 'argument')
+        if (argument !== null) {
+          const isDirectTypeof = readNodeString(node, 'operator') === 'typeof' && argument.type === 'Identifier'
+          this.visit(argument, scope, isDirectTypeof ? 'direct-typeof' : 'plain')
         }
         return
       }

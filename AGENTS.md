@@ -14,11 +14,22 @@ After meaningful changes, update the closest owning guidance when purpose, durab
 | ------------------------------------------------------ | ------------------------------------------------------- |
 | [`.agents/skills/AGENTS.md`](.agents/skills/AGENTS.md) | Repository-local skills, references, and agent metadata |
 
+## Design Context
+
+Before changing anything the user sees in [`apps/playground`](apps/playground), read both root design files:
+
+- [`PRODUCT.md`](PRODUCT.md): register (brand), users, purpose, brand personality, anti-references, design principles, accessibility bar.
+- [`DESIGN.md`](DESIGN.md): the visual system. OKLCH palette with verified contrast ratios, Archivo + Martian Mono type scale, elevation, components, and the do's and don'ts. `.impeccable/design.json` carries the tonal ramps, motion tokens, and renderable component snippets that the DESIGN.md frontmatter schema cannot hold.
+
+`apps/playground` implements `DESIGN.md`. Treat the stylesheet's token block as the rendered form of that system: change the document and the stylesheet together, and do not reintroduce a value the do's and don'ts rule out.
+
 ## Project Identity
 
 This repository builds `runesm` — an ESM-only in-browser code runner with judge, REPL, and lazy Vitest/Jest workspace modes — as a pnpm/Turborepo monorepo maintained with Vitest, tsdown, oxfmt, oxlint, Changesets, and mise. The only publishable package lives in `packages/runesm`; the workspace root and every demo under `apps/` must stay private and excluded from Changesets publishing.
 
-Preserve the runner's invariants: submitted judge and REPL modules run only inside a same-origin child execution worker, never inside their coordinator worker. Each judge run gets a fresh child. A REPL child persists only until reset, timeout, fatal failure, or session close. Test workspaces use one fresh directly owned worker per run because their service-worker-backed module graph must work in Chromium and WebKit. Runtime-owned global bindings cannot be overwritten, redefined, or deleted, while intended contents such as `process.env` remain mutable. Bare imports resolve via esm.sh (inline versions override `deps`, which override `autoInstall`), `process`, `node:process`, and `globalThis.process` expose the same browser-identified process object, test workspaces resolve exact canonical local ids before packages and load official engine components lazily, and error messages stay self-contained and actionable.
+Preserve the runner's invariants: submitted judge and REPL modules run only inside a same-origin child execution worker, never inside their coordinator worker. Each judge run gets a fresh child. A REPL child persists only until reset, timeout, fatal failure, or session close. Named ESM declarations can seed its persistent scope; local export lists add no bindings, while re-exports remain unsupported. Missing REPL identifiers report `ReferenceError`, while a direct `typeof` check returns `'undefined'`. Test workspaces use one fresh directly owned worker per run because their service-worker-backed module graph must work in Chromium and WebKit. Runtime-owned global bindings cannot be overwritten, redefined, or deleted, while intended contents such as `process.env` remain mutable. Bare imports resolve via esm.sh (inline versions override `deps`, which override `autoInstall`), `process`, `node:process`, and `globalThis.process` expose the same browser-identified process object, test workspaces resolve exact canonical local ids before packages and load official engine components lazily, and error messages stay self-contained and actionable.
+
+The private playground uses CodeMirror 6 for both source and REPL input. Its `.ts` mode compiles in a dedicated browser worker before passing emitted ESM to runesm; `.mjs` passes source directly. This is a playground authoring feature, not a runesm package capability.
 
 ## Tooling Rules
 

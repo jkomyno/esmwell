@@ -79,7 +79,7 @@ describe('REPL persistence', () => {
     const session = createReplSessionInRealm({})
     await evaluate(session, '{\n  let inner = 1\n}')
     const read = await evaluate(session, 'inner')
-    expect(read.value).toBeUndefined()
+    expect(read.error).toMatchObject({ name: 'ReferenceError', message: 'inner is not defined' })
   })
 
   it('top-level await works', async () => {
@@ -105,8 +105,7 @@ describe('REPL persistence', () => {
     const session = createReplSessionInRealm({})
     const failed = await evaluate(session, 'missingFunction()')
     expect(failed.ok).toBe(false)
-    expect(failed.error).toMatchObject({ name: 'TypeError' })
-    expect(failed.error?.message).toContain('missingFunction')
+    expect(failed.error).toMatchObject({ name: 'ReferenceError', message: 'missingFunction is not defined' })
 
     const recovered = await evaluate(session, 'let recovered = true')
     const read = await evaluate(session, 'recovered')
@@ -119,7 +118,16 @@ describe('REPL persistence', () => {
     await evaluate(session, 'let kept = 1')
     session.reset()
     const read = await evaluate(session, 'kept')
-    expect(read.value).toBeUndefined()
+    expect(read.error).toMatchObject({ name: 'ReferenceError', message: 'kept is not defined' })
+  })
+
+  it('typeof an unknown name remains undefined', async () => {
+    const session = createReplSessionInRealm({})
+    const missing = await evaluate(session, 'typeof neverDeclared')
+    await evaluate(session, 'let storedValue = 1')
+    const stored = await evaluate(session, 'typeof storedValue')
+    expect(missing).toMatchObject({ ok: true, value: 'undefined' })
+    expect(stored).toMatchObject({ ok: true, value: 'number' })
   })
 
   it('re-evaluating identical input runs again', async () => {
@@ -133,11 +141,12 @@ describe('REPL persistence', () => {
 })
 
 describe('REPL rejections and capture', () => {
-  it('rejects export statements with a clear error', async () => {
+  it('loads editor-style ESM declarations into the persistent scope', async () => {
     const session = createReplSessionInRealm({})
-    const result = await evaluate(session, 'export const hidden = 1')
-    expect(result.ok).toBe(false)
-    expect(result.error?.message).toContain('export statements are not supported in REPL input')
+    const loaded = await evaluate(session, 'const factor = 2\nexport const solve = (input) => input.value * factor')
+    const result = await evaluate(session, 'solve({ value: 21 })')
+    expect(loaded.ok).toBe(true)
+    expect(result.value).toBe(42)
   })
 
   it('reports syntax errors with positions', async () => {

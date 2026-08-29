@@ -132,9 +132,10 @@ export function createRunesm(options: RunesmOptions = {}): RunesmSession {
 
 /**
  * Creates a REPL session backed by a trusted coordinator worker. Declarations,
- * imports, and reassignments persist in one child across `evaluate` calls;
- * `reset()` starts a fresh scope. A hung evaluation terminates the child, so
- * the next evaluation starts fresh and state does not survive a timeout.
+ * including named declarations wrapped in ESM export syntax, imports, and
+ * reassignments persist in one child across `evaluate` calls; `reset()` starts
+ * a fresh scope. A hung evaluation terminates the child, so the next evaluation
+ * starts fresh and state does not survive a timeout.
  */
 export function createReplSession(options: RunesmOptions = {}): ReplSession {
   const transport = new WorkerTransport(options, SUPERVISOR_WATCHDOG_GRACE_MS)

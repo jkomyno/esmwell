@@ -12,6 +12,11 @@ test('REPL session persists state across evaluations in the worker', async () =>
     const declared = await session.evaluate('let count = 0')
     assert(declared.ok === true, `declaration failed: ${declared.error?.message}`)
 
+    const editorModule = await session.evaluate('const offset = 40\nexport const solve = (input) => input + offset')
+    assert(editorModule.ok === true, `editor module failed: ${editorModule.error?.message}`)
+    const solved = await session.evaluate('solve(2)')
+    assert(solved.value === 42, `editor export should persist as solve, got ${JSON.stringify(solved.value)}`)
+
     await session.evaluate('count++')
     const read = await session.evaluate('count')
     assert(read.value === 1, `count should persist as 1, got ${JSON.stringify(read.value)}`)
@@ -37,7 +42,17 @@ test('REPL session persists state across evaluations in the worker', async () =>
 
     const failed = await session.evaluate('missing()')
     assert(failed.ok === false, 'errors report ok=false')
-    assert((failed.error?.message ?? '').includes('missing'), 'errors carry the message')
+    assert(
+      failed.error?.name === 'ReferenceError',
+      `missing name should throw ReferenceError, got ${failed.error?.name}`,
+    )
+    assert(
+      failed.error?.message === 'missing is not defined',
+      `unexpected missing-name message: ${failed.error?.message}`,
+    )
+
+    const missingType = await session.evaluate('typeof missing')
+    assert(missingType.value === 'undefined', `typeof missing should be 'undefined', got ${missingType.value}`)
 
     const survived = await session.evaluate('count + 1')
     assert(survived.value === 2, 'the session survives errors')
@@ -89,7 +104,7 @@ test('REPL reset starts a fresh scope over the transport', async () => {
     await session.evaluate('let kept = 41')
     await session.reset()
     const read = await session.evaluate('kept')
-    assert(read.value === undefined, `kept should be gone after reset, got ${JSON.stringify(read.value)}`)
+    assert(read.error?.name === 'ReferenceError', `kept should be gone after reset, got ${read.error?.name}`)
   } finally {
     session.close()
   }
