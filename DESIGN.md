@@ -103,11 +103,11 @@ components:
     rounded: '{rounded.sm}'
     padding: '4px 10px'
   test-disclosure:
-    backgroundColor: '{colors.paper-sunk}'
+    backgroundColor: '{colors.paper-raised}'
     textColor: '{colors.graphite}'
-    typography: '{typography.body}'
-    rounded: '{rounded.md}'
-    padding: '4px 12px'
+    typography: '{typography.label}'
+    rounded: '{rounded.sm}'
+    padding: '6px 10px'
   case-row:
     backgroundColor: '{colors.paper}'
     textColor: '{colors.graphite}'
@@ -256,7 +256,7 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 
 - **Style:** paper-sunk fill, 4px radius, 12px padding, code typography, no border.
 - **Behavior:** scroll internally rather than growing the page. The console well is a polite live region so streamed output is announced.
-- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, and syntax rendering. `.ts` uses the TypeScript language mode and compiles in a dedicated browser worker before runesm executes the emitted module; `.mjs` shows that generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
+- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, inferred-type hover help, and syntax rendering. `.ts` uses the TypeScript language mode and compiles in a dedicated browser worker before runesm executes the emitted module; `.mjs` shows that generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
 - **Empty state:** a single line of graphite-soft body text stating what will appear here, never a blank box.
 
 ### Source Language Controls
@@ -267,9 +267,9 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 
 ### Test Disclosure
 
-- **Structure:** native `details` and `summary` directly below the run controls, closed by default. The summary reads `View tests`.
+- **Structure:** native `details` and `summary` in a dedicated bottom-right strip inside the editor well, closed by default. The strip keeps the control clear of editable text. The summary reads `View tests`; its list opens above it so the control stays in place.
 - **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution.
-- **Style:** the expanded list uses `paper-sunk`, one hairline between rows, body text for names and expectations, and code typography for invocations.
+- **Style:** the summary is a compact raised control. The expanded list is a genuine popover using `paper-sunk`, the lifted shadow, one hairline between rows, body text for names and expectations, and code typography for invocations.
 
 ### Case Result Row
 

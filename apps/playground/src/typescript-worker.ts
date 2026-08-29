@@ -6,9 +6,11 @@ import type {
   TypeScriptCompletion,
   TypeScriptCompletions,
   TypeScriptDiagnostic,
+  TypeScriptQuickInfo,
   TypeScriptWorkerRequest,
   TypeScriptWorkerResponse,
 } from './typescript-protocol'
+import { serializeQuickInfo } from './typescript-quick-info'
 
 const LIB_FILES = import.meta.glob<string>('../node_modules/typescript-legacy/lib/lib*.d.ts', {
   eager: true,
@@ -162,6 +164,13 @@ const completions = (source: string, language: SourceLanguage, position: number)
   }
 }
 
+const quickInfo = (source: string, language: SourceLanguage, position: number): TypeScriptQuickInfo | null => {
+  setSource(source, language)
+  return serializeQuickInfo(
+    languageService.getQuickInfoAtPosition(activeFileName(), Math.min(Math.max(position, 0), source.length)),
+  )
+}
+
 const transpile = (source: string): { code: string; diagnostics: readonly TypeScriptDiagnostic[] } => {
   const result = ts.transpileModule(source, {
     compilerOptions: {
@@ -208,6 +217,8 @@ scope.addEventListener('message', (event: MessageEvent<TypeScriptWorkerRequest>)
           return completions(request.source, request.language, request.position)
         case 'diagnostics':
           return diagnostics(request.source, request.language)
+        case 'quick-info':
+          return quickInfo(request.source, request.language, request.position)
         case 'transpile':
           return transpile(request.source)
       }

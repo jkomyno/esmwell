@@ -317,9 +317,22 @@ a {
   gap: var(--space-tight);
 }
 
+.test-disclosure {
+  position: relative;
+  flex: none;
+  width: calc(100% - 2 * var(--space-snug));
+  margin: 0 var(--space-snug) var(--space-snug);
+  z-index: 2;
+}
+
 .test-disclosure summary {
   width: max-content;
-  color: var(--graphite-soft);
+  margin-left: auto;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  color: var(--graphite);
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.2;
@@ -328,16 +341,20 @@ a {
   cursor: pointer;
 }
 
-.test-disclosure[open] summary {
-  color: var(--graphite);
-}
-
 .test-definitions {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-tight));
+  width: min(28rem, 100%);
+  max-height: min(20rem, 55vh);
+  overflow: auto;
   list-style-position: inside;
-  margin: var(--space-snug) 0 0;
+  margin: 0;
   padding: var(--space-hair) var(--space-snug);
+  border: 1px solid var(--rule-strong);
   border-radius: var(--radius-md);
   background: var(--paper-sunk);
+  box-shadow: 0 6px 20px -8px oklch(28% 0.014 70 / 0.22);
 }
 
 .test-definition {
@@ -453,14 +470,26 @@ a {
   color: var(--graphite-soft);
 }
 
-.editor-host {
+.editor-stage {
+  position: relative;
   flex: 1;
   min-height: 12rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  background: var(--paper-sunk);
+}
+
+.editor-host {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   border-radius: var(--radius-md);
 }
 
 .editor-host > .cm-editor {
+  height: 100%;
   border-radius: inherit;
   overflow: hidden;
 }

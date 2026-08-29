@@ -12,10 +12,13 @@ import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, Prec, Transaction, type Extension } from '@codemirror/state'
 import {
   Decoration,
+  activateHover,
+  closeHoverTooltip,
   drawSelection,
   EditorView,
   highlightActiveLineGutter,
   highlightSpecialChars,
+  hoverTooltip,
   keymap,
   lineNumbers,
   placeholder,
@@ -86,6 +89,19 @@ const editorTheme = EditorView.theme({
   },
   '.cm-completionLabel': { color: 'var(--graphite)' },
   '.cm-completionDetail': { color: 'var(--graphite-soft)', fontStyle: 'normal' },
+  '.cm-typescript-info': {
+    maxWidth: 'min(34rem, calc(100vw - 2.5rem))',
+    maxHeight: 'min(20rem, 50vh)',
+    overflow: 'auto',
+    padding: 'var(--space-tight) var(--space-snug)',
+  },
+  '.cm-typescript-info code': { display: 'block', whiteSpace: 'pre-wrap' },
+  '.cm-typescript-info p': {
+    margin: 'var(--space-tight) 0 0',
+    color: 'var(--graphite-soft)',
+    fontFamily: 'var(--font-sans)',
+    lineHeight: '1.5',
+  },
   '.cm-diagnostic-error': { borderLeftColor: 'var(--crimson)' },
   '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: 'underline wavy var(--crimson)' },
   '.cm-placeholder': { color: 'var(--graphite-soft)', fontStyle: 'normal' },
@@ -123,6 +139,22 @@ const highlightActiveCursorLines = ViewPlugin.fromClass(
 )
 
 const languageExtension = (language: SourceLanguage): Extension => javascript({ typescript: language === 'ts' })
+
+const quickInfoDom = (text: string, documentation: string): { readonly dom: HTMLElement } => {
+  const dom = document.createElement('div')
+  dom.className = 'cm-typescript-info'
+  dom.setAttribute('role', 'tooltip')
+  dom.setAttribute('aria-live', 'polite')
+  const signature = document.createElement('code')
+  signature.textContent = text
+  dom.append(signature)
+  if (documentation !== '') {
+    const description = document.createElement('p')
+    description.textContent = documentation
+    dom.append(description)
+  }
+  return { dom }
+}
 
 const replaceDocument = (view: EditorView, value: string): void => {
   view.dispatch({
@@ -166,11 +198,37 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
   let currentLanguage = options.language
   const language = new Compartment()
   const sourceHistory = new Compartment()
+  const typeInfoTooltip = hoverTooltip(
+    async (editor, position) => {
+      const info = await options.typescript.quickInfo(editor.state.doc.toString(), currentLanguage, position)
+      if (info === null) {
+        return null
+      }
+      return {
+        pos: info.from,
+        end: info.to,
+        above: true,
+        create: () => quickInfoDom(info.text, info.documentation),
+      }
+    },
+    { hideOnChange: true },
+  )
   const runKeybinding: KeyBinding = {
     key: 'Mod-Enter',
     preventDefault: true,
     run: () => {
       options.onRun()
+      return true
+    },
+  }
+  const typeInfoKeybinding: KeyBinding = {
+    key: 'Mod-Shift-h',
+    preventDefault: true,
+    run: (editor) => {
+      activateHover(editor, editor.state.selection.main.head, 1, {
+        tooltip: typeInfoTooltip,
+        until: (transaction) => transaction.docChanged || transaction.selection !== undefined,
+      })
       return true
     },
   }
@@ -196,10 +254,12 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         EditorView.contentAttributes.of({
           'aria-label': 'Module source',
           'aria-describedby': 'editor-shortcuts',
+          'aria-keyshortcuts': 'Meta+Shift+H Control+Shift+H',
           spellcheck: 'false',
         }),
         keymap.of([
           runKeybinding,
+          typeInfoKeybinding,
           ...closeBracketsKeymap,
           ...defaultKeymap,
           ...searchKeymap,
@@ -213,6 +273,7 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         linter((editor) => options.typescript.diagnostics(editor.state.doc.toString(), currentLanguage), {
           delay: 500,
         }),
+        typeInfoTooltip,
         syntaxHighlighting(syntaxColors),
         editorTheme,
         EditorView.updateListener.of((update) => {
@@ -232,7 +293,9 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
     },
     setLanguage(nextLanguage) {
       currentLanguage = nextLanguage
-      view.dispatch({ effects: language.reconfigure(languageExtension(nextLanguage)) })
+      view.dispatch({
+        effects: [language.reconfigure(languageExtension(nextLanguage)), closeHoverTooltip(typeInfoTooltip)],
+      })
     },
     focus: () => view.focus(),
     destroy: () => view.destroy(),

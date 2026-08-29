@@ -7,19 +7,16 @@ import * as Schema from 'effect@beta/Schema'
 // Bare imports resolve from esm.sh at runtime.
 // No bundler, no install step. Inline versions
 // select the exact package release to load.
-const User = Schema.Struct({
+const UserInput = Schema.Struct({
   name: Schema.String,
   age: Schema.Number,
 })
 
-type UserInput = {
-  readonly name: string
-  readonly age: number
-}
+type UserInput = typeof UserInput.Type
 
 export const solve = (input: UserInput): Promise<string> => {
   const program = Effect.gen(function* () {
-    const user = Schema.decodeUnknownSync(User)(input)
+    const user = Schema.decodeUnknownSync(UserInput)(input)
     yield* Console.log(\`decoded \${user.name} (age \${user.age})\`)
     return \`hello, \${user.name}\`
   })

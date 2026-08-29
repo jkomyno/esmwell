@@ -4,6 +4,7 @@ import type {
   SourceLanguage,
   TypeScriptCompletions,
   TypeScriptDiagnostic,
+  TypeScriptQuickInfo,
   TypeScriptWorkerRequest,
   TypeScriptWorkerRequestBody,
   TypeScriptWorkerResponse,
@@ -103,6 +104,10 @@ export class TypeScriptClient {
       message: diagnostic.message,
       source: `TypeScript ${diagnostic.code}`,
     }))
+  }
+
+  quickInfo(source: string, language: SourceLanguage, position: number): Promise<TypeScriptQuickInfo | null> {
+    return this.#request({ type: 'quick-info', source, language, position })
   }
 
   completionSource(documentContext: () => CompletionDocument): CompletionSource {

@@ -38,7 +38,9 @@
           <div class="pane-head">
             <h2 class="pane-label" id="label-editor">Editor</h2>
             <div class="editor-controls">
-              <p class="pane-note editor-shortcuts" id="editor-shortcuts">⌘↵ run · Ctrl+Space complete</p>
+              <p class="pane-note editor-shortcuts" id="editor-shortcuts">
+                ⌘↵ run · Ctrl+Space complete · hover or ⌘⇧H types
+              </p>
               <button
                 id="source-reset"
                 type="button"
@@ -56,15 +58,17 @@
             </div>
           </div>
           <p id="source-status" class="source-status" role="status" hidden></p>
-          <div id="editor" class="editor-host"></div>
+          <div class="editor-stage">
+            <div id="editor" class="editor-host"></div>
+            <details class="test-disclosure">
+              <summary>View tests</summary>
+              <ol id="test-definitions" class="test-definitions"></ol>
+            </details>
+          </div>
           <div class="run-bar">
             <button id="run" type="button" class="button button--secondary">Run script</button>
             <button id="judge" type="button" class="button button--primary">Run tests</button>
           </div>
-          <details class="test-disclosure">
-            <summary>View tests</summary>
-            <ol id="test-definitions" class="test-definitions"></ol>
-          </details>
         </section>
       </div>
 

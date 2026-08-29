@@ -32,6 +32,32 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
     )
   }
 
+  window.__demoHoverCodeMirrorText = (selector, text) => {
+    const content = document.querySelector(selector + ' .cm-content')
+    if (!(content instanceof HTMLElement)) throw new Error('CodeMirror target is missing: ' + selector)
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node) {
+      const offset = node.textContent?.indexOf(text) ?? -1
+      if (offset >= 0 && node.parentElement) {
+        const range = document.createRange()
+        range.setStart(node, offset)
+        range.setEnd(node, offset + text.length)
+        const bounds = range.getBoundingClientRect()
+        const init = {
+          bubbles: true,
+          clientX: bounds.left + bounds.width / 2,
+          clientY: bounds.top + bounds.height / 2,
+        }
+        node.parentElement.dispatchEvent(new MouseEvent('mouseover', init))
+        node.parentElement.dispatchEvent(new MouseEvent('mousemove', init))
+        return
+      }
+      node = walker.nextNode()
+    }
+    throw new Error('CodeMirror text is missing: ' + text)
+  }
+
   window.__demoWaitFor = async (predicate, message) => {
     for (let attempt = 0; attempt < 60; attempt += 1) {
       if (predicate()) return
@@ -76,9 +102,42 @@ export default defineVideo(
         if (!(editor instanceof HTMLDivElement) || !(content instanceof HTMLElement)) {
           throw new Error('CodeMirror editor markup is missing')
         }
-        if (!content.textContent?.includes('type UserInput')) {
+        if (!content.textContent?.includes('type UserInput = typeof UserInput.Type')) {
           throw new Error('TypeScript source is not visible in the editor')
         }
+        const editorStage = document.querySelector('.editor-stage')
+        const testsSummary = document.querySelector('.test-disclosure summary')
+        const testsDisclosure = document.querySelector('.test-disclosure')
+        const testDefinitions = document.querySelector('.test-definitions')
+        if (
+          !(editorStage instanceof HTMLElement) ||
+          !(testsSummary instanceof HTMLElement) ||
+          !(testsDisclosure instanceof HTMLDetailsElement) ||
+          !(testDefinitions instanceof HTMLElement)
+        ) {
+          throw new Error('editor tests disclosure is missing')
+        }
+        const stageBounds = editorStage.getBoundingClientRect()
+        const summaryBounds = testsSummary.getBoundingClientRect()
+        const rightInset = stageBounds.right - summaryBounds.right
+        const bottomInset = stageBounds.bottom - summaryBounds.bottom
+        if (rightInset < 0 || rightInset > 20 || bottomInset < 0 || bottomInset > 20) {
+          throw new Error('View tests is not anchored to the editor bottom-right')
+        }
+        const editorBounds = editor.getBoundingClientRect()
+        if (summaryBounds.top < editorBounds.bottom) {
+          throw new Error('View tests overlaps editable source')
+        }
+        testsDisclosure.open = true
+        const definitionsBounds = testDefinitions.getBoundingClientRect()
+        if (
+          definitionsBounds.bottom > summaryBounds.top ||
+          definitionsBounds.left < stageBounds.left ||
+          definitionsBounds.right > stageBounds.right
+        ) {
+          throw new Error('test definitions do not open above the control inside the editor')
+        }
+        testsDisclosure.open = false
         const tokenColor = (text) => {
           const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
           let node = walker.nextNode()
@@ -97,6 +156,40 @@ export default defineVideo(
       await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
 
       await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', 'const answer = 42')
+        window.__demoHoverCodeMirrorText('#editor', 'answer')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('const answer: 42') === true,
+          'hover did not show the inferred TypeScript type',
+        )
+        window.__demoSetCodeMirror('#editor', 'const answer = 43')
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'type hover remained visible after the source changed',
+        )
+        window.__demoPressCodeMirror('#editor', 'Home', { code: 'Home' })
+        for (let step = 0; step < 7; step += 1) {
+          window.__demoPressCodeMirror('#editor', 'ArrowRight', { code: 'ArrowRight' })
+        }
+        window.__demoPressCodeMirror('#editor', 'h', {
+          code: 'KeyH',
+          metaKey: true,
+          shiftKey: true,
+        })
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('const answer: 43') === true,
+          'keyboard type help did not show the inferred TypeScript type',
+        )
+        window.__demoSetCodeMirror('#editor', ${JSON.stringify(DEFAULT_CODE)})
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'type hover remained visible after the source changed',
+        )
+      })()`)
+
+      await t.browser.evaluate(`(() => {
         const button = document.querySelector('[data-language="mjs"]')
         if (!(button instanceof HTMLButtonElement)) throw new Error('.mjs control is missing')
         button.focus()
@@ -112,7 +205,7 @@ export default defineVideo(
         await window.__demoWaitFor(() => {
           const active = document.querySelector('[data-language="mjs"]')?.getAttribute('aria-pressed') === 'true'
           const source = document.querySelector('#editor .cm-content')?.textContent ?? ''
-          return active && source.includes('const User =') && !source.includes('type UserInput')
+          return active && source.includes('const UserInput =') && !source.includes('type UserInput')
         }, '.mjs did not show generated JavaScript')
       })()`)
       await t.browser.evaluate(`(() => {
@@ -130,7 +223,9 @@ export default defineVideo(
       await t.browser.click('[data-language="ts"]')
       await t.browser.evaluate(`(() => {
         const source = document.querySelector('#editor .cm-content')?.textContent ?? ''
-        if (!source.includes('type UserInput')) throw new Error('.ts did not restore TypeScript source')
+        if (!source.includes('type UserInput = typeof UserInput.Type')) {
+          throw new Error('.ts did not restore TypeScript source')
+        }
         window.__demoSetCodeMirror('#editor', 'export const typed: number = 42')
       })()`)
       await t.browser.click('[data-language="mjs"]')
