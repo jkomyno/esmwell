@@ -231,6 +231,17 @@ export default defineVideo(
           () => document.querySelector('.cm-typescript-info')?.textContent?.includes('const answer: 42') === true,
           'hover did not show the inferred TypeScript type',
         )
+        const typeTokens = [...document.querySelectorAll('.cm-typescript-info code span')]
+        const highlightedTokens = ['const', 'answer', '42'].map((text) =>
+          typeTokens.find((token) => token.textContent === text),
+        )
+        if (highlightedTokens.some((token) => token === undefined)) {
+          throw new Error('type hover did not preserve TypeScript display parts')
+        }
+        const tokenColors = new Set(highlightedTokens.map((token) => getComputedStyle(token).color))
+        if (tokenColors.size !== 3) {
+          throw new Error('type hover did not syntax-highlight its signature')
+        }
         window.__demoSetCodeMirror('#editor', 'const answer = 43')
         await window.__demoWaitFor(
           () => document.querySelector('.cm-typescript-info') === null,

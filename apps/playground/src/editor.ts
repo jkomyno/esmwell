@@ -27,9 +27,9 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
-import { tags } from '@lezer/highlight'
+import { tags, type Tag } from '@lezer/highlight'
 import { ReplCommandHistory } from './repl-command-history'
-import type { SourceLanguage } from './typescript-protocol'
+import type { SourceLanguage, TypeScriptDisplayPart } from './typescript-protocol'
 import type { TypeScriptClient } from './typescript-client'
 
 const syntaxColors = HighlightStyle.define([
@@ -140,13 +140,47 @@ const highlightActiveCursorLines = ViewPlugin.fromClass(
 
 const languageExtension = (language: SourceLanguage): Extension => javascript({ typescript: language === 'ts' })
 
-const quickInfoDom = (text: string, documentation: string): { readonly dom: HTMLElement } => {
+const quickInfoTokenTags: Readonly<Record<string, Tag>> = {
+  aliasName: tags.typeName,
+  className: tags.typeName,
+  enumMemberName: tags.propertyName,
+  enumName: tags.typeName,
+  fieldName: tags.propertyName,
+  functionName: tags.function(tags.variableName),
+  interfaceName: tags.typeName,
+  keyword: tags.keyword,
+  localName: tags.variableName,
+  methodName: tags.function(tags.propertyName),
+  moduleName: tags.namespace,
+  numericLiteral: tags.number,
+  operator: tags.punctuation,
+  parameterName: tags.variableName,
+  propertyName: tags.propertyName,
+  punctuation: tags.punctuation,
+  regularExpressionLiteral: tags.string,
+  stringLiteral: tags.string,
+  typeParameterName: tags.typeName,
+}
+
+const quickInfoDom = (
+  displayParts: readonly TypeScriptDisplayPart[],
+  documentation: string,
+): { readonly dom: HTMLElement } => {
   const dom = document.createElement('div')
   dom.className = 'cm-typescript-info'
   dom.setAttribute('role', 'tooltip')
   dom.setAttribute('aria-live', 'polite')
   const signature = document.createElement('code')
-  signature.textContent = text
+  for (const part of displayParts) {
+    const token = document.createElement('span')
+    token.textContent = part.text
+    const tokenTag = quickInfoTokenTags[part.kind]
+    const tokenClass = tokenTag === undefined ? null : syntaxColors.style([tokenTag])
+    if (tokenClass !== null) {
+      token.className = tokenClass
+    }
+    signature.append(token)
+  }
   dom.append(signature)
   if (documentation !== '') {
     const description = document.createElement('p')
@@ -208,7 +242,7 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         pos: info.from,
         end: info.to,
         above: true,
-        create: () => quickInfoDom(info.text, info.documentation),
+        create: () => quickInfoDom(info.displayParts, info.documentation),
       }
     },
     { hideOnChange: true },

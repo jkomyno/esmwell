@@ -8,7 +8,7 @@ export const serializeQuickInfo = (info: ts.QuickInfo | undefined): TypeScriptQu
   return {
     from: info.textSpan.start,
     to: info.textSpan.start + info.textSpan.length,
-    text: ts.displayPartsToString(info.displayParts),
+    displayParts: info.displayParts?.map(({ kind, text }) => ({ kind, text })) ?? [],
     documentation: ts.displayPartsToString(info.documentation),
   }
 }

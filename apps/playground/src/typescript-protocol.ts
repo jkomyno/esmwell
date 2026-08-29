@@ -22,10 +22,15 @@ export interface TypeScriptCompletions {
   readonly options: readonly TypeScriptCompletion[]
 }
 
+export interface TypeScriptDisplayPart {
+  readonly kind: string
+  readonly text: string
+}
+
 export interface TypeScriptQuickInfo {
   readonly from: number
   readonly to: number
-  readonly text: string
+  readonly displayParts: readonly TypeScriptDisplayPart[]
   readonly documentation: string
 }
 

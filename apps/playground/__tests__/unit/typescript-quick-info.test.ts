@@ -3,7 +3,7 @@ import * as ts from 'typescript-legacy'
 import { serializeQuickInfo } from '../../src/typescript-quick-info'
 
 describe('serializeQuickInfo', () => {
-  it('preserves the inferred signature, documentation, and source range', () => {
+  it('preserves display-part kinds for syntax-highlighted hover signatures', () => {
     expect(
       serializeQuickInfo({
         kind: ts.ScriptElementKind.constElement,
@@ -22,7 +22,14 @@ describe('serializeQuickInfo', () => {
     ).toEqual({
       from: 6,
       to: 12,
-      text: 'const answer: 42',
+      displayParts: [
+        { kind: 'keyword', text: 'const' },
+        { kind: 'space', text: ' ' },
+        { kind: 'localName', text: 'answer' },
+        { kind: 'punctuation', text: ':' },
+        { kind: 'space', text: ' ' },
+        { kind: 'stringLiteral', text: '42' },
+      ],
       documentation: 'The inferred answer.',
     })
   })
