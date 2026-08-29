@@ -5,8 +5,8 @@ import * as Effect from 'effect@beta/Effect'
 import * as Schema from 'effect@beta/Schema'
 
 // Bare imports resolve from esm.sh at runtime.
-// No bundler, no install step. The inline @beta
-// tag wins over the pins in the deps list.
+// No bundler, no install step. Inline versions
+// select the exact package release to load.
 const User = Schema.Struct({
   name: Schema.String,
   age: Schema.Number,
@@ -24,11 +24,7 @@ export const solve = (input: UserInput): Promise<string> => {
     return \`hello, \${user.name}\`
   })
 
-  return new Promise((resolve) => {
-    Effect.runFork(program).addObserver((exit) => {
-      resolve(exit.value)
-    })
-  })
+  return Effect.runPromise(program)
 }
 `
 

@@ -91,7 +91,7 @@ a {
   text-underline-offset: 0.18em;
 }
 
-:is(a, button, input, textarea):focus-visible {
+:is(a, button, input, summary, textarea):focus-visible {
   outline: 2px solid var(--rust);
   outline-offset: 2px;
 }
@@ -227,6 +227,36 @@ a {
   gap: var(--space-snug);
 }
 
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+  color: var(--graphite);
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--paper-sunk);
+}
+
+.icon-button:disabled {
+  border-color: var(--rule);
+  background: var(--paper-sunk);
+  color: var(--graphite-soft);
+  cursor: not-allowed;
+}
+
 .language-switch {
   display: inline-flex;
   align-items: stretch;
@@ -253,7 +283,7 @@ a {
   border-right: none;
 }
 
-.language-option:hover {
+.language-option:hover:not(:disabled) {
   color: var(--graphite);
   background: var(--paper-sunk);
 }
@@ -263,11 +293,86 @@ a {
   color: var(--paper);
 }
 
+.language-option:disabled:not([aria-pressed='true']) {
+  background: var(--paper-sunk);
+  color: var(--rule-strong);
+  cursor: not-allowed;
+}
+
+.source-status {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--graphite-soft);
+}
+
+.source-status[data-tone='error'] {
+  color: var(--crimson);
+}
+
 /* The primary action sits at the end of the thing you edit. */
 .run-bar {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-tight);
+}
+
+.test-disclosure summary {
+  width: max-content;
+  color: var(--graphite-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.test-disclosure[open] summary {
+  color: var(--graphite);
+}
+
+.test-definitions {
+  list-style-position: inside;
+  margin: var(--space-snug) 0 0;
+  padding: var(--space-hair) var(--space-snug);
+  border-radius: var(--radius-md);
+  background: var(--paper-sunk);
+}
+
+.test-definition {
+  padding: var(--space-tight) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.test-definition:last-child {
+  border-bottom: none;
+}
+
+.test-name {
+  font-weight: 600;
+}
+
+.test-invocation,
+.test-expectation {
+  display: block;
+  margin-left: 1.4rem;
+  overflow-wrap: anywhere;
+}
+
+.test-invocation {
+  margin-top: var(--space-hair);
+  color: var(--graphite);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-stretch: var(--editor-font-stretch);
+  line-height: 1.6;
+}
+
+.test-expectation {
+  color: var(--graphite-soft);
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .button {
@@ -358,74 +463,6 @@ a {
 .editor-host > .cm-editor {
   border-radius: inherit;
   overflow: hidden;
-}
-
-/* ============================================================
-   Deps
-   ============================================================ */
-
-.deps {
-  list-style: none;
-  margin: 0;
-  padding: var(--space-hair) var(--space-snug);
-  max-height: 8.5rem;
-}
-
-.dep {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: var(--space-snug);
-  padding: var(--space-tight) 0;
-  border-bottom: 1px solid var(--rule);
-}
-
-.dep:last-child {
-  border-bottom: none;
-}
-
-.dep-name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  cursor: default;
-}
-
-/* The one place rust appears as content: what a run actually resolved. */
-.dep-resolved {
-  color: var(--rust);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.dep input {
-  width: 7rem;
-  min-height: 2rem;
-  padding: 0.25rem 0.5rem;
-  background: var(--paper-raised);
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-sm);
-  color: var(--graphite);
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  font-stretch: 87.5%;
-}
-
-.dep input::placeholder {
-  color: var(--graphite-soft);
-  opacity: 1;
-}
-
-.dep-specifiers {
-  grid-column: 1 / -1;
-  margin: var(--space-hair) 0 0;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--graphite-soft);
-  overflow-wrap: anywhere;
-}
-
-.dep-empty {
-  padding: var(--space-tight) 0;
 }
 
 /* ============================================================
@@ -748,11 +785,20 @@ a {
     max-width: none;
   }
 
+  .editor-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .editor-shortcuts {
+    flex-basis: 100%;
+  }
+
   /* Narrow the width axis rather than the type size, so wide mono still
      fits a useful number of characters on a phone. */
   .well,
-  .repl-caret,
-  .dep input {
+  .repl-caret {
     font-stretch: 75%;
   }
 

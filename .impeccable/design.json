@@ -293,8 +293,8 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The run and judge actions. Darkest element on the page; weight makes it primary, not hue.",
-      "html": "<button class=\"ds-btn-primary\" type=\"button\">Judge</button>",
+      "description": "The main run action. Darkest element on the page; weight makes it primary, not hue.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Run tests</button>",
       "css": ".ds-btn-primary{background:oklch(28% 0.014 70);color:oklch(97.5% 0.008 75);font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 20px;border:none;border-radius:2px;cursor:pointer;transition:background 120ms cubic-bezier(.25,1,.5,1)}.ds-btn-primary:hover{background:oklch(52% 0.15 45)}.ds-btn-primary:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}.ds-btn-primary:disabled{background:oklch(94.5% 0.010 75);color:oklch(48% 0.012 70);cursor:not-allowed}"
     },
     {
@@ -314,12 +314,20 @@
       "css": ".ds-well{display:flex;flex-direction:column;gap:8px}.ds-well-label{font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:oklch(48% 0.012 70)}.ds-well-body{margin:0;background:oklch(94.5% 0.010 75);color:oklch(28% 0.014 70);font-family:\"Martian Mono\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;line-height:1.65;font-variation-settings:\"wdth\" 87.5;border-radius:4px;padding:12px;overflow:auto}"
     },
     {
-      "name": "Version Input",
-      "kind": "input",
-      "refersTo": "input-version",
-      "description": "The version pin beside a detected dependency. Border does not shift on focus, so the control never appears to move.",
-      "html": "<input class=\"ds-input-version\" type=\"text\" placeholder=\"latest\" aria-label=\"version pin\" />",
-      "css": ".ds-input-version{background:oklch(99% 0.005 75);color:oklch(28% 0.014 70);font-family:\"Martian Mono\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;font-variation-settings:\"wdth\" 87.5;width:7rem;padding:4px 8px;border:1px solid oklch(62% 0.014 75);border-radius:2px}.ds-input-version::placeholder{color:oklch(48% 0.012 70)}.ds-input-version:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}"
+      "name": "Source Language Controls",
+      "kind": "custom",
+      "refersTo": "source-language-controls",
+      "description": "Restore followed by connected TypeScript and JavaScript selectors, with native disabled states for blocked transitions.",
+      "html": "<div class=\"ds-source-controls\"><button type=\"button\" aria-label=\"Restore initial source\">↺</button><button type=\"button\" aria-pressed=\"true\">.ts</button><button type=\"button\" aria-pressed=\"false\">.mjs</button></div>",
+      "css": ".ds-source-controls{display:inline-flex;gap:8px}.ds-source-controls button{min-height:32px;padding:4px 10px;background:oklch(99% 0.005 75);color:oklch(28% 0.014 70);border:1px solid oklch(62% 0.014 75);border-radius:2px;font-family:\"Martian Mono\",ui-monospace,monospace}.ds-source-controls button[aria-pressed=true]{background:oklch(28% 0.014 70);color:oklch(97.5% 0.008 75)}.ds-source-controls button:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}.ds-source-controls button:disabled{background:oklch(94.5% 0.010 75);color:oklch(48% 0.012 70);cursor:not-allowed}"
+    },
+    {
+      "name": "Test Disclosure",
+      "kind": "custom",
+      "refersTo": "test-disclosure",
+      "description": "A native disclosure that reveals fixed judge-case names, invocations, and expectations before execution.",
+      "html": "<details class=\"ds-tests\"><summary>View tests</summary><ol><li><strong>greets a decoded user</strong><code>solve({ name: 'runesm', age: 3 })</code><span>expects 'hello, runesm'</span></li></ol></details>",
+      "css": ".ds-tests summary{width:max-content;color:oklch(48% 0.012 70);font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.ds-tests ol{margin:12px 0 0;padding:4px 12px;background:oklch(94.5% 0.010 75);border-radius:4px}.ds-tests li{padding:8px 0}.ds-tests code,.ds-tests span{display:block;margin-left:20px}.ds-tests code{font-family:\"Martian Mono\",ui-monospace,monospace;font-size:.75rem}.ds-tests span{color:oklch(48% 0.012 70);font-size:.8125rem}"
     },
     {
       "name": "Case Result Row",
@@ -336,14 +344,6 @@
       "description": "Persistent-scope CodeMirror input seeded by the current editor module, with right-arrow inline-suggestion acceptance, semantic completion, and up/down command history. Sap caret and inherited code typography.",
       "html": "<div class=\"ds-repl\"><span class=\"ds-repl-caret\">›</span><div class=\"ds-repl-input\" role=\"textbox\" aria-label=\"REPL input\">solve({ name: 'repl' })</div></div>",
       "css": ".ds-repl{display:flex;align-items:center;gap:8px;background:oklch(99% 0.005 75);border:1px solid oklch(62% 0.014 75);border-radius:2px;padding:8px 12px}.ds-repl-caret{color:oklch(46% 0.11 150);font-family:\"Martian Mono\",ui-monospace,monospace}.ds-repl-input{flex:1;color:oklch(28% 0.014 70);font-family:\"Martian Mono\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;font-variation-settings:\"wdth\" 87.5}.ds-repl:focus-within{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}"
-    },
-    {
-      "name": "Dependency Row",
-      "kind": "custom",
-      "refersTo": "dep-row",
-      "description": "An auto-detected import with its version pin. Hairline between rows, not a bordered box per row.",
-      "html": "<div class=\"ds-dep\"><span class=\"ds-dep-name\">effect@beta/Schema</span><span class=\"ds-dep-resolved\">4.0.0-beta.107</span><input class=\"ds-input-version\" type=\"text\" placeholder=\"latest\" aria-label=\"version pin\" /></div>",
-      "css": ".ds-dep{display:flex;align-items:center;gap:12px;background:oklch(97.5% 0.008 75);border-bottom:1px solid oklch(86% 0.012 75);padding:8px 12px}.ds-dep-name{font-family:\"Martian Mono\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;font-variation-settings:\"wdth\" 87.5;color:oklch(28% 0.014 70)}.ds-dep-resolved{margin-left:auto;font-family:\"Martian Mono\",ui-monospace,monospace;font-size:.8125rem;color:oklch(52% 0.15 45)}"
     }
   ],
   "narrative": {

@@ -96,19 +96,18 @@ components:
     typography: '{typography.code}'
     rounded: '{rounded.md}'
     padding: '12px'
-  input-version:
+  source-language-controls:
     backgroundColor: '{colors.paper-raised}'
     textColor: '{colors.graphite}'
     typography: '{typography.code}'
     rounded: '{rounded.sm}'
-    padding: '4px 8px'
-    width: '7rem'
-  dep-row:
-    backgroundColor: '{colors.paper}'
+    padding: '4px 10px'
+  test-disclosure:
+    backgroundColor: '{colors.paper-sunk}'
     textColor: '{colors.graphite}'
-    typography: '{typography.code}'
-    rounded: '{rounded.sm}'
-    padding: '8px 12px'
+    typography: '{typography.body}'
+    rounded: '{rounded.md}'
+    padding: '4px 12px'
   case-row:
     backgroundColor: '{colors.paper}'
     textColor: '{colors.graphite}'
@@ -146,7 +145,7 @@ Warm paper and warm ink, with four saturated UI hues held in reserve for interfa
 
 ### Primary
 
-- **Rust** (`oklch(52% 0.15 45)` / `#ab4400`): the brand hue and the only accent. Links, focus rings, resolved dependency names, and the hover state of the primary action. 5.46:1 on paper, 4.99:1 on wells. It is deliberately _not_ the action color; see the Ink Acts Rule.
+- **Rust** (`oklch(52% 0.15 45)` / `#ab4400`): the brand hue and the only accent. Links, focus rings, and the hover state of the primary action. 5.46:1 on paper, 4.99:1 on wells. It is deliberately _not_ the action color; see the Ink Acts Rule.
 
 ### Secondary
 
@@ -158,7 +157,7 @@ Warm paper and warm ink, with four saturated UI hues held in reserve for interfa
 
 - **Paper** (`oklch(97.5% 0.008 75)` / `#faf6f1`): the page ground. A warm off-white sheet.
 - **Paper Sunk** (`oklch(94.5% 0.010 75)` / `#f1ece6`): every surface the machine writes into. The editor, the console, the REPL history.
-- **Paper Raised** (`oklch(99% 0.005 75)` / `#fefbf8`): controls sitting on top of a sunk well, such as a version input inside a dependency row.
+- **Paper Raised** (`oklch(99% 0.005 75)` / `#fefbf8`): controls sitting on top of a sunk well, such as the language switch, restore control, and REPL entry.
 - **Graphite** (`oklch(28% 0.014 70)` / `#2d2821`): body text, code, and the primary action fill. 13.59:1 on paper.
 - **Graphite Soft** (`oklch(48% 0.012 70)` / `#625d56`): pane labels, hints, secondary metadata. 6.09:1 on paper, 5.57:1 on wells.
 - **Rule** (`oklch(86% 0.012 75)` / `#d6d0c9`): decorative hairlines and dividers only, where the boundary is not needed to identify a control.
@@ -205,13 +204,13 @@ Syntax ink is meaningful only inside source code. It never appears in headings, 
 - **Title** (600, 1.1875rem, 1.25): pane titles that need more presence than a label.
 - **Body** (400, 0.9375rem, 1.6): prose, hints, case names. Capped at 65–75ch wherever it runs long.
 - **Label** (600, 0.75rem, 1.2, `0.08em`, uppercase): pane labels and button text.
-- **Code** (400, 0.8125rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, dependency specifiers, version pins.
+- **Code** (400, 0.8125rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, and test invocations.
 
 Steps are 0.75 → 0.9375 → 1.1875 → 1.5, each at least 1.25× the last. Flat scales are prohibited.
 
 ### Named Rules
 
-**The Labeled Drawer Rule.** Every pane carries a small uppercase Archivo label in graphite-soft: EDITOR, DEPS, OUTPUT, REPL. This is the deliberate organizing grammar of the system, taken from equipment documentation, and it is the one place repeated uppercase tracked labels are correct. Do not extend the pattern to decorative kickers above ordinary headings.
+**The Labeled Drawer Rule.** Every pane carries a small uppercase Archivo label in graphite-soft: EDITOR, OUTPUT, REPL. This is the deliberate organizing grammar of the system, taken from equipment documentation, and it is the one place repeated uppercase tracked labels are correct. Do not extend the pattern to decorative kickers above ordinary headings.
 
 **The Mono Is For Code Rule.** Martian Mono appears only where the content is code or machine output. Chrome, labels, buttons, hints and prose are Archivo. Monospace used as a costume for "developer tool" is prohibited; this interface has real code in it and that is the only reason mono is here.
 
@@ -219,7 +218,7 @@ Steps are 0.75 → 0.9375 → 1.1875 → 1.5, each at least 1.25× the last. Fla
 
 Flat by default. There are no decorative shadows anywhere in this system, and no glass, blur, or translucency. Depth is tonal and it means one specific thing: recession indicates a surface the machine writes into, rather than a surface the user acts on.
 
-The editor, the console, the REPL history and the dependency list are recessed to `paper-sunk`. Buttons, inputs and the REPL entry field sit flush on `paper` or raised to `paper-raised`. That is the entire depth vocabulary.
+The editor, the console, the REPL history, and the expanded test list are recessed to `paper-sunk`. Buttons and the REPL entry field sit flush on `paper` or raised to `paper-raised`. That is the entire depth vocabulary.
 
 One shadow exists, and only for elements that genuinely float above the page:
 
@@ -253,18 +252,24 @@ One shadow exists, and only for elements that genuinely float above the page:
 
 There are no cards in this system. Panes are defined by a label and a ground change, not by a bordered box, and nested containers are prohibited. When a boundary is genuinely needed, it is a single 1px `rule` hairline.
 
-### Inputs / Fields
-
-- **Style:** paper-raised fill, 1px `rule-strong` border, 2px radius, code typography. The version pin input is 7rem wide and shows `latest` as placeholder text in graphite-soft.
-- **Focus:** 2px rust outline at 2px offset. The border does not change color, so the control does not appear to move.
-- **Error:** 1px crimson border plus a crimson message beneath. Never a border color change alone.
-
 ### Wells
 
 - **Style:** paper-sunk fill, 4px radius, 12px padding, code typography, no border.
 - **Behavior:** scroll internally rather than growing the page. The console well is a polite live region so streamed output is announced.
-- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, and syntax rendering. `.ts` uses the TypeScript language mode and compiles in a dedicated browser worker before runesm executes the emitted module; `.mjs` passes JavaScript source directly to runesm. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
+- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, and syntax rendering. `.ts` uses the TypeScript language mode and compiles in a dedicated browser worker before runesm executes the emitted module; `.mjs` shows that generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
 - **Empty state:** a single line of graphite-soft body text stating what will appear here, never a blank box.
+
+### Source Language Controls
+
+- **Structure:** an icon-only restore control followed by the connected `.ts` and `.mjs` selector. Every icon control has an accessible name and native disabled state.
+- **State:** `.mjs` is unavailable only while TypeScript compilation is failing. `.ts` becomes unavailable after direct JavaScript edits. A visible status line explains either block.
+- **Restore:** the restore control returns to the initial TypeScript source, invalidates cached JavaScript, re-enables both languages, and resets the REPL scope.
+
+### Test Disclosure
+
+- **Structure:** native `details` and `summary` directly below the run controls, closed by default. The summary reads `View tests`.
+- **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution.
+- **Style:** the expanded list uses `paper-sunk`, one hairline between rows, body text for names and expectations, and code typography for invocations.
 
 ### Case Result Row
 
@@ -277,14 +282,9 @@ The signature component, and the one place the old design broke a hard rule.
 ### REPL Entry
 
 - **Style:** paper-raised, 1px `rule-strong` border, 2px radius, with a sap `›` caret and a borderless CodeMirror entry that inherits code typography.
-- **Scope:** the current editor module evaluates as the first input. Later declarations persist until reset, source edits, or dependency-pin changes rebuild the scope.
+- **Scope:** the current editor module evaluates as the first input. Later declarations persist until reset, source edits, language changes, or source restore rebuilds the scope.
 - **Input:** `Ctrl+Space` opens completion against the editor module and successful prior inputs. Right arrow accepts the faded inline suggestion while the input is empty. Up and down arrows traverse command history, restoring the unfinished draft after the newest entry.
 - **History:** a sunk well above it. Input lines prefixed `›` in graphite, values prefixed `=` in graphite-soft, errors prefixed `!` in crimson.
-
-### Dependency Row
-
-- **Style:** the specifier in code typography on paper, a version input aligned right, a 1px `rule` hairline between rows rather than a bordered box per row.
-- **Resolved state:** once a run completes, the resolved version is shown in rust beside the pin, which is the only place rust appears as content.
 
 ## 6. Do's and Don'ts
 

@@ -9,7 +9,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { bracketMatching, HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting } from '@codemirror/language'
 import { linter, lintKeymap } from '@codemirror/lint'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, Prec, Transaction, type Extension } from '@codemirror/state'
 import {
   Decoration,
   drawSelection,
@@ -131,6 +131,17 @@ const replaceDocument = (view: EditorView, value: string): void => {
   })
 }
 
+const replaceSourceDocument = (view: EditorView, value: string, sourceHistory: Compartment): void => {
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: value },
+    selection: { anchor: value.length },
+    annotations: Transaction.addToHistory.of(false),
+    effects: sourceHistory.reconfigure([]),
+  })
+  // A language switch or source restore starts a new source undo history.
+  view.dispatch({ effects: sourceHistory.reconfigure(history()) })
+}
+
 const REPL_SUGGESTION = "solve({ name: 'repl', age: 5 })"
 
 interface SourceEditorOptions {
@@ -145,13 +156,16 @@ interface SourceEditorOptions {
 
 export interface SourceEditor {
   getValue(): string
+  setValue(value: string): void
   setLanguage(language: SourceLanguage): void
+  focus(): void
   destroy(): void
 }
 
 export const createSourceEditor = (options: SourceEditorOptions): SourceEditor => {
   let currentLanguage = options.language
   const language = new Compartment()
+  const sourceHistory = new Compartment()
   const runKeybinding: KeyBinding = {
     key: 'Mod-Enter',
     preventDefault: true,
@@ -168,7 +182,7 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightSpecialChars(),
-        history(),
+        sourceHistory.of(history()),
         drawSelection(),
         indentOnInput(),
         bracketMatching(),
@@ -211,10 +225,16 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
   })
   return {
     getValue: () => view.state.doc.toString(),
+    setValue(value) {
+      if (value !== view.state.doc.toString()) {
+        replaceSourceDocument(view, value, sourceHistory)
+      }
+    },
     setLanguage(nextLanguage) {
       currentLanguage = nextLanguage
       view.dispatch({ effects: language.reconfigure(languageExtension(nextLanguage)) })
     },
+    focus: () => view.focus(),
     destroy: () => view.destroy(),
   }
 }

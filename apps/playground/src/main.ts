@@ -1,11 +1,4 @@
-import {
-  adaptWorker,
-  collectBareSpecifiers,
-  createReplSession,
-  createRunesm,
-  parseUserModule,
-  resolveImportSpecifier,
-} from 'runesm'
+import { adaptWorker, createReplSession, createRunesm } from 'runesm'
 import type {
   ConsoleChunk,
   JudgeCase,
@@ -13,20 +6,22 @@ import type {
   JudgeRunResult,
   ReplResult,
   ReplSession,
-  ResolvedDependency,
   SerializedError,
 } from 'runesm'
 import { createReplEditor, createSourceEditor, type ReplEditor, type SourceEditor } from './editor'
 import RunesmExecutionWorkerUrl from './runesm-execution-worker?worker&url'
 import RunesmWorker from './runesm-worker?worker'
 import { DEFAULT_CODE, DEMO_CASES } from './examples'
+import { SourceLanguageState } from './source-language-state'
 import { TypeScriptClient, TypeScriptCompileError } from './typescript-client'
 import type { SourceLanguage } from './typescript-protocol'
 
 const editor = document.querySelector<HTMLDivElement>('#editor')
-const depsList = document.querySelector<HTMLUListElement>('#deps-list')
 const runButton = document.querySelector<HTMLButtonElement>('#run')
 const judgeButton = document.querySelector<HTMLButtonElement>('#judge')
+const sourceResetButton = document.querySelector<HTMLButtonElement>('#source-reset')
+const sourceStatus = document.querySelector<HTMLParagraphElement>('#source-status')
+const testDefinitions = document.querySelector<HTMLOListElement>('#test-definitions')
 const tape = document.querySelector<HTMLParagraphElement>('#tape')
 const faultView = document.querySelector<HTMLDivElement>('#fault')
 const consoleView = document.querySelector<HTMLDivElement>('#console')
@@ -38,9 +33,11 @@ const languageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-
 
 if (
   editor === null ||
-  depsList === null ||
   runButton === null ||
   judgeButton === null ||
+  sourceResetButton === null ||
+  sourceStatus === null ||
+  testDefinitions === null ||
   tape === null ||
   faultView === null ||
   consoleView === null ||
@@ -72,31 +69,20 @@ const emptyLine = (text: string): HTMLParagraphElement => el('p', 'well-empty', 
 const CONSOLE_EMPTY = 'Console output from your module appears here as it runs.'
 const REPL_EMPTY = 'Editor declarations load first. Later values persist until reset or the editor changes.'
 const typescriptClient = new TypeScriptClient()
-let sourceLanguage: SourceLanguage = 'ts'
+const sourceState = new SourceLanguageState(DEFAULT_CODE)
 let sourceEditor: SourceEditor
 let replEditor: ReplEditor
+let replacingEditorSource = false
+let switchingLanguage = false
+let sourceTransitionStatus: { readonly message: string; readonly tone: 'notice' | 'error' } | undefined
 
-const currentSource = (): string => sourceEditor.getValue()
-
-const executableSource = (source = currentSource(), language = sourceLanguage): Promise<string> =>
+const executableSource = (source = sourceState.source, language = sourceState.language): Promise<string> =>
   language === 'ts' ? typescriptClient.transpile(source) : Promise.resolve(source)
-
-const collectPinnedDeps = (): Record<string, string> => {
-  const deps: Record<string, string> = {}
-  for (const input of depsList.querySelectorAll<HTMLInputElement>('input[data-pkg]')) {
-    const version = input.value.trim()
-    if (version !== '') {
-      deps[input.dataset.pkg ?? ''] = version
-    }
-  }
-  return deps
-}
 
 function createSession() {
   return createRunesm({
     workerFactory: () => adaptWorker(new RunesmWorker()),
     executionWorkerUrl: RunesmExecutionWorkerUrl,
-    deps: collectPinnedDeps(),
     timeoutMs: 10_000,
   })
 }
@@ -124,8 +110,6 @@ const renderTape = (status: string, tone: Tone, facts: readonly string[]): void 
 
 const countLabel = (count: number, singular: string, plural: string): string =>
   count === 1 ? `1 ${singular}` : `${count} ${plural}`
-
-judgeButton.textContent = `Judge ${countLabel(DEMO_CASES.length, 'case', 'cases')}`
 
 /* ------------------------------------------------------------------
    Console
@@ -210,6 +194,23 @@ const formatValue = (value: unknown): string => {
   }
 }
 
+const renderTestDefinitions = (): void => {
+  const rows = DEMO_CASES.map((testCase) => {
+    const row = el('li', 'test-definition')
+    const invocation = `${testCase.exportName}(${(testCase.args ?? []).map(formatValue).join(', ')})`
+    const expectation = Object.hasOwn(testCase, 'expected')
+      ? `expects ${formatValue(testCase.expected)}`
+      : 'passes if it does not throw'
+    row.append(
+      el('span', 'test-name', testCase.name),
+      el('code', 'test-invocation', invocation),
+      el('span', 'test-expectation', expectation),
+    )
+    return row
+  })
+  testDefinitions.replaceChildren(...rows)
+}
+
 const caseDetail = (caseResult: JudgeCaseResult): string | undefined => {
   if (caseResult.status === 'fail') {
     return `expected ${formatValue(caseResult.expected)}, got ${formatValue(caseResult.actual)}`
@@ -237,28 +238,11 @@ const renderCases = (cases: readonly JudgeCaseResult[]): void => {
   casesView.replaceChildren(...rows)
 }
 
-/* ------------------------------------------------------------------
-   Resolved dependencies. Rust as content, and the only place it
-   appears as content anywhere in the interface.
-   ------------------------------------------------------------------ */
-
-const showResolvedDeps = (dependencies: readonly ResolvedDependency[]): void => {
-  const versions = new Map(dependencies.map((dependency) => [dependency.name, dependency.version]))
-  for (const row of depsList.querySelectorAll<HTMLLIElement>('li[data-pkg]')) {
-    const slot = row.querySelector<HTMLSpanElement>('.dep-resolved')
-    const version = versions.get(row.dataset.pkg ?? '')
-    if (slot !== null) {
-      slot.textContent = version === undefined ? '' : `@${version}`
-    }
-  }
-}
-
 const renderResult = (result: JudgeRunResult, showLocation: boolean): void => {
   if (result.error !== undefined) {
     renderFault(result.error, showLocation)
   }
   renderCases(result.cases)
-  showResolvedDeps(result.dependencies)
 
   const facts = [`${result.durationMs} ms`, countLabel(result.dependencies.length, 'dep', 'deps')]
   renderTape(result.status, result.status === 'pass' ? 'ok' : 'fail', facts)
@@ -277,13 +261,12 @@ const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
   clearFault()
   consoleView.replaceChildren(emptyLine(CONSOLE_EMPTY))
   casesView.replaceChildren()
-  showResolvedDeps([])
   renderTape('running', 'running', [])
   session.close()
   session = createSession()
-  const language = sourceLanguage
+  const language = sourceState.language
   try {
-    const source = await executableSource(currentSource(), language)
+    const source = await executableSource(sourceState.source, language)
     const result = await session.runJudge(source, cases, { onConsoleChunk: appendConsoleLine })
     renderResult(result, language === 'mjs')
   } catch (error) {
@@ -307,8 +290,8 @@ judgeButton.addEventListener('click', () => {
 })
 
 /* ------------------------------------------------------------------
-   REPL: the editor module seeds one persistent worker scope. Editing
-   source or dependency pins discards it so the next input reloads.
+   REPL: the editor module seeds one persistent worker scope. Editing,
+   restoring, or changing source language discards it so the next input reloads.
    ------------------------------------------------------------------ */
 
 let replSession: ReplSession | null = null
@@ -318,7 +301,7 @@ const replContextInputs: string[] = []
 let replCompletionPrefix = ''
 
 const refreshReplCompletionPrefix = (): void => {
-  replCompletionPrefix = `${currentSource()}\n${replContextInputs.join('\n')}\n`
+  replCompletionPrefix = `${sourceState.source}\n${replContextInputs.join('\n')}\n`
 }
 
 const discardReplSession = (): void => {
@@ -356,12 +339,11 @@ const appendReplConsole = (chunk: ConsoleChunk): void => {
 const getReplSession = (): Promise<ReplSession> => {
   if (replReady === null) {
     const generation = replGeneration
-    const source = currentSource()
-    const language = sourceLanguage
+    const source = sourceState.source
+    const language = sourceState.language
     const nextSession = createReplSession({
       workerFactory: () => adaptWorker(new RunesmWorker()),
       executionWorkerUrl: RunesmExecutionWorkerUrl,
-      deps: collectPinnedDeps(),
       timeoutMs: 10_000,
     })
     replSession = nextSession
@@ -412,7 +394,7 @@ const renderReplResult = (result: ReplResult): void => {
 
 const submitRepl = async (input: string): Promise<void> => {
   const generation = replGeneration
-  const language = sourceLanguage
+  const language = sourceState.language
   appendReplLine('input', '›', input)
   try {
     const [readySession, compiledInput] = await Promise.all([getReplSession(), executableSource(input, language)])
@@ -446,130 +428,94 @@ replResetButton.addEventListener('click', () => {
   replEditor.focus()
 })
 
-/* ------------------------------------------------------------------
-   Deps list, rebuilt from the imports the editor currently declares.
-   ------------------------------------------------------------------ */
-
-const collectBareSpecifiersFromCode = (code: string): string[] => collectBareSpecifiers(parseUserModule(code))
-
-/**
- * Groups the editor's specifiers by the package they belong to. Pins are per
- * package, and an inline tag like `effect@beta/Console` is not part of the
- * package name, so runesm's own resolver does the naming. Specifiers it cannot
- * resolve at all are not pinnable; the run reports them as a fault.
- */
-const groupByPackage = (specifiers: readonly string[]): Map<string, string[]> => {
-  const groups = new Map<string, string[]>()
-  for (const specifier of specifiers) {
-    let name: string | undefined
-    try {
-      name = resolveImportSpecifier(specifier, { autoInstall: true }).dependency?.name
-    } catch {
-      continue
-    }
-    if (name === undefined) {
-      continue
-    }
-    const group = groups.get(name)
-    if (group === undefined) {
-      groups.set(name, [specifier])
-    } else if (!group.includes(specifier)) {
-      group.push(specifier)
-    }
-  }
-  return groups
-}
-
-let depsRefreshGeneration = 0
-let depsRefreshTimer: ReturnType<typeof setTimeout> | undefined
-let renderedDepsSignature: string | undefined
-
-const refreshDeps = async (): Promise<void> => {
-  const generation = ++depsRefreshGeneration
-  let specifiers: string[]
-  try {
-    specifiers = collectBareSpecifiersFromCode(await executableSource())
-  } catch {
-    // Syntax errors while typing are fine: keep the previous dep list.
-    return
-  }
-  if (generation !== depsRefreshGeneration) {
-    return
-  }
-  const previous = collectPinnedDeps()
-
-  const groups = groupByPackage(specifiers)
-  const signature = JSON.stringify([...groups])
-  if (signature === renderedDepsSignature) {
-    return
-  }
-  renderedDepsSignature = signature
-  if (groups.size === 0) {
-    depsList.replaceChildren(
-      el('li', 'dep-empty well-empty', 'No bare imports yet. Import a package and it shows up here.'),
-    )
-    return
-  }
-
-  const rows = [...groups].map(([packageName, packageSpecifiers], index) => {
-    const inputId = `dep-pin-${index}`
-
-    const row = el('li', 'dep')
-    row.dataset.pkg = packageName
-
-    const label = document.createElement('label')
-    label.className = 'dep-name'
-    label.htmlFor = inputId
-    label.append(packageName, el('span', 'sr-only', ' version pin'))
-
-    const version = document.createElement('input')
-    version.id = inputId
-    version.type = 'text'
-    version.dataset.pkg = packageName
-    version.placeholder = 'latest'
-    version.value = previous[packageName] ?? ''
-    version.addEventListener('change', () => {
-      resetRepl()
-    })
-
-    row.append(label, el('span', 'dep-resolved'), version)
-
-    // Only worth showing when a specifier says more than the package name does,
-    // which is exactly when a subpath or an inline tag is doing something.
-    const detailed = packageSpecifiers.filter((specifier) => specifier !== packageName)
-    if (detailed.length > 0) {
-      row.append(el('p', 'dep-specifiers', detailed.join('  ')))
-    }
-    return row
-  })
-  depsList.replaceChildren(...rows)
-}
-
-const scheduleDepsRefresh = (): void => {
-  clearTimeout(depsRefreshTimer)
-  depsRefreshTimer = setTimeout(() => void refreshDeps(), 160)
-}
-
 const resetRepl = (): void => {
   discardReplSession()
   replHistory.replaceChildren(emptyLine(REPL_EMPTY))
 }
 
-const updateLanguageButtons = (): void => {
+const renderSourceControls = (): void => {
   for (const button of languageButtons) {
-    button.setAttribute('aria-pressed', String(button.dataset.language === sourceLanguage))
+    const language = button.dataset.language
+    button.setAttribute('aria-pressed', String(language === sourceState.language))
+    button.disabled = switchingLanguage || (language === 'ts' && !sourceState.typeScriptAvailable)
+  }
+  sourceResetButton.disabled = switchingLanguage || !sourceState.dirty
+
+  const status =
+    sourceTransitionStatus?.message ??
+    (sourceState.typeScriptAvailable ? undefined : 'JavaScript changed. Restore the initial source to return to .ts.')
+  sourceStatus.hidden = status === undefined
+  sourceStatus.textContent = status ?? ''
+  sourceStatus.dataset.tone = sourceTransitionStatus?.tone ?? 'notice'
+}
+
+const renderVisibleSource = (): void => {
+  replacingEditorSource = true
+  try {
+    sourceEditor.setLanguage(sourceState.language)
+    sourceEditor.setValue(sourceState.source)
+    replEditor.setLanguage(sourceState.language)
+  } finally {
+    replacingEditorSource = false
+  }
+}
+
+const switchSourceLanguage = async (nextLanguage: SourceLanguage): Promise<void> => {
+  if (switchingLanguage || nextLanguage === sourceState.language) {
+    return
+  }
+  if (nextLanguage === 'ts') {
+    if (!sourceState.showTypeScript()) {
+      renderSourceControls()
+      return
+    }
+    sourceTransitionStatus = undefined
+    renderVisibleSource()
+    renderSourceControls()
+    resetRepl()
+    return
+  }
+
+  sourceEditor.focus()
+  switchingLanguage = true
+  sourceTransitionStatus = undefined
+  renderSourceControls()
+  try {
+    const result = await sourceState.showJavaScriptForCurrentTypeScript((source) => typescriptClient.transpile(source))
+    if (result.status === 'shown') {
+      renderVisibleSource()
+      resetRepl()
+    } else if (result.status === 'source-changed') {
+      sourceTransitionStatus = {
+        message: 'Source changed while generating .mjs. Open .mjs again to generate the latest JavaScript.',
+        tone: 'notice',
+      }
+    } else {
+      sourceTransitionStatus = {
+        message: `Cannot open .mjs: ${serializeThrown(result.error).message}`,
+        tone: 'error',
+      }
+    }
+  } finally {
+    switchingLanguage = false
+    renderSourceControls()
   }
 }
 
 sourceEditor = createSourceEditor({
   parent: editor,
   doc: DEFAULT_CODE,
-  language: sourceLanguage,
+  language: sourceState.language,
   typescript: typescriptClient,
-  completionSource: typescriptClient.completionSource(() => ({ prefix: '', language: sourceLanguage })),
+  completionSource: typescriptClient.completionSource(() => ({ prefix: '', language: sourceState.language })),
   onChange: () => {
+    if (replacingEditorSource) {
+      return
+    }
+    sourceState.edit(sourceEditor.getValue())
+    sourceTransitionStatus = undefined
+    renderSourceControls()
     resetRepl()
-    scheduleDepsRefresh()
   },
   onRun: () => void execute([]),
 })
@@ -577,10 +523,10 @@ refreshReplCompletionPrefix()
 
 replEditor = createReplEditor({
   parent: replInput,
-  language: sourceLanguage,
+  language: sourceState.language,
   completionSource: typescriptClient.completionSource(() => ({
     prefix: replCompletionPrefix,
-    language: sourceLanguage,
+    language: sourceState.language,
   })),
   onSubmit: (input) => void submitRepl(input),
 })
@@ -588,17 +534,21 @@ replEditor = createReplEditor({
 for (const button of languageButtons) {
   button.addEventListener('click', () => {
     const nextLanguage = button.dataset.language
-    if ((nextLanguage !== 'ts' && nextLanguage !== 'mjs') || nextLanguage === sourceLanguage) {
+    if (nextLanguage !== 'ts' && nextLanguage !== 'mjs') {
       return
     }
-    sourceLanguage = nextLanguage
-    sourceEditor.setLanguage(nextLanguage)
-    replEditor.setLanguage(nextLanguage)
-    updateLanguageButtons()
-    resetRepl()
-    void refreshDeps()
+    void switchSourceLanguage(nextLanguage)
   })
 }
+
+sourceResetButton.addEventListener('click', () => {
+  sourceState.reset()
+  sourceTransitionStatus = undefined
+  renderVisibleSource()
+  sourceEditor.focus()
+  renderSourceControls()
+  resetRepl()
+})
 
 window.addEventListener('pagehide', (event) => {
   if (event.persisted) {
@@ -611,8 +561,8 @@ window.addEventListener('pagehide', (event) => {
   replSession?.close()
 })
 
-updateLanguageButtons()
-void refreshDeps()
+renderSourceControls()
+renderTestDefinitions()
 consoleView.replaceChildren(emptyLine(CONSOLE_EMPTY))
 replHistory.replaceChildren(emptyLine(REPL_EMPTY))
 renderTape('idle', 'idle', [])

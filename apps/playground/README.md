@@ -1,6 +1,6 @@
 # playground
 
-Judge and REPL demo for [`runesm`](../../packages/runesm): an editor for user-authored ESM, an auto-detected deps list with optional version pins, an output panel streaming console output and per-case results, and a persistent REPL. The workers are bundled by vite from the runesm source entry, so the app works under its non-root base (`/playground/`) in dev and build.
+Judge and REPL demo for [`runesm`](../../packages/runesm): a TypeScript editor with its generated JavaScript counterpart, inspectable judge cases, an output panel streaming console output and per-case results, and a persistent REPL. The workers are bundled by vite from the runesm source entry, so the app works under its non-root base (`/playground/`) in dev and build.
 
 ## Design
 
@@ -17,20 +17,19 @@ The editor uses CodeMirror 6 for TypeScript and JavaScript syntax, keyboard
 editing, diagnostics, and completion. A dedicated language-service worker keeps
 that work off the page thread. In `.ts` mode it compiles the current source in
 the browser before passing the emitted ESM to runesm; `.mjs` mode passes the
-JavaScript source directly.
+JavaScript source directly. The two views retain separate source: TypeScript
+edits regenerate `.mjs` on navigation, syntax errors keep the editor in `.ts`,
+and direct JavaScript edits disable `.ts` until Restore initial source resets
+both views. The View tests disclosure exposes every fixed judge case before it
+runs.
 
 The first REPL command lazily evaluates the current editor module into the
 persistent REPL scope, so declarations such as `export const solve` are directly
 callable. Completion sees the editor module and successful prior commands, while
 the right arrow accepts the faded inline suggestion from an empty input and the
-up and down arrows traverse command history. Editing source, changing a dependency
-pin, or pressing Reset scope discards that scope; the next command reloads the
-current module first.
-
-Deps rows are keyed by package, because a version pin is per package while a
-specifier such as `effect@beta/Console` is not. `groupByPackage` in
-[`src/main.ts`](./src/main.ts) uses runesm's own `resolveImportSpecifier` to name
-the package rather than re-implementing specifier parsing in the demo.
+up and down arrows traverse command history. Editing or restoring source, changing
+language, or pressing Reset scope discards that scope; the next command reloads
+the current module first.
 
 ```bash
 pnpm --filter playground dev       # http://localhost:5173/playground/
