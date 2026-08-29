@@ -14,9 +14,11 @@ Martian Mono is set on its width axis (`font-stretch: 87.5%`, narrowing to `75%`
 on small screens) rather than by shrinking the code type size.
 
 The editor uses CodeMirror 6 for TypeScript and JavaScript syntax, keyboard
-editing, diagnostics, and completion. A dedicated language-service worker keeps
-that work off the page thread. In `.ts` mode it compiles the current source in
-the browser before passing the emitted ESM to runesm; `.mjs` mode passes the
+editing, diagnostics, completion, and inferred-type hover help. A dedicated
+language-service worker keeps that work off the page thread and acquires cached
+npm declaration graphs on demand for bare imports, including inline versions
+such as `effect@beta` and `zod@4`. In `.ts` mode it compiles the current source
+in the browser before passing the emitted ESM to runesm; `.mjs` mode passes the
 JavaScript source directly. The two views retain separate source: TypeScript
 edits regenerate `.mjs` on navigation, syntax errors keep the editor in `.ts`,
 and direct JavaScript edits disable `.ts` until Restore initial source resets

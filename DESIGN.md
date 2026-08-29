@@ -256,7 +256,7 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 
 - **Style:** paper-sunk fill, 4px radius, 12px padding, code typography, no border.
 - **Behavior:** scroll internally rather than growing the page. The console well is a polite live region so streamed output is announced.
-- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, inferred-type hover help, and syntax rendering. `.ts` uses the TypeScript language mode and compiles in a dedicated browser worker before runesm executes the emitted module; `.mjs` shows that generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
+- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, inferred-type hover help, and syntax rendering. Its dedicated TypeScript worker acquires and caches npm declaration graphs on demand for bare imports and their inline versions. `.ts` compiles in that worker before runesm executes the emitted module; `.mjs` shows the generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
 - **Empty state:** a single line of graphite-soft body text stating what will appear here, never a blank box.
 
 ### Source Language Controls

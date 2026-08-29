@@ -1,6 +1,20 @@
 import { defineVideo } from 'termcut'
 import { DEFAULT_CODE } from './src/examples'
 
+const ZOD_INFERENCE_CODE = `import { z } from 'zod@4'
+
+const UserInput = z.object({
+  name: z.string(),
+  age: z.number(),
+})
+
+type UserInput = z.infer<typeof UserInput>
+`
+
+const ZOD_COMPLETION_CODE = `import { z } from 'zod@4'
+
+z.`
+
 const INSTALL_CODEMIRROR_HELPERS = `(() => {
   window.__demoSetCodeMirror = (selector, text) => {
     const target = document.querySelector(selector + ' .cm-content')
@@ -58,8 +72,8 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
     throw new Error('CodeMirror text is missing: ' + text)
   }
 
-  window.__demoWaitFor = async (predicate, message) => {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+  window.__demoWaitFor = async (predicate, message, attempts = 60) => {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       if (predicate()) return
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
@@ -154,6 +168,59 @@ export default defineVideo(
 
       })()`)
       await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
+
+      await t.browser.evaluate(`(() => {
+        window.__demoHoverCodeMirrorText('#editor', 'UserInput')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('Schema.Struct') === true,
+          'Effect quick info did not load',
+          90,
+        )
+        if (document.querySelector('.cm-typescript-info')?.textContent?.includes('any') === true) {
+          throw new Error('Effect quick info resolved UserInput to any')
+        }
+      })()`)
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', ${JSON.stringify(ZOD_INFERENCE_CODE)})
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'Effect quick info remained visible after loading Zod source',
+        )
+      })()`)
+      await t.browser.evaluate(`(() => {
+        window.__demoHoverCodeMirrorText('#editor', 'UserInput')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('ZodObject') === true,
+          'Zod quick info did not load',
+          90,
+        )
+        if (document.querySelector('.cm-typescript-info')?.textContent?.includes('any') === true) {
+          throw new Error('Zod quick info resolved UserInput to any')
+        }
+      })()`)
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', ${JSON.stringify(ZOD_COMPLETION_CODE)})
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'Zod quick info remained visible before completion check',
+        )
+        if (!document.execCommand('insertText', false, 'o')) {
+          throw new Error('could not trigger Zod member completion')
+        }
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-tooltip-autocomplete')?.textContent?.includes('object') === true,
+          'Zod member completion did not load',
+        )
+        window.__demoPressCodeMirror('#editor', 'Escape', { code: 'Escape' })
+      })()`)
 
       await t.browser.evaluate(`(() => {
         window.__demoSetCodeMirror('#editor', 'const answer = 42')

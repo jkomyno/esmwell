@@ -11,6 +11,12 @@ import type {
   TypeScriptWorkerResponse,
 } from './typescript-protocol'
 import { serializeQuickInfo } from './typescript-quick-info'
+import {
+  isModuleSpecifierPosition,
+  typeResolutionKey,
+  TypeScriptTypeAcquirer,
+  type TypeScriptTypeGraph,
+} from './typescript-type-acquisition'
 
 const LIB_FILES = import.meta.glob<string>('../node_modules/typescript-legacy/lib/lib*.d.ts', {
   eager: true,
@@ -21,6 +27,9 @@ const LIB_FILES = import.meta.glob<string>('../node_modules/typescript-legacy/li
 const libraries = new Map(
   Object.entries(LIB_FILES).map(([path, source]) => [`/${path.split('/').at(-1) ?? path}`, source]),
 )
+const moduleResolutions = new Map<string, string>()
+const typeFileNames = new Set<string>()
+const typeAcquirer = new TypeScriptTypeAcquirer()
 
 const sourceFileNames: Readonly<Record<SourceLanguage, string>> = {
   ts: '/playground.ts',
@@ -56,6 +65,26 @@ const sourceFor = (fileName: string): string | undefined => {
   return libraries.get(absolute)
 }
 
+const declarationExtension = (fileName: string): ts.Extension => {
+  if (fileName.endsWith('.d.mts')) {
+    return ts.Extension.Dmts
+  }
+  if (fileName.endsWith('.d.cts')) {
+    return ts.Extension.Dcts
+  }
+  return ts.Extension.Dts
+}
+
+const containingPackagePrefix = (fileName: string): string | undefined => {
+  const root = '/node_modules/.runesm-types/'
+  if (!fileName.startsWith(root)) {
+    return undefined
+  }
+  const segments = fileName.slice(root.length).split('/')
+  const packageSegments = segments[0]?.startsWith('@') ? segments.slice(0, 2) : segments.slice(0, 1)
+  return packageSegments.length === 0 ? undefined : `${root}${packageSegments.join('/')}/`
+}
+
 const host: ts.LanguageServiceHost = {
   fileExists: (fileName) => sourceFor(fileName) !== undefined,
   getCompilationSettings: () => compilerOptions(currentLanguage),
@@ -71,10 +100,26 @@ const host: ts.LanguageServiceHost = {
   },
   getScriptVersion: (fileName) => (fileName === activeFileName() ? String(sourceVersion) : '1'),
   readFile: sourceFor,
+  resolveModuleNameLiterals: (moduleLiterals, containingFile, _redirectedReference, options) =>
+    moduleLiterals.map((moduleLiteral) => {
+      const packagePrefix = containingPackagePrefix(containingFile)
+      const resolvedFileName = moduleResolutions.get(typeResolutionKey(moduleLiteral.text, packagePrefix))
+      if (resolvedFileName !== undefined) {
+        return {
+          resolvedModule: {
+            resolvedFileName,
+            extension: declarationExtension(resolvedFileName),
+            isExternalLibraryImport: true,
+          },
+        }
+      }
+      return ts.resolveModuleName(moduleLiteral.text, containingFile, options, host)
+    }),
   useCaseSensitiveFileNames: () => true,
 }
 
 const languageService = ts.createLanguageService(host, ts.createDocumentRegistry())
+let appliedTypeGraph: TypeScriptTypeGraph | undefined
 
 const setSource = (source: string, language: SourceLanguage): void => {
   if (source === currentSource && language === currentLanguage) {
@@ -83,6 +128,31 @@ const setSource = (source: string, language: SourceLanguage): void => {
   currentSource = source
   currentLanguage = language
   sourceVersion += 1
+}
+
+const applyTypeGraph = (graph: TypeScriptTypeGraph): void => {
+  if (graph === appliedTypeGraph) {
+    return
+  }
+  for (const fileName of typeFileNames) {
+    libraries.delete(fileName)
+  }
+  typeFileNames.clear()
+  moduleResolutions.clear()
+  for (const file of graph.files) {
+    libraries.set(file.fileName, file.content)
+    typeFileNames.add(file.fileName)
+  }
+  for (const resolution of graph.resolutions) {
+    moduleResolutions.set(typeResolutionKey(resolution.specifier, resolution.containingFilePrefix), resolution.fileName)
+  }
+  appliedTypeGraph = graph
+  sourceVersion += 1
+}
+
+const withTypeGraph = async <Result>(source: string, operation: () => Result): Promise<Result> => {
+  applyTypeGraph(await typeAcquirer.acquire(source))
+  return operation()
 }
 
 const diagnosticData = (diagnostic: ts.Diagnostic, sourceFile: ts.SourceFile): TypeScriptDiagnostic => {
@@ -208,17 +278,19 @@ interface TypeScriptWorkerScope {
 const scope = self as unknown as TypeScriptWorkerScope
 const postToPage = scope.postMessage.bind(scope)
 
-scope.addEventListener('message', (event: MessageEvent<TypeScriptWorkerRequest>): void => {
+scope.addEventListener('message', async (event: MessageEvent<TypeScriptWorkerRequest>): Promise<void> => {
   const request = event.data
   try {
-    const result = (() => {
+    const result = await (() => {
       switch (request.type) {
         case 'completions':
-          return completions(request.source, request.language, request.position)
+          return isModuleSpecifierPosition(request.source, request.position)
+            ? completions(request.source, request.language, request.position)
+            : withTypeGraph(request.source, () => completions(request.source, request.language, request.position))
         case 'diagnostics':
           return diagnostics(request.source, request.language)
         case 'quick-info':
-          return quickInfo(request.source, request.language, request.position)
+          return withTypeGraph(request.source, () => quickInfo(request.source, request.language, request.position))
         case 'transpile':
           return transpile(request.source)
       }
