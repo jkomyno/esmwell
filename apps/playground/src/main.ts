@@ -12,6 +12,7 @@ import { createReplEditor, createSourceEditor, type ReplEditor, type SourceEdito
 import RunesmExecutionWorkerUrl from './runesm-execution-worker?worker&url'
 import RunesmWorker from './runesm-worker?worker'
 import { DEFAULT_CODE, DEMO_CASES } from './examples'
+import { describeWhere, faultKind, serializeThrown } from './fault'
 import { SourceLanguageState } from './source-language-state'
 import { TypeScriptClient, TypeScriptCompileError } from './typescript-client'
 import type { SourceLanguage } from './typescript-protocol'
@@ -128,46 +129,8 @@ const appendConsoleLine = (chunk: ConsoleChunk): void => {
    detail to act on, using the structured fields the error carries.
    ------------------------------------------------------------------ */
 
-const FAULT_KINDS: Readonly<Record<string, string>> = {
-  UserSyntaxError: 'Syntax error',
-  PolicyViolation: 'Policy violation',
-  SpecifierResolutionError: 'Unresolved import',
-  TimeoutError: 'Timed out',
-  TypeScriptError: 'TypeScript error',
-}
-
-const serializeThrown = (error: unknown): SerializedError => {
-  if (error instanceof TypeScriptCompileError) {
-    return { name: error.name, message: error.message, line: error.line, column: error.column }
-  }
-  if (error instanceof Error) {
-    return { name: error.name, message: error.message }
-  }
-  return { name: 'Error', message: String(error) }
-}
-
-/**
- * The location detail the error's own message does not already carry. A
- * resolution failure names its specifier and reason itself, so it gets nothing.
- */
-const describeWhere = (error: SerializedError): string | undefined => {
-  if (error.specifier !== undefined) {
-    return undefined
-  }
-  if (error.rule !== undefined && error.line !== undefined) {
-    return `Rule ${error.rule}, line ${error.line}.`
-  }
-  if (error.line !== undefined && error.column !== undefined) {
-    return `Line ${error.line}, column ${error.column + 1}.`
-  }
-  if (error.line !== undefined) {
-    return `Line ${error.line}.`
-  }
-  return undefined
-}
-
 const renderFault = (error: SerializedError, showLocation = true): void => {
-  const nodes: HTMLElement[] = [el('p', 'fault-kind', FAULT_KINDS[error.name] ?? error.name)]
+  const nodes: HTMLElement[] = [el('p', 'fault-kind', faultKind(error))]
   nodes.push(el('p', 'fault-message', error.message))
   const where = showLocation ? describeWhere(error) : undefined
   if (where !== undefined) {
