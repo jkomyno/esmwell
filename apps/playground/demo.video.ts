@@ -16,9 +16,14 @@ const ZOD_COMPLETION_CODE = `import { z } from 'zod@4'
 z.`
 
 const INSTALL_CODEMIRROR_HELPERS = `(() => {
-  window.__demoSetCodeMirror = (selector, text) => {
+  const cmContent = (selector) => {
     const target = document.querySelector(selector + ' .cm-content')
     if (!(target instanceof HTMLElement)) throw new Error('CodeMirror target is missing: ' + selector)
+    return target
+  }
+
+  window.__demoSetCodeMirror = (selector, text) => {
+    const target = cmContent(selector)
     target.focus()
     const selection = getSelection()
     const range = document.createRange()
@@ -29,8 +34,7 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
   }
 
   window.__demoPressCodeMirror = (selector, key, init = {}) => {
-    const target = document.querySelector(selector + ' .cm-content')
-    if (!(target instanceof HTMLElement)) throw new Error('CodeMirror target is missing: ' + selector)
+    const target = cmContent(selector)
     target.focus()
     target.dispatchEvent(
       new KeyboardEvent('keydown', { key, code: init.code ?? key, bubbles: true, cancelable: true, ...init }),
@@ -38,8 +42,7 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
   }
 
   window.__demoUndoCodeMirror = (selector) => {
-    const target = document.querySelector(selector + ' .cm-content')
-    if (!(target instanceof HTMLElement)) throw new Error('CodeMirror target is missing: ' + selector)
+    const target = cmContent(selector)
     target.focus()
     target.dispatchEvent(
       new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true }),
@@ -47,9 +50,7 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
   }
 
   window.__demoHoverCodeMirrorText = (selector, text) => {
-    const content = document.querySelector(selector + ' .cm-content')
-    if (!(content instanceof HTMLElement)) throw new Error('CodeMirror target is missing: ' + selector)
-    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
+    const walker = document.createTreeWalker(cmContent(selector), NodeFilter.SHOW_TEXT)
     let node = walker.nextNode()
     while (node) {
       const offset = node.textContent?.indexOf(text) ?? -1

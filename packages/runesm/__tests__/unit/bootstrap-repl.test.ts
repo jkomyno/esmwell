@@ -141,7 +141,7 @@ describe('REPL persistence', () => {
 })
 
 describe('REPL rejections and capture', () => {
-  it('loads editor-style ESM declarations into the persistent scope', async () => {
+  it('loads named ESM declarations into the persistent scope', async () => {
     const session = createReplSessionInRealm({})
     const loaded = await evaluate(session, 'const factor = 2\nexport const solve = (input) => input.value * factor')
     const result = await evaluate(session, 'solve({ value: 21 })')
