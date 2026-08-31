@@ -27,37 +27,25 @@ colors:
   editor-active-line: 'oklch(91% 0.014 75)'
 typography:
   display:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
     fontSize: 'clamp(2rem, 1.4rem + 2.6vw, 3.25rem)'
     fontWeight: 700
     lineHeight: 1.05
     letterSpacing: '-0.02em'
-  headline:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
-    fontSize: '1.5rem'
-    fontWeight: 650
-    lineHeight: 1.15
-    letterSpacing: '-0.01em'
-  title:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
-    fontSize: '1.1875rem'
-    fontWeight: 600
-    lineHeight: 1.25
-    letterSpacing: 'normal'
   body:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
     fontSize: '0.9375rem'
     fontWeight: 400
     lineHeight: 1.6
     letterSpacing: 'normal'
   label:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
     fontSize: '0.75rem'
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: '0.08em'
   code:
-    fontFamily: 'Martian Mono, ui-monospace, SFMono-Regular, Menlo, monospace'
+    fontFamily: 'Martian Mono Variable, ui-monospace, SFMono-Regular, Menlo, monospace'
     fontSize: '0.8125rem'
     fontWeight: 400
     lineHeight: 1.65
@@ -66,7 +54,6 @@ typography:
 rounded:
   sm: '2px'
   md: '4px'
-  pill: '999px'
 spacing:
   hair: '4px'
   tight: '8px'
@@ -114,6 +101,12 @@ components:
     typography: '{typography.body}'
     rounded: '{rounded.md}'
     padding: '8px 12px'
+  repl-entry:
+    backgroundColor: '{colors.paper-raised}'
+    textColor: '{colors.graphite}'
+    typography: '{typography.code}'
+    rounded: '{rounded.sm}'
+    padding: '7px 12px'
 ---
 
 # Design System: runesm playground
@@ -187,7 +180,7 @@ Syntax ink is meaningful only inside source code. It never appears in headings, 
 
 **The Never Hue-Alone Rule.** Status is never carried by color alone. Every pass, fail, running, and error state ships a text label or glyph alongside its hue. Removing all color from the interface must leave it fully readable.
 
-**The Two-Ground Rule.** Only two background values appear in normal use: paper and paper-sunk. A third background is a sign that a container was added that did not need to exist.
+**The Two-Ground Rule.** Structural surfaces use only paper and paper-sunk. Paper-raised is reserved for interactive controls, never a third container layer. Another structural background is a sign that a container was added that did not need to exist.
 
 ## 3. Typography
 
@@ -200,13 +193,11 @@ Syntax ink is meaningful only inside source code. It never appears in headings, 
 ### Hierarchy
 
 - **Display** (700, `clamp(2rem, 1.4rem + 2.6vw, 3.25rem)`, 1.05, `-0.02em`): the playground wordmark and nothing else.
-- **Headline** (650, 1.5rem, 1.15, `-0.01em`): section headings when the page grows past one screen.
-- **Title** (600, 1.1875rem, 1.25): pane titles that need more presence than a label.
 - **Body** (400, 0.9375rem, 1.6): prose, hints, case names. Capped at 65–75ch wherever it runs long.
 - **Label** (600, 0.75rem, 1.2, `0.08em`, uppercase): pane labels and button text.
 - **Code** (400, 0.8125rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, and test invocations.
 
-Steps are 0.75 → 0.9375 → 1.1875 → 1.5, each at least 1.25× the last. Flat scales are prohibited.
+The visual hierarchy runs from 0.75rem labels to 0.9375rem body text, then jumps decisively to the fluid display size. Code is a parallel functional track, distinguished by family, width, and context rather than treated as a hierarchy step.
 
 ### Named Rules
 
@@ -267,7 +258,7 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 
 ### Test Disclosure
 
-- **Structure:** native `details` and `summary` in a dedicated bottom-right strip inside the editor well, closed by default. The strip keeps the control clear of editable text. The summary reads `View tests`; its list opens above it so the control stays in place.
+- **Structure:** the editor shortcut hint and native `details`/`summary` share a footer rail beneath the recessed editor host. The rail has no background of its own; a hairline separates it from editable text, and `View tests` sits on the rail's exact horizontal center at wide widths. On compact screens the hint and control stack and center. The test list opens centered above the control and stays inside the editor bounds.
 - **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution.
 - **Style:** the summary is a compact raised control. The expanded list is a genuine popover using `paper-sunk`, the lifted shadow, one hairline between rows, body text for names and expectations, and code typography for invocations.
 
@@ -286,6 +277,13 @@ The signature component, and the one place the old design broke a hard rule.
 - **Input:** `Ctrl+Space` opens completion against the editor module and successful prior inputs. Right arrow accepts the faded inline suggestion while the input is empty. Up and down arrows traverse command history, restoring the unfinished draft after the newest entry.
 - **History:** a sunk well above it. Input lines prefixed `›` in graphite, values prefixed `=` in graphite-soft, errors prefixed `!` in crimson.
 
+### Responsive Bench
+
+- **Wide:** source and response columns share one viewport, with the editor taking slightly more width and both columns distributing the bounded height through internally scrolling wells.
+- **Pane headers:** every pane uses the same label, metadata, and control columns. Editor and Output therefore begin on the same horizontal line, while REPL shortcuts stay attached to its reset action instead of floating between edges.
+- **Stacked:** below `68rem`, the source column comes first, followed by Output and REPL. The page stops stretching the editor to the remaining viewport; its well stays between `20rem` and `25rem`, using `46svh` as the fluid target so the response begins near the first fold.
+- **Compact:** below `40rem`, pane heads and action groups wrap, while the editor footer collapses to one centered column. Code narrows on Martian Mono's width axis. Once the bench stacks, every control retains a `44px` minimum target.
+
 ## 6. Do's and Don'ts
 
 ### Do:
@@ -295,6 +293,7 @@ The signature component, and the one place the old design broke a hard rule.
 - **Do** make the primary action graphite fill with paper text. Weight makes it primary, not color.
 - **Do** pair every status color with a text label, so the interface survives with all color removed.
 - **Do** recess surfaces the machine writes into, and keep surfaces the user acts on flush or raised.
+- **Do** keep the editor footer rail transparent; only the editor host receives the `paper-sunk` ground.
 - **Do** use Martian Mono only for code and machine output. Everything else is Archivo.
 - **Do** vary spacing for rhythm across the 4/8/12/20/32/52 scale. Identical padding on every element is monotony.
 - **Do** honor `prefers-reduced-motion` on every transition, and keep motion to feedback that makes streaming legible.

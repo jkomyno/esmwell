@@ -116,15 +116,40 @@ export default defineVideo(
         if (!(editor instanceof HTMLDivElement) || !(content instanceof HTMLElement)) {
           throw new Error('CodeMirror editor markup is missing')
         }
-        if (!content.textContent?.includes('type UserInput = typeof UserInput.Type')) {
+        if (!content.textContent?.includes('type User = typeof User.Type')) {
           throw new Error('TypeScript source is not visible in the editor')
         }
+        if (content.textContent.includes('//')) {
+          throw new Error('default TypeScript source still contains comments')
+        }
         const editorStage = document.querySelector('.editor-stage')
+        const editorFooter = document.querySelector('.editor-footer')
+        const runBar = document.querySelector('.run-bar')
+        const consoleWell = document.querySelector('#console')
+        const wordmark = document.querySelector('.wordmark')
+        const claim = document.querySelector('.claim')
+        const editorHead = document.querySelector('#label-editor')?.parentElement
+        const outputHead = document.querySelector('#label-output')?.parentElement
+        const replHead = document.querySelector('#label-repl')?.parentElement
+        const replShortcuts = document.querySelector('#repl-shortcuts')
+        const replActions = document.querySelector('#repl-reset')?.parentElement
+        const editorShortcuts = document.querySelector('#editor-shortcuts')
         const testsSummary = document.querySelector('.test-disclosure summary')
         const testsDisclosure = document.querySelector('.test-disclosure')
         const testDefinitions = document.querySelector('.test-definitions')
         if (
           !(editorStage instanceof HTMLElement) ||
+          !(editorFooter instanceof HTMLElement) ||
+          !(runBar instanceof HTMLElement) ||
+          !(consoleWell instanceof HTMLElement) ||
+          !(wordmark instanceof HTMLElement) ||
+          !(claim instanceof HTMLElement) ||
+          !(editorHead instanceof HTMLElement) ||
+          !(outputHead instanceof HTMLElement) ||
+          !(replHead instanceof HTMLElement) ||
+          !(replShortcuts instanceof HTMLElement) ||
+          !(replActions instanceof HTMLElement) ||
+          !(editorShortcuts instanceof HTMLElement) ||
           !(testsSummary instanceof HTMLElement) ||
           !(testsDisclosure instanceof HTMLDetailsElement) ||
           !(testDefinitions instanceof HTMLElement)
@@ -132,15 +157,42 @@ export default defineVideo(
           throw new Error('editor tests disclosure is missing')
         }
         const stageBounds = editorStage.getBoundingClientRect()
+        const footerBounds = editorFooter.getBoundingClientRect()
+        const shortcutsBounds = editorShortcuts.getBoundingClientRect()
         const summaryBounds = testsSummary.getBoundingClientRect()
-        const rightInset = stageBounds.right - summaryBounds.right
-        const bottomInset = stageBounds.bottom - summaryBounds.bottom
-        if (rightInset < 0 || rightInset > 20 || bottomInset < 0 || bottomInset > 20) {
-          throw new Error('View tests is not anchored to the editor bottom-right')
+        const stageCenter = (stageBounds.left + stageBounds.right) / 2
+        const summaryCenter = (summaryBounds.left + summaryBounds.right) / 2
+        const shortcutsCenterLine = (shortcutsBounds.top + shortcutsBounds.bottom) / 2
+        const summaryCenterLine = (summaryBounds.top + summaryBounds.bottom) / 2
+        if (Math.abs(stageCenter - summaryCenter) > 1 || Math.abs(shortcutsCenterLine - summaryCenterLine) > 1) {
+          throw new Error('View tests is not centered on the editor shortcut line')
+        }
+        const footerBackground = getComputedStyle(editorFooter).backgroundColor
+        if (footerBackground !== 'rgba(0, 0, 0, 0)' && footerBackground !== 'transparent') {
+          throw new Error('editor footer has its own background')
         }
         const editorBounds = editor.getBoundingClientRect()
-        if (summaryBounds.top < editorBounds.bottom) {
+        if (footerBounds.top < editorBounds.bottom || summaryBounds.top < footerBounds.top) {
           throw new Error('View tests overlaps editable source')
+        }
+        if (Math.abs(stageBounds.top - consoleWell.getBoundingClientRect().top) > 1) {
+          throw new Error('Editor and Output wells do not share a top edge')
+        }
+        if (Math.abs(editorHead.getBoundingClientRect().height - outputHead.getBoundingClientRect().height) > 1) {
+          throw new Error('Editor and Output headers do not share a height')
+        }
+        if (
+          getComputedStyle(replHead).display !== 'grid' ||
+          replShortcuts.getBoundingClientRect().right > replActions.getBoundingClientRect().left ||
+          replActions.getBoundingClientRect().left - replShortcuts.getBoundingClientRect().right > 32
+        ) {
+          throw new Error('REPL metadata and controls do not occupy stable header columns')
+        }
+        if (Math.abs(wordmark.getBoundingClientRect().left - claim.getBoundingClientRect().left) > 1) {
+          throw new Error('masthead copy does not share the page axis')
+        }
+        if (runBar.getBoundingClientRect().bottom > innerHeight) {
+          throw new Error('editor actions are outside the desktop viewport')
         }
         testsDisclosure.open = true
         const definitionsBounds = testDefinitions.getBoundingClientRect()
@@ -161,7 +213,7 @@ export default defineVideo(
           }
           return ''
         }
-        const tokenColors = new Set([tokenColor('type'), tokenColor('UserInput'), tokenColor("'effect@beta/Schema'")])
+        const tokenColors = new Set([tokenColor('type'), tokenColor('User'), tokenColor("'effect@beta/Schema'")])
         if (tokenColors.has('') || tokenColors.size !== 3) {
           throw new Error('CodeMirror token categories do not have distinct syntax colors')
         }
@@ -170,7 +222,7 @@ export default defineVideo(
       await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
 
       await t.browser.evaluate(`(() => {
-        window.__demoHoverCodeMirrorText('#editor', 'UserInput')
+        window.__demoHoverCodeMirrorText('#editor', 'User')
       })()`)
       await t.browser.evaluate(`(async () => {
         await window.__demoWaitFor(
@@ -179,7 +231,7 @@ export default defineVideo(
           90,
         )
         if (document.querySelector('.cm-typescript-info')?.textContent?.includes('any') === true) {
-          throw new Error('Effect quick info resolved UserInput to any')
+          throw new Error('Effect quick info resolved User to any')
         }
       })()`)
       await t.browser.evaluate(`(() => {
@@ -283,7 +335,7 @@ export default defineVideo(
         await window.__demoWaitFor(() => {
           const active = document.querySelector('[data-language="mjs"]')?.getAttribute('aria-pressed') === 'true'
           const source = document.querySelector('#editor .cm-content')?.textContent ?? ''
-          return active && source.includes('const UserInput =') && !source.includes('type UserInput')
+          return active && source.includes('const User =') && !source.includes('type User =')
         }, '.mjs did not show generated JavaScript')
       })()`)
       await t.browser.evaluate(`(() => {
@@ -301,7 +353,7 @@ export default defineVideo(
       await t.browser.click('[data-language="ts"]')
       await t.browser.evaluate(`(() => {
         const source = document.querySelector('#editor .cm-content')?.textContent ?? ''
-        if (!source.includes('type UserInput = typeof UserInput.Type')) {
+        if (!source.includes('type User = typeof User.Type')) {
           throw new Error('.ts did not restore TypeScript source')
         }
         window.__demoSetCodeMirror('#editor', 'export const typed: number = 42')
@@ -469,14 +521,21 @@ export default defineVideo(
     await t.browser.click('.test-disclosure summary')
     await t.browser.waitFor(/solve\(\{"name":"runesm","age":3\}\)/)
     await t.browser.click('#judge')
-    await t.browser.waitFor(/decoded runesm \(age 3\)/)
-    await t.browser.waitFor(/decoded effect \(age 4\)/)
-    await t.browser.waitFor(/greets another user/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for runesm \(age 3\)/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for effect \(age 4\)/)
+    await t.browser.waitFor(/creates another unique user/)
     await t.browser.evaluate(`(async () => {
       await window.__demoWaitFor(
         () => document.querySelector('.tape-status')?.textContent === 'pass',
         'judge did not report a passing run',
       )
+      const uuidV7Pattern = /[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i
+      const generatedIds = [...document.querySelectorAll('#console .line')]
+        .map((line) => line.textContent?.match(uuidV7Pattern)?.[0])
+        .filter((id) => id !== undefined)
+      if (generatedIds.length !== 2 || new Set(generatedIds).size !== 2) {
+        throw new Error('judge did not produce two unique UUID v7 identifiers')
+      }
     })()`)
     await t.sleep('1.5s')
 
@@ -486,8 +545,8 @@ export default defineVideo(
       window.__demoSetCodeMirror('#repl-input', "solve({ name: 'repl', age: 5 })")
       window.__demoPressCodeMirror('#repl-input', 'Enter')
     })()`)
-    await t.browser.waitFor(/decoded repl \(age 5\)/)
-    await t.browser.waitFor(/'hello, repl'/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for repl \(age 5\)/)
+    await t.browser.waitFor(/= \{"id":"[0-9a-f-]+","name":"repl","age":5\}/)
     await t.sleep('1.5s')
   },
 )

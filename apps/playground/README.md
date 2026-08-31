@@ -13,6 +13,11 @@ at the top of `src/style.css`, so no run depends on a third-party font request.
 Martian Mono is set on its width axis (`font-stretch: 87.5%`, narrowing to `75%`
 on small screens) rather than by shrinking the code type size.
 
+Above `68rem`, the editor and response surfaces share the available viewport.
+Below it, the panes stack and the editor uses a bounded, viewport-aware height so
+Output and REPL remain nearby instead of being pushed down by an expanding source
+well. Interactive controls retain a 44px minimum target at every width.
+
 The editor uses CodeMirror 6 for TypeScript and JavaScript syntax, keyboard
 editing, diagnostics, completion, and inferred-type hover help. A dedicated
 language-service worker keeps that work off the page thread and acquires cached
@@ -24,6 +29,9 @@ edits regenerate `.mjs` on navigation, syntax errors keep the editor in `.ts`,
 and direct JavaScript edits disable `.ts` until Restore initial source resets
 both views. The View tests disclosure exposes every fixed judge case before it
 runs.
+
+The default module decodes a typed user with Effect Schema and generates its
+time-ordered UUID v7 through the exact `uniku@0.6.0/uuid/v7` entrypoint.
 
 The first REPL command lazily evaluates the current editor module into the
 persistent REPL scope, so declarations such as `export const solve` are directly

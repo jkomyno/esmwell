@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-29T11:53:48.000Z",
+  "generatedAt": "2026-08-31T09:56:12Z",
   "title": "Design System: runesm playground",
   "extensions": {
     "colorMeta": {
@@ -67,62 +67,182 @@
       "syntax-keyword": {
         "role": "syntax",
         "displayName": "Syntax Keyword",
-        "canonical": "oklch(37% 0.17 35)"
+        "canonical": "oklch(37% 0.17 35)",
+        "tonalRamp": [
+          "oklch(15% 0.109 35)",
+          "oklch(27% 0.128 35)",
+          "oklch(39% 0.146 35)",
+          "oklch(51% 0.164 35)",
+          "oklch(63% 0.158 35)",
+          "oklch(75% 0.139 35)",
+          "oklch(87% 0.121 35)",
+          "oklch(95% 0.109 35)"
+        ]
       },
       "syntax-string": {
         "role": "syntax",
         "displayName": "Syntax String",
-        "canonical": "oklch(36% 0.1 150)"
+        "canonical": "oklch(36% 0.1 150)",
+        "tonalRamp": [
+          "oklch(15% 0.064 150)",
+          "oklch(27% 0.075 150)",
+          "oklch(39% 0.086 150)",
+          "oklch(51% 0.096 150)",
+          "oklch(63% 0.093 150)",
+          "oklch(75% 0.082 150)",
+          "oklch(87% 0.071 150)",
+          "oklch(95% 0.064 150)"
+        ]
       },
       "syntax-literal": {
         "role": "syntax",
         "displayName": "Syntax Literal",
-        "canonical": "oklch(38% 0.13 75)"
+        "canonical": "oklch(38% 0.13 75)",
+        "tonalRamp": [
+          "oklch(15% 0.083 75)",
+          "oklch(27% 0.098 75)",
+          "oklch(39% 0.112 75)",
+          "oklch(51% 0.125 75)",
+          "oklch(63% 0.121 75)",
+          "oklch(75% 0.107 75)",
+          "oklch(87% 0.092 75)",
+          "oklch(95% 0.083 75)"
+        ]
       },
       "syntax-type": {
         "role": "syntax",
         "displayName": "Syntax Type",
-        "canonical": "oklch(38% 0.13 280)"
+        "canonical": "oklch(38% 0.13 280)",
+        "tonalRamp": [
+          "oklch(15% 0.083 280)",
+          "oklch(27% 0.098 280)",
+          "oklch(39% 0.112 280)",
+          "oklch(51% 0.125 280)",
+          "oklch(63% 0.121 280)",
+          "oklch(75% 0.107 280)",
+          "oklch(87% 0.092 280)",
+          "oklch(95% 0.083 280)"
+        ]
       },
       "syntax-function": {
         "role": "syntax",
         "displayName": "Syntax Function",
-        "canonical": "oklch(36% 0.13 320)"
+        "canonical": "oklch(36% 0.13 320)",
+        "tonalRamp": [
+          "oklch(15% 0.083 320)",
+          "oklch(27% 0.098 320)",
+          "oklch(39% 0.112 320)",
+          "oklch(51% 0.125 320)",
+          "oklch(63% 0.121 320)",
+          "oklch(75% 0.107 320)",
+          "oklch(87% 0.092 320)",
+          "oklch(95% 0.083 320)"
+        ]
       },
       "syntax-variable": {
         "role": "syntax",
         "displayName": "Syntax Variable",
-        "canonical": "oklch(36% 0.09 235)"
+        "canonical": "oklch(36% 0.09 235)",
+        "tonalRamp": [
+          "oklch(15% 0.058 235)",
+          "oklch(27% 0.068 235)",
+          "oklch(39% 0.077 235)",
+          "oklch(51% 0.086 235)",
+          "oklch(63% 0.084 235)",
+          "oklch(75% 0.074 235)",
+          "oklch(87% 0.064 235)",
+          "oklch(95% 0.058 235)"
+        ]
       },
       "syntax-property": {
         "role": "syntax",
         "displayName": "Syntax Property",
-        "canonical": "oklch(38% 0.08 215)"
+        "canonical": "oklch(38% 0.08 215)",
+        "tonalRamp": [
+          "oklch(15% 0.051 215)",
+          "oklch(27% 0.060 215)",
+          "oklch(39% 0.069 215)",
+          "oklch(51% 0.077 215)",
+          "oklch(63% 0.074 215)",
+          "oklch(75% 0.066 215)",
+          "oklch(87% 0.057 215)",
+          "oklch(95% 0.051 215)"
+        ]
       },
       "syntax-comment": {
         "role": "syntax",
         "displayName": "Syntax Comment",
-        "canonical": "oklch(45% 0.03 75)"
+        "canonical": "oklch(45% 0.03 75)",
+        "tonalRamp": [
+          "oklch(15% 0.019 75)",
+          "oklch(27% 0.023 75)",
+          "oklch(39% 0.026 75)",
+          "oklch(51% 0.029 75)",
+          "oklch(63% 0.028 75)",
+          "oklch(75% 0.025 75)",
+          "oklch(87% 0.021 75)",
+          "oklch(95% 0.019 75)"
+        ]
       },
       "syntax-punctuation": {
         "role": "syntax",
         "displayName": "Syntax Punctuation",
-        "canonical": "oklch(42% 0.015 75)"
+        "canonical": "oklch(42% 0.015 75)",
+        "tonalRamp": [
+          "oklch(15% 0.010 75)",
+          "oklch(27% 0.011 75)",
+          "oklch(39% 0.013 75)",
+          "oklch(51% 0.014 75)",
+          "oklch(63% 0.014 75)",
+          "oklch(75% 0.012 75)",
+          "oklch(87% 0.011 75)",
+          "oklch(95% 0.010 75)"
+        ]
       },
       "editor-selection": {
         "role": "editor",
         "displayName": "Editor Selection",
-        "canonical": "oklch(82% 0.07 75)"
+        "canonical": "oklch(82% 0.07 75)",
+        "tonalRamp": [
+          "oklch(15% 0.045 75)",
+          "oklch(27% 0.053 75)",
+          "oklch(39% 0.060 75)",
+          "oklch(51% 0.067 75)",
+          "oklch(63% 0.065 75)",
+          "oklch(75% 0.057 75)",
+          "oklch(87% 0.050 75)",
+          "oklch(95% 0.045 75)"
+        ]
       },
       "editor-selection-match": {
         "role": "editor",
         "displayName": "Editor Selection Match",
-        "canonical": "oklch(88% 0.035 75)"
+        "canonical": "oklch(88% 0.035 75)",
+        "tonalRamp": [
+          "oklch(15% 0.022 75)",
+          "oklch(27% 0.026 75)",
+          "oklch(39% 0.030 75)",
+          "oklch(51% 0.034 75)",
+          "oklch(63% 0.033 75)",
+          "oklch(75% 0.029 75)",
+          "oklch(87% 0.025 75)",
+          "oklch(95% 0.022 75)"
+        ]
       },
       "editor-active-line": {
         "role": "editor",
         "displayName": "Editor Active Line",
-        "canonical": "oklch(91% 0.014 75)"
+        "canonical": "oklch(91% 0.014 75)",
+        "tonalRamp": [
+          "oklch(15% 0.009 75)",
+          "oklch(27% 0.011 75)",
+          "oklch(39% 0.012 75)",
+          "oklch(51% 0.013 75)",
+          "oklch(63% 0.013 75)",
+          "oklch(75% 0.011 75)",
+          "oklch(87% 0.010 75)",
+          "oklch(95% 0.009 75)"
+        ]
       },
       "paper": {
         "role": "neutral",
@@ -235,14 +355,6 @@
         "displayName": "Display",
         "purpose": "The playground wordmark and nothing else."
       },
-      "headline": {
-        "displayName": "Headline",
-        "purpose": "Section headings once the page runs past one screen."
-      },
-      "title": {
-        "displayName": "Title",
-        "purpose": "Pane titles needing more presence than a label."
-      },
       "body": {
         "displayName": "Body",
         "purpose": "Prose, hints, case names. Capped at 65-75ch."
@@ -265,26 +377,31 @@
     ],
     "motion": [
       {
-        "name": "ease-out-quart",
-        "value": "cubic-bezier(0.25, 1, 0.5, 1)",
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
         "purpose": "Default easing for every state transition. No bounce, no elastic."
       },
       {
-        "name": "dur-feedback",
+        "name": "dur-quick",
         "value": "120ms",
         "purpose": "Button and control state changes."
       },
       {
-        "name": "dur-reveal",
-        "value": "220ms",
+        "name": "arrive",
+        "value": "140ms",
         "purpose": "A console line arriving, a case row resolving."
       }
     ],
     "breakpoints": [
       {
         "name": "bench",
-        "value": "900px",
-        "purpose": "Below this the two-column bench stacks to one column."
+        "value": "68rem",
+        "purpose": "Below this the two-column bench stacks and the editor gets a bounded viewport-aware height."
+      },
+      {
+        "name": "compact",
+        "value": "40rem",
+        "purpose": "Below this pane heads and actions wrap, while the editor footer stacks and centers; controls keep a 44px minimum target."
       }
     ]
   },
@@ -295,7 +412,7 @@
       "refersTo": "button-primary",
       "description": "The main run action. Darkest element on the page; weight makes it primary, not hue.",
       "html": "<button class=\"ds-btn-primary\" type=\"button\">Run tests</button>",
-      "css": ".ds-btn-primary{background:oklch(28% 0.014 70);color:oklch(97.5% 0.008 75);font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 20px;border:none;border-radius:2px;cursor:pointer;transition:background 120ms cubic-bezier(.25,1,.5,1)}.ds-btn-primary:hover{background:oklch(52% 0.15 45)}.ds-btn-primary:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}.ds-btn-primary:disabled{background:oklch(94.5% 0.010 75);color:oklch(48% 0.012 70);cursor:not-allowed}"
+      "css": ".ds-btn-primary{background:oklch(28% 0.014 70);color:oklch(97.5% 0.008 75);font-family:\"Archivo Variable\",ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 20px;border:none;border-radius:2px;cursor:pointer;transition:background 120ms cubic-bezier(.22,1,.36,1)}.ds-btn-primary:hover{background:oklch(52% 0.15 45)}.ds-btn-primary:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}.ds-btn-primary:disabled{background:oklch(94.5% 0.010 75);color:oklch(48% 0.012 70);cursor:not-allowed}"
     },
     {
       "name": "Secondary Button",
@@ -303,39 +420,39 @@
       "refersTo": "button-secondary",
       "description": "Reset scope, and any action that is not the main path.",
       "html": "<button class=\"ds-btn-secondary\" type=\"button\">Reset scope</button>",
-      "css": ".ds-btn-secondary{background:oklch(99% 0.005 75);color:oklch(28% 0.014 70);font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 20px;border:1px solid oklch(62% 0.014 75);border-radius:2px;cursor:pointer;transition:background 120ms cubic-bezier(.25,1,.5,1)}.ds-btn-secondary:hover{background:oklch(94.5% 0.010 75)}.ds-btn-secondary:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}"
+      "css": ".ds-btn-secondary{background:oklch(99% 0.005 75);color:oklch(28% 0.014 70);font-family:\"Archivo Variable\",ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 20px;border:1px solid oklch(62% 0.014 75);border-radius:2px;cursor:pointer;transition:background 120ms cubic-bezier(.22,1,.36,1)}.ds-btn-secondary:hover{background:oklch(94.5% 0.010 75)}.ds-btn-secondary:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}"
     },
     {
       "name": "Code Well",
       "kind": "custom",
       "refersTo": "well-code",
       "description": "Any surface the machine writes into: editor, console, REPL history. Recessed by the Sunk Well Rule.",
-      "html": "<div class=\"ds-well\"><span class=\"ds-well-label\">Output</span><pre class=\"ds-well-body\">decoded runesm (age 3)\ndecoded effect (age 4)</pre></div>",
-      "css": ".ds-well{display:flex;flex-direction:column;gap:8px}.ds-well-label{font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:oklch(48% 0.012 70)}.ds-well-body{margin:0;background:oklch(94.5% 0.010 75);color:oklch(28% 0.014 70);font-family:\"Martian Mono\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;line-height:1.65;font-variation-settings:\"wdth\" 87.5;border-radius:4px;padding:12px;overflow:auto}"
+      "html": "<div class=\"ds-well\"><span class=\"ds-well-label\">Output</span><pre class=\"ds-well-body\">decoded 0198... for runesm (age 3)\ndecoded 0198... for effect (age 4)</pre></div>",
+      "css": ".ds-well{display:flex;flex-direction:column;gap:8px}.ds-well-label{font-family:\"Archivo Variable\",ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:oklch(48% 0.012 70)}.ds-well-body{margin:0;background:oklch(94.5% 0.010 75);color:oklch(28% 0.014 70);font-family:\"Martian Mono Variable\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;line-height:1.65;font-variation-settings:\"wdth\" 87.5;border-radius:4px;padding:12px;overflow:auto}"
     },
     {
       "name": "Source Language Controls",
       "kind": "custom",
       "refersTo": "source-language-controls",
       "description": "Restore followed by connected TypeScript and JavaScript selectors, with native disabled states for blocked transitions.",
-      "html": "<div class=\"ds-source-controls\"><button type=\"button\" aria-label=\"Restore initial source\">↺</button><button type=\"button\" aria-pressed=\"true\">.ts</button><button type=\"button\" aria-pressed=\"false\">.mjs</button></div>",
-      "css": ".ds-source-controls{display:inline-flex;gap:8px}.ds-source-controls button{min-height:32px;padding:4px 10px;background:oklch(99% 0.005 75);color:oklch(28% 0.014 70);border:1px solid oklch(62% 0.014 75);border-radius:2px;font-family:\"Martian Mono\",ui-monospace,monospace}.ds-source-controls button[aria-pressed=true]{background:oklch(28% 0.014 70);color:oklch(97.5% 0.008 75)}.ds-source-controls button:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}.ds-source-controls button:disabled{background:oklch(94.5% 0.010 75);color:oklch(48% 0.012 70);cursor:not-allowed}"
+      "html": "<div class=\"ds-source-controls\"><button class=\"ds-source-reset\" type=\"button\" aria-label=\"Restore initial source\">↺</button><div role=\"group\" aria-label=\"Source language\"><button type=\"button\" aria-pressed=\"true\">.ts</button><button type=\"button\" aria-pressed=\"false\">.mjs</button></div></div>",
+      "css": ".ds-source-controls{display:inline-flex;align-items:center;gap:8px}.ds-source-reset{display:inline-grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid oklch(62% 0.014 75);border-radius:2px;background:oklch(99% 0.005 75);color:oklch(28% 0.014 70);font-family:\"Archivo Variable\",ui-sans-serif,system-ui,sans-serif;font-size:1.125rem;cursor:pointer}.ds-source-controls>div{display:inline-flex;overflow:hidden;border:1px solid oklch(62% 0.014 75);border-radius:2px}.ds-source-controls>div button{min-width:48px;min-height:32px;padding:4px 10px;border:0;border-right:1px solid oklch(62% 0.014 75);background:oklch(99% 0.005 75);color:oklch(48% 0.012 70);font-family:\"Martian Mono Variable\",ui-monospace,monospace;font-size:.75rem}.ds-source-controls>div button:last-child{border-right:0}.ds-source-controls button[aria-pressed=true]{background:oklch(28% 0.014 70);color:oklch(97.5% 0.008 75)}.ds-source-controls button:hover:not(:disabled){background:oklch(94.5% 0.010 75);color:oklch(28% 0.014 70)}.ds-source-controls button:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}.ds-source-controls button:disabled{background:oklch(94.5% 0.010 75);color:oklch(48% 0.012 70);cursor:not-allowed}@media(max-width:68rem){.ds-source-reset{width:44px;height:44px}.ds-source-controls>div button{min-height:44px}}"
     },
     {
       "name": "Test Disclosure",
       "kind": "custom",
       "refersTo": "test-disclosure",
       "description": "A native disclosure that reveals fixed judge-case names, invocations, and expectations before execution.",
-      "html": "<details class=\"ds-tests\"><summary>View tests</summary><ol><li><strong>greets a decoded user</strong><code>solve({ name: 'runesm', age: 3 })</code><span>expects 'hello, runesm'</span></li></ol></details>",
-      "css": ".ds-tests summary{width:max-content;color:oklch(48% 0.012 70);font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.ds-tests ol{margin:12px 0 0;padding:4px 12px;background:oklch(94.5% 0.010 75);border-radius:4px}.ds-tests li{padding:8px 0}.ds-tests code,.ds-tests span{display:block;margin-left:20px}.ds-tests code{font-family:\"Martian Mono\",ui-monospace,monospace;font-size:.75rem}.ds-tests span{color:oklch(48% 0.012 70);font-size:.8125rem}"
+      "html": "<div class=\"ds-tests-footer\"><span>⌘↵ run · Ctrl+Space complete · ⌘⇧H types</span><details class=\"ds-tests\"><summary>View tests</summary><ol><li><strong>creates a decoded user</strong><code>solve({ name: 'runesm', age: 3 })</code><span>passes if it does not throw</span></li></ol></details></div>",
+      "css": ".ds-tests-footer{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px;min-height:48px;padding:8px 0 0;border-top:1px solid oklch(86% 0.012 75)}.ds-tests-footer>span{grid-column:1;justify-self:start;color:oklch(48% 0.012 70);font:400 .8125rem/1.4 \"Archivo Variable\",ui-sans-serif,system-ui,sans-serif}.ds-tests{position:relative;grid-column:2;justify-self:center}.ds-tests summary{width:max-content;min-height:36px;padding:6px 10px;border:1px solid oklch(62% 0.014 75);border-radius:2px;background:oklch(99% 0.005 75);color:oklch(28% 0.014 70);font-family:\"Archivo Variable\",ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.ds-tests summary:focus-visible{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}.ds-tests ol{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);width:min(28rem,calc(100vw - 64px));margin:0;padding:4px 12px;border:1px solid oklch(62% 0.014 75);border-radius:4px;background:oklch(94.5% 0.010 75);box-shadow:0 6px 20px -8px oklch(28% 0.014 70/.22)}.ds-tests li{padding:8px 0;border-bottom:1px solid oklch(86% 0.012 75)}.ds-tests li:last-child{border-bottom:0}.ds-tests code,.ds-tests li>span{display:block;margin-left:20px}.ds-tests code{font-family:\"Martian Mono Variable\",ui-monospace,monospace;font-size:.75rem}.ds-tests li>span{color:oklch(48% 0.012 70);font-size:.8125rem}@media(max-width:40rem){.ds-tests-footer{grid-template-columns:1fr;justify-items:center;row-gap:8px}.ds-tests-footer>span,.ds-tests{grid-column:1;justify-self:center;text-align:center}.ds-tests summary{min-height:44px}}"
     },
     {
       "name": "Case Result Row",
       "kind": "custom",
       "refersTo": "case-row",
       "description": "Signature component. Status lives in the word, never in a colored left stripe. Colour is removable without loss.",
-      "html": "<div class=\"ds-case\"><span class=\"ds-case-name\">greets a decoded user</span><span class=\"ds-case-status ds-pass\">Pass</span></div><div class=\"ds-case\"><span class=\"ds-case-name\">rejects a bad payload</span><span class=\"ds-case-status ds-fail\">Fail</span><span class=\"ds-case-detail\">expected &quot;hi&quot; — got undefined</span></div>",
-      "css": ".ds-case{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:oklch(97.5% 0.008 75);border:1px solid oklch(86% 0.012 75);border-radius:4px;padding:8px 12px;margin-bottom:8px}.ds-case-name{font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.9375rem;color:oklch(28% 0.014 70)}.ds-case-status{margin-left:auto;font-family:Archivo,ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}.ds-pass{color:oklch(46% 0.11 150)}.ds-fail{color:oklch(47% 0.17 20)}.ds-run{color:oklch(50% 0.115 80)}.ds-case-detail{width:100%;font-family:\"Martian Mono\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;font-variation-settings:\"wdth\" 87.5;color:oklch(48% 0.012 70)}"
+      "html": "<div class=\"ds-case\"><span class=\"ds-case-name\">creates a decoded user</span><span class=\"ds-case-duration\">12 ms</span><span class=\"ds-case-status ds-pass\">Pass</span></div><div class=\"ds-case\"><span class=\"ds-case-name\">rejects a bad payload</span><span class=\"ds-case-duration\">9 ms</span><span class=\"ds-case-status ds-fail\">Fail</span><span class=\"ds-case-detail\">expected &quot;hi&quot;, got undefined</span></div>",
+      "css": ".ds-case{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:baseline;gap:12px;background:oklch(97.5% 0.008 75);border:1px solid oklch(86% 0.012 75);border-radius:4px;padding:8px 12px;margin-bottom:8px}.ds-case-name{font-family:\"Archivo Variable\",ui-sans-serif,system-ui,sans-serif;font-size:.9375rem;color:oklch(28% 0.014 70)}.ds-case-duration{font-family:\"Martian Mono Variable\",ui-monospace,monospace;font-size:.75rem;font-variant-numeric:tabular-nums;color:oklch(48% 0.012 70)}.ds-case-status{font-family:\"Archivo Variable\",ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase}.ds-pass{color:oklch(46% 0.11 150)}.ds-fail{color:oklch(47% 0.17 20)}.ds-run{color:oklch(50% 0.115 80)}.ds-case-detail{grid-column:1/-1;font-family:\"Martian Mono Variable\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;font-variation-settings:\"wdth\" 87.5;color:oklch(48% 0.012 70)}"
     },
     {
       "name": "REPL Entry",
@@ -343,15 +460,15 @@
       "refersTo": "repl-entry",
       "description": "Persistent-scope CodeMirror input seeded by the current editor module, with right-arrow inline-suggestion acceptance, semantic completion, and up/down command history. Sap caret and inherited code typography.",
       "html": "<div class=\"ds-repl\"><span class=\"ds-repl-caret\">›</span><div class=\"ds-repl-input\" role=\"textbox\" aria-label=\"REPL input\">solve({ name: 'repl' })</div></div>",
-      "css": ".ds-repl{display:flex;align-items:center;gap:8px;background:oklch(99% 0.005 75);border:1px solid oklch(62% 0.014 75);border-radius:2px;padding:8px 12px}.ds-repl-caret{color:oklch(46% 0.11 150);font-family:\"Martian Mono\",ui-monospace,monospace}.ds-repl-input{flex:1;color:oklch(28% 0.014 70);font-family:\"Martian Mono\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;font-variation-settings:\"wdth\" 87.5}.ds-repl:focus-within{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}"
+      "css": ".ds-repl{display:flex;align-items:center;gap:8px;background:oklch(99% 0.005 75);border:1px solid oklch(62% 0.014 75);border-radius:2px;padding:7px 12px}.ds-repl-caret{color:oklch(46% 0.11 150);font-family:\"Martian Mono Variable\",ui-monospace,monospace}.ds-repl-input{flex:1;color:oklch(28% 0.014 70);font-family:\"Martian Mono Variable\",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8125rem;font-variation-settings:\"wdth\" 87.5}.ds-repl:focus-within{outline:2px solid oklch(52% 0.15 45);outline-offset:2px}"
     }
   ],
   "narrative": {
     "northStar": "The Well-Lit Bench",
-    "overview": "A workshop bench under good daylight, with labeled drawers and nothing hidden behind a cover plate. The visitor is a builder deciding whether runesm fits their product, and the fastest way to convince them is to hand them the tool and let them watch it work. Every surface is meant to be picked up and changed. Nothing is a display case.\n\nThe system takes its precision from Rams-era Braun product documentation: a machine explained without ornament, where every part is labeled in the same quiet voice and the labels are the design. It takes its warmth from paper rather than from decoration. The ground is a warm off-white, not white, and the ink is a warm near-black, not black.\n\nColor here is information, never decoration. Four semantic hues communicate UI state, while a separate editor-only palette makes source structure visible without borrowing status meaning.",
+    "overview": "A workshop bench under good daylight, with labeled drawers and nothing hidden behind a cover plate. The visitor is a builder deciding whether runesm fits their product, and the fastest way to convince them is to hand them the tool and let them watch it work. Every surface is meant to be picked up and changed. Nothing is a display case.\n\nThe system takes its precision from Rams-era Braun product documentation: a machine explained without ornament, where every part is labeled in the same quiet voice and the labels are the design. It takes its warmth from paper rather than from decoration. The ground is a warm off-white at `oklch(97.5% 0.008 75)`, not white, and the ink is a warm near-black at `oklch(28% 0.014 70)`, not black. Every neutral is tinted toward the same warm hue so the interface reads as a printed sheet under a lamp rather than as a screen.\n\nThis explicitly rejects what a developer tool is expected to look like. Not near-black plus one blue accent. Not uniform rounded cards. Not a reflex-default sans. It equally rejects the two anti-references named in PRODUCT.md: no gradient meshes, glassmorphism, floating 3D blobs, purple-to-pink palettes or oversized rounded corners; and no CRT glow, scanlines, blinking block cursors, ASCII art or green-on-black. Only part of this interface is a terminal, and dressing the rest as one would be a lie about what runesm is.\n\nColor here is information, never decoration. UI state has four semantic hues with one job each. The editor has a separate, scoped syntax-ink palette so language structure is visible without borrowing status meaning.",
     "keyCharacteristics": [
       "Warm paper ground, warm ink, warm neutrals: no pure white, no pure black, everything tinted toward hue 75",
-      "Four semantic UI hues with one job each, plus an editor-only syntax palette",
+      "Four UI-state hues with one job each, plus an editor-only syntax palette",
       "Near-square corners (2-4px). Roundness is not a personality here",
       "Flat by default. Depth comes from recessing what the machine writes into, not from shadows",
       "Labeled panes as the organizing grammar, in the manner of equipment documentation",
@@ -360,68 +477,69 @@
     "rules": [
       {
         "name": "The Four UI Jobs Rule",
-        "body": "There are exactly four semantic UI hues: rust for the brand and its links, sap for pass, crimson for fail, ochre for running. Syntax ink is confined to editor tokens and never carries UI state.",
+        "body": "There are exactly four semantic UI hues, and each has exactly one job: rust for the brand and its links, sap for pass, crimson for fail, ochre for running. Syntax ink is confined to editor tokens and never carries UI state. Another hue in headings, icons, panel chrome, status, or hover backgrounds is prohibited.",
         "section": "colors"
       },
       {
         "name": "The Ink Acts Rule",
-        "body": "The primary action is graphite fill with paper text, not a colored button. Weight, not hue, makes it primary.",
+        "body": "The primary action is graphite fill with paper text, not a colored button. Actions are the darkest thing on the page because weight, not hue, is what makes them primary. This also keeps rust and crimson from ever having to be told apart at a glance.",
         "section": "colors"
       },
       {
         "name": "The Never Hue-Alone Rule",
-        "body": "Status is never carried by color alone. Removing all color from the interface must leave it fully readable.",
+        "body": "Status is never carried by color alone. Every pass, fail, running, and error state ships a text label or glyph alongside its hue. Removing all color from the interface must leave it fully readable.",
         "section": "colors"
       },
       {
         "name": "The Two-Ground Rule",
-        "body": "Only two background values appear in normal use: paper and paper-sunk. A third is a sign of a container that did not need to exist.",
+        "body": "Structural surfaces use only paper and paper-sunk. Paper-raised is reserved for interactive controls, never a third container layer. Another structural background is a sign that a container was added that did not need to exist.",
         "section": "colors"
       },
       {
         "name": "The Labeled Drawer Rule",
-        "body": "Every pane carries a small uppercase Archivo label in graphite-soft. This is the deliberate organizing grammar, and the one place repeated uppercase tracked labels are correct.",
+        "body": "Every pane carries a small uppercase Archivo label in graphite-soft: EDITOR, OUTPUT, REPL. This is the deliberate organizing grammar of the system, taken from equipment documentation, and it is the one place repeated uppercase tracked labels are correct. Do not extend the pattern to decorative kickers above ordinary headings.",
         "section": "typography"
       },
       {
         "name": "The Mono Is For Code Rule",
-        "body": "Martian Mono appears only where the content is code or machine output. Monospace as a costume for 'developer tool' is prohibited.",
+        "body": "Martian Mono appears only where the content is code or machine output. Chrome, labels, buttons, hints and prose are Archivo. Monospace used as a costume for \"developer tool\" is prohibited; this interface has real code in it and that is the only reason mono is here.",
         "section": "typography"
       },
       {
         "name": "The Sunk Well Rule",
-        "body": "Anything the machine writes into is recessed. Anything the user acts on is flush or raised.",
+        "body": "Anything the machine writes into is recessed. Anything the user acts on is flush or raised. If a surface is recessed and the user is expected to type into it, it is an editor, and that is correct; if a surface is recessed and purely decorative, delete the container.",
         "section": "elevation"
       },
       {
         "name": "The No Ambient Shadow Rule",
-        "body": "A shadow on a resting element is prohibited. Use a ground change or a hairline instead.",
+        "body": "A shadow on a resting element is prohibited. If an element needs separation, use the ground change or a `rule` hairline, not elevation.",
         "section": "elevation"
       }
     ],
     "dos": [
-      "Do tint every neutral toward hue 75. Warm paper and warm ink, never #fff or #000.",
-      "Do keep the four UI hues to their four jobs and keep syntax ink inside editor source.",
+      "Do tint every neutral toward hue 75. Warm paper (`#faf6f1`) and warm ink (`#2d2821`), never `#fff` or `#000`.",
+      "Do keep the four UI hues to their four jobs: rust brand, sap pass, crimson fail, ochre running. Keep syntax ink inside editor source.",
       "Do make the primary action graphite fill with paper text. Weight makes it primary, not color.",
       "Do pair every status color with a text label, so the interface survives with all color removed.",
       "Do recess surfaces the machine writes into, and keep surfaces the user acts on flush or raised.",
+      "Do keep the editor footer rail transparent; only the editor host receives the `paper-sunk` ground.",
       "Do use Martian Mono only for code and machine output. Everything else is Archivo.",
-      "Do vary spacing for rhythm across the 4/8/12/20/32/52 scale.",
-      "Do honor prefers-reduced-motion on every transition.",
+      "Do vary spacing for rhythm across the 4/8/12/20/32/52 scale. Identical padding on every element is monotony.",
+      "Do honor `prefers-reduced-motion` on every transition, and keep motion to feedback that makes streaming legible.",
       "Do give every control a visible 2px rust focus ring at 2px offset.",
-      "Do use rule-strong (3.39:1) for any boundary that identifies a control, and rule only for decorative hairlines."
+      "Do use `rule-strong` (3.39:1) for any boundary that identifies a control, and `rule` only for decorative hairlines."
     ],
     "donts": [
-      "Don't use a border-left or border-right greater than 1px as a colored accent stripe.",
-      "Don't reach for gradient mesh backgrounds, glassmorphism, floating 3D blobs, purple-to-pink palettes, or oversized rounded corners.",
-      "Don't add CRT glow, scanlines, blinking block cursors, ASCII art, or green-on-black.",
-      "Don't fall back to near-black plus one blue accent, uniform rounded cards, and a reflex-default sans.",
-      "Don't use background-clip: text with a gradient.",
+      "Don't use a `border-left` or `border-right` greater than 1px as a colored accent stripe. The case rows previously did exactly this; it is banned outright.",
+      "Don't reach for gradient mesh backgrounds, glassmorphism, floating 3D blobs, purple-to-pink palettes, or oversized rounded corners. This is the \"playful AI-startup\" anti-reference from PRODUCT.md.",
+      "Don't add CRT glow, scanlines, blinking block cursors, ASCII art, or green-on-black. This is the \"terminal cosplay\" anti-reference from PRODUCT.md, and it is dishonest when only part of this interface is a terminal.",
+      "Don't fall back to near-black plus one blue accent, uniform rounded cards, and a reflex-default sans. That is the category reflex PRODUCT.md names, and it is what this interface looked like before.",
+      "Don't use `background-clip: text` with a gradient. Emphasis comes from weight and size.",
       "Don't wrap panes in bordered cards, and never nest a container inside a container.",
-      "Don't add a shadow to a resting element.",
+      "Don't add a shadow to a resting element. If it looks like a 2014 app, the shadow should not be there at all.",
       "Don't introduce another UI hue, use syntax ink outside source code, or color a heading, icon, or panel chrome.",
       "Don't set body text wider than 75ch.",
-      "Don't animate layout properties. Transition color, opacity, and transform only."
+      "Don't animate layout properties. Transition color, opacity, and transform only, with ease-out curves and no bounce."
     ]
   }
 }
