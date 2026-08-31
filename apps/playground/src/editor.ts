@@ -78,7 +78,7 @@ const editorTheme = EditorView.theme({
     color: 'var(--graphite)',
     border: '1px solid var(--rule-strong)',
     borderRadius: 'var(--radius-sm)',
-    boxShadow: '0 6px 20px -8px oklch(28% 0.014 70 / 0.22)',
+    boxShadow: 'var(--shadow-lifted)',
     fontFamily: 'var(--font-mono)',
     fontSize: '0.75rem',
   },

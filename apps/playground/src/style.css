@@ -52,6 +52,9 @@
   --font-sans: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Martian Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /* The one shadow in the system: for elements detached from document flow. */
+  --shadow-lifted: 0 6px 20px -8px oklch(28% 0.014 70 / 0.22);
+
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-quick: 120ms;
 }
@@ -408,7 +411,7 @@ a {
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius-md);
   background: var(--paper-sunk);
-  box-shadow: 0 6px 20px -8px oklch(28% 0.014 70 / 0.22);
+  box-shadow: var(--shadow-lifted);
 }
 
 .test-definition {
