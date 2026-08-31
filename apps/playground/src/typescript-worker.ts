@@ -13,6 +13,7 @@ import type {
 import { serializeQuickInfo } from './typescript-quick-info'
 import {
   isModuleSpecifierPosition,
+  RUNESM_TYPES_ROOT,
   typeResolutionKey,
   TypeScriptTypeAcquirer,
   type TypeScriptTypeGraph,
@@ -28,7 +29,6 @@ const libraries = new Map(
   Object.entries(LIB_FILES).map(([path, source]) => [`/${path.split('/').at(-1) ?? path}`, source]),
 )
 const moduleResolutions = new Map<string, string>()
-const typeFileNames = new Set<string>()
 const typeAcquirer = new TypeScriptTypeAcquirer()
 
 const sourceFileNames: Readonly<Record<SourceLanguage, string>> = {
@@ -76,13 +76,12 @@ const declarationExtension = (fileName: string): ts.Extension => {
 }
 
 const containingPackagePrefix = (fileName: string): string | undefined => {
-  const root = '/node_modules/.runesm-types/'
-  if (!fileName.startsWith(root)) {
+  if (!fileName.startsWith(RUNESM_TYPES_ROOT)) {
     return undefined
   }
-  const segments = fileName.slice(root.length).split('/')
+  const segments = fileName.slice(RUNESM_TYPES_ROOT.length).split('/')
   const packageSegments = segments[0]?.startsWith('@') ? segments.slice(0, 2) : segments.slice(0, 1)
-  return packageSegments.length === 0 ? undefined : `${root}${packageSegments.join('/')}/`
+  return packageSegments.length === 0 ? undefined : `${RUNESM_TYPES_ROOT}${packageSegments.join('/')}/`
 }
 
 const host: ts.LanguageServiceHost = {
@@ -134,14 +133,12 @@ const applyTypeGraph = (graph: TypeScriptTypeGraph): void => {
   if (graph === appliedTypeGraph) {
     return
   }
-  for (const fileName of typeFileNames) {
-    libraries.delete(fileName)
+  for (const file of appliedTypeGraph?.files ?? []) {
+    libraries.delete(file.fileName)
   }
-  typeFileNames.clear()
   moduleResolutions.clear()
   for (const file of graph.files) {
     libraries.set(file.fileName, file.content)
-    typeFileNames.add(file.fileName)
   }
   for (const resolution of graph.resolutions) {
     moduleResolutions.set(typeResolutionKey(resolution.specifier, resolution.containingFilePrefix), resolution.fileName)

@@ -1,4 +1,5 @@
 import * as ts from 'typescript-legacy'
+import { isBareSpecifier } from 'runesm/utils'
 
 const NPM_REGISTRY_ORIGIN = 'https://registry.npmjs.org'
 const NPM_VERSION_RESOLVER_ORIGIN = 'https://data.jsdelivr.com/v1/package/resolve/npm'
@@ -97,8 +98,23 @@ const rememberRetryable = <Key, Value>(
   return pending
 }
 
+/**
+ * One editor request scans the same source twice — once to place the caret, once
+ * to collect its imports — so the latest scan is kept.
+ */
+let lastPreprocessed: { readonly source: string; readonly info: ts.PreProcessedFileInfo } | undefined
+
+const preprocess = (source: string): ts.PreProcessedFileInfo => {
+  if (lastPreprocessed?.source === source) {
+    return lastPreprocessed.info
+  }
+  const info = ts.preProcessFile(source, true, true)
+  lastPreprocessed = { source, info }
+  return info
+}
+
 export const moduleSpecifiers = (source: string): readonly string[] => {
-  const preprocessed = ts.preProcessFile(source, true, true)
+  const preprocessed = preprocess(source)
   return [
     ...new Set([
       ...preprocessed.importedFiles.map((file) => file.fileName),
@@ -108,13 +124,7 @@ export const moduleSpecifiers = (source: string): readonly string[] => {
 }
 
 export const isModuleSpecifierPosition = (source: string, position: number): boolean =>
-  ts.preProcessFile(source, true, true).importedFiles.some((file) => position >= file.pos && position <= file.end)
-
-const isBareSpecifier = (specifier: string): boolean =>
-  !specifier.startsWith('.') &&
-  !specifier.startsWith('/') &&
-  !specifier.startsWith('#') &&
-  !/^[a-z][a-z\d+.-]*:/iu.test(specifier)
+  preprocess(source).importedFiles.some((file) => position >= file.pos && position <= file.end)
 
 const packageReference = (specifier: string): PackageReference | null => {
   if (!isBareSpecifier(specifier)) {
@@ -380,11 +390,13 @@ const relativeDeclaration = (
   return declarationTarget(target).find((candidate) => declarations.has(candidate))
 }
 
-const virtualFileName = (archive: PackageArchive, declaration: string): string =>
-  `/node_modules/.runesm-types/${archive.metadata.name}@${archive.metadata.version}/${declaration}`
+/** The virtual root every acquired declaration file is mounted under. */
+export const RUNESM_TYPES_ROOT = '/node_modules/.runesm-types/'
 
-const virtualPackagePrefix = (archive: PackageArchive): string =>
-  `/node_modules/.runesm-types/${archive.metadata.name}@${archive.metadata.version}/`
+const virtualFileName = (archive: PackageArchive, declaration: string): string =>
+  `${RUNESM_TYPES_ROOT}${archive.metadata.name}@${archive.metadata.version}/${declaration}`
+
+const virtualPackagePrefix = (archive: PackageArchive): string => virtualFileName(archive, '')
 
 export const typeResolutionKey = (specifier: string, containingFilePrefix?: string): string =>
   `${containingFilePrefix ?? ''}\0${specifier}`
