@@ -60,6 +60,13 @@
         "default": "./build/index.mjs"
       }
     },
+    "./utils": {
+      "import": {
+        "@jkomyno/source": "./src/utils.ts",
+        "types": "./build/utils.d.mts",
+        "default": "./build/utils.mjs"
+      }
+    },
     "./worker-entry": {
       "import": {
         "@jkomyno/source": "./src/worker-entry.ts",

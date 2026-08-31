@@ -351,6 +351,15 @@ import 'runesm/execution-worker-entry'
 - `collectBareSpecifiers(ast)` — lists the bare import specifiers a parsed module references.
 - `resolveDependencies` / `resolveImportSpecifier` — resolve bare specifiers to CDN URLs, throwing `SpecifierResolutionError` on failure (see [Dependencies and autoInstall](#dependencies-and-autoinstall)).
 
+A host that only needs to classify a specifier, without resolving it, can import the predicate on its own from the `runesm/utils` subpath — it pulls in none of the runner:
+
+```ts
+import { isBareSpecifier } from 'runesm/utils'
+
+isBareSpecifier('zod@4') // true — a package name, possibly versioned, scoped, or with a subpath
+isBareSpecifier('./local.js') // false — relative, absolute, `#imports`, and full URLs are all not bare
+```
+
 These compose by chaining return values (`collectBareSpecifiers(parseUserModule(code))`) without ever needing to name the acorn `Node`/`Program` type. If you do want to type an intermediate AST value yourself, add `acorn` as a direct dependency — this package does not re-export its types.
 
 ## Compatibility

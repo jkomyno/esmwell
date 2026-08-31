@@ -6,6 +6,7 @@ export default defineConfig({
   // Main-thread API plus lazy execution- and module-service-worker assets.
   entry: [
     'src/index.ts',
+    'src/utils.ts',
     'src/worker-entry.ts',
     'src/execution-worker-entry.ts',
     'src/test-worker-entry.ts',
