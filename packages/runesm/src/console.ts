@@ -6,6 +6,10 @@ export interface ConsoleSink {
   write(chunk: ConsoleChunk): void
 }
 
+interface BoundedConsoleSink extends ConsoleSink {
+  readonly isTruncated: boolean
+}
+
 /** How deep the serializer descends into nested structures. */
 const MAX_SERIALIZATION_DEPTH = 3
 const MAX_SERIALIZED_ITEMS = 100
@@ -15,7 +19,7 @@ const CONSOLE_TRUNCATION_MESSAGE = `[Console output truncated after ${MAX_CONSOL
 const CONSOLE_LEVELS: readonly ConsoleLevel[] = ['log', 'info', 'warn', 'error', 'debug']
 
 let protectedConsole: Console | undefined
-let protectedConsoleSink: ConsoleSink | undefined
+let protectedConsoleSink: BoundedConsoleSink | undefined
 let protectedConsoleCaptureActive = false
 
 /**
@@ -41,9 +45,10 @@ export function protectConsole(): void {
           original(...args)
           return
         }
+        if (sink.isTruncated) return
         sink.write({
           level,
-          parts: args.map((argument) => serializeValue(argument)),
+          parts: serializeConsoleArguments(args),
         })
       },
     })
@@ -151,11 +156,15 @@ const serializeObject = (value: object, depth: number, seen: WeakSet<object>): s
   if (depth >= MAX_SERIALIZATION_DEPTH) {
     return '[Object]'
   }
-  const keys = Object.keys(value)
-  const entries = keys
-    .slice(0, MAX_SERIALIZED_ITEMS)
-    .map((key) => `${formatKey(key)}: ${serializeValueGuarded(Reflect.get(value, key), depth + 1, seen)}`)
-  appendOmittedCount(entries, keys.length)
+  const entries: string[] = []
+  for (const key in value) {
+    if (!Object.hasOwn(value, key)) continue
+    if (entries.length === MAX_SERIALIZED_ITEMS) {
+      entries.push('… more')
+      break
+    }
+    entries.push(`${formatKey(key)}: ${serializeValueGuarded(Reflect.get(value, key), depth + 1, seen)}`)
+  }
   return `{ ${entries.join(', ')} }`
 }
 
@@ -177,6 +186,14 @@ const takeItems = <T>(items: Iterable<T>): T[] => {
   return selected
 }
 
+const serializeConsoleArguments = (args: readonly unknown[]): string[] => {
+  const parts = args.slice(0, MAX_SERIALIZED_ITEMS).map((argument) => serializeValue(argument))
+  if (args.length > MAX_SERIALIZED_ITEMS) {
+    parts.push(`… ${args.length - MAX_SERIALIZED_ITEMS} more arguments`)
+  }
+  return parts
+}
+
 const serializeFunction = (value: Function): string => {
   const name = value.name === '' ? '(anonymous)' : value.name
   const kind = value.constructor?.name === 'AsyncFunction' ? 'async function' : 'function'
@@ -193,11 +210,8 @@ const IDENTIFIER_KEY_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 const formatKey = (key: string): string => (IDENTIFIER_KEY_PATTERN.test(key) ? key : quoteString(key))
 
-// Quotes a string for a human-facing preview, not for generated module
-// source — see `edits.ts`'s `quoteString`, used by the transform modules for
-// that purpose. The two bodies read the same today, but they serve
-// different contracts (display vs. valid-JS-syntax generation) and may
-// diverge, so keep them separate rather than merging them.
+// Quotes a human-facing preview. Generated module source uses `edits.ts`'s
+// stricter source-code quoter instead.
 const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
 
 /**
@@ -226,9 +240,10 @@ export function installConsoleCapture(sink: ConsoleSink): () => void {
     const original = consoleObject[level] as unknown as (...args: unknown[]) => void
     originals.set(level, original.bind(consoleObject))
     consoleObject[level] = (...args: unknown[]) => {
+      if (boundedSink.isTruncated) return
       boundedSink.write({
         level,
-        parts: args.map((argument) => serializeValue(argument)),
+        parts: serializeConsoleArguments(args),
       })
     }
   }
@@ -240,11 +255,14 @@ export function installConsoleCapture(sink: ConsoleSink): () => void {
   }
 }
 
-const createBoundedConsoleSink = (sink: ConsoleSink): ConsoleSink => {
+const createBoundedConsoleSink = (sink: ConsoleSink): BoundedConsoleSink => {
   let usedCharacters = 0
   let truncated = false
 
   return {
+    get isTruncated(): boolean {
+      return truncated
+    },
     write(chunk): void {
       if (truncated) return
 

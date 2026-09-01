@@ -32,9 +32,8 @@ export function applyEdits(code: string, edits: readonly SourceEdit[]): string {
  * URL rewritten into an `import`/`export` specifier or a dynamic `import(…)`
  * call). This is a source-code quoter, not a display quoter: it must stay
  * a faithful, escaping-only round trip of `value` as valid JS syntax. A
- * human-facing preview (see `console.ts`'s own `quoteString`) is free to
- * truncate or otherwise diverge, which is why the two are kept separate
- * even though their bodies read the same today.
+ * human-facing preview (see `console.ts`'s own `quoteString`) may truncate,
+ * so the two contracts stay separate.
  */
 export function quoteString(value: string): string {
   return `'${value

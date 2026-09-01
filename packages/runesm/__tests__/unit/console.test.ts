@@ -79,6 +79,13 @@ describe('serializeValue', () => {
 
     expect(serializeValue(hostile)).toBe('[Unserializable]')
   })
+
+  it('bounds wide object previews', () => {
+    const wideObject = Object.fromEntries(Array.from({ length: 120 }, (_, index) => [`key${index}`, index]))
+
+    expect(serializeValue(wideObject)).toContain('key99: 99, … more')
+    expect(serializeValue(wideObject)).not.toContain('key100')
+  })
 })
 
 describe('installConsoleCapture', () => {
@@ -145,5 +152,32 @@ describe('installConsoleCapture', () => {
       parts: ['[Console output truncated after 65536 characters]'],
     })
     expect(chunks.filter((chunk) => chunk.level === 'warn')).toHaveLength(1)
+  })
+
+  it('caps arguments in one call and skips inspection after truncation', () => {
+    const chunks: ConsoleChunk[] = []
+    const restore = installConsoleCapture({
+      write: (chunk) => {
+        chunks.push(chunk)
+      },
+    })
+    let inspections = 0
+    const inspected = new Proxy(
+      {},
+      {
+        getPrototypeOf(target) {
+          inspections += 1
+          return Reflect.getPrototypeOf(target)
+        },
+      },
+    )
+
+    console.log(...Array.from({ length: 120 }, (_, index) => index))
+    for (let index = 0; index < 100; index += 1) console.log('x'.repeat(1024))
+    console.log(inspected)
+    restore()
+
+    expect(chunks[0]?.parts.at(-1)).toBe('… 20 more arguments')
+    expect(inspections).toBe(0)
   })
 })

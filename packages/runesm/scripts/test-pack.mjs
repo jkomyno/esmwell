@@ -1,10 +1,9 @@
 import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const packageRoot = resolve(import.meta.dirname, '..')
 const workspaceRoot = resolve(packageRoot, '../..')
 const fixtureRoot = join(packageRoot, '__tests__/fixtures/packed-consumer')
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'runesm-packed-consumer-'))
@@ -37,7 +36,7 @@ try {
   writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
 
   run('pnpm', ['install', '--offline', '--ignore-scripts'], consumerRoot)
-  run(process.execPath, [join(workspaceRoot, 'node_modules/vite/bin/vite.js'), 'build', '.'], consumerRoot)
+  run(join(workspaceRoot, 'node_modules/.bin/vite'), ['build', '.'], consumerRoot)
 
   console.log('test-pack: packed runesm installed and built in a clean Vite consumer')
 } finally {
