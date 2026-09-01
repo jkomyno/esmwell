@@ -41,6 +41,17 @@ describe('REPL persistence', () => {
     expect(read.value).toBe(2)
   })
 
+  it('treats __proto__ as an ordinary persistent binding', async () => {
+    const session = createReplSessionInRealm({})
+    const declared = await evaluate(session, 'let __proto__ = { marker: 42 }')
+    const read = await evaluate(session, '__proto__.marker')
+    const owned = await evaluate(session, "Object.hasOwn(__runesm, '__proto__')")
+
+    expect(declared.ok).toBe(true)
+    expect(read).toMatchObject({ ok: true, value: 42 })
+    expect(owned).toMatchObject({ ok: true, value: true })
+  })
+
   it('function and class declarations persist with live self-references', async () => {
     const session = createReplSessionInRealm({})
     await evaluate(session, 'function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2)\n}')
