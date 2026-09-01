@@ -133,8 +133,8 @@ tests.close()
 ```
 
 Test sessions default to `timeoutMs: 60000` because the same budget covers
-the engine download and test run. Judge and REPL sessions keep the 5-second
-default.
+service-worker setup, the engine download, and the test run. Judge and REPL
+sessions keep the 5-second default.
 
 For Jest, import the same globals from `@jest/globals`. `jest.fn` and
 `jest.spyOn` use the official `jest-mock` package. Both engines and their
@@ -159,6 +159,8 @@ required outside localhost. Pass explicit URLs when a bundler relocates the
 files; a blob-built execution worker cannot participate in this mode. The
 service worker only answers runesm's versioned virtual-module path beneath its
 scope and leaves other requests untouched.
+
+Serve these assets from a dedicated directory. `runesm` refuses to replace a different service worker already registered at the exact same scope.
 
 Each test run creates and terminates its own worker. A timeout therefore clears engine registration state and the virtual module graph before the next run.
 
