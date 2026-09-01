@@ -14,7 +14,7 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 - ✅ **Infinite loops become results, not frozen tabs** — a hard timeout terminates the worker and returns a typed `TimeoutError`
 - ✅ **Console output streams** while the submitted code is still running
 - ✅ **Real Vitest and Jest engines**, loaded lazily so judge and REPL users never pay for them
-- ✅ **Small** — one runtime dependency ([acorn](https://github.com/acornjs/acorn)), 22 KB gzipped under a CI-enforced 30 KB budget, gated against Chromium and WebKit
+- ✅ **Small** — one runtime dependency ([acorn](https://github.com/acornjs/acorn)), 23 KB gzipped under a CI-enforced 30 KB budget, gated in Chrome
 
 👉 [Compatibility reference](https://github.com/jkomyno/runesm/blob/main/COMPATIBILITY.md) · [Contributing](https://github.com/jkomyno/runesm/blob/main/CONTRIBUTING.md)
 
@@ -370,7 +370,7 @@ These compose by chaining return values (`collectBareSpecifiers(parseUserModule(
 
 `runesm` executes ES2023 modules inside browser workers. Most ECMAScript support therefore comes straight from the host browser — runesm adds a policy layer, an ESM resolver, worker lifecycle management, and result normalization on top.
 
-The current gate covers **Chromium** and **WebKit**. Firefox is not yet part of the claimed matrix.
+The release gate runs in **Chrome**. The compatibility reference also records a dated manual WebKit probe; WebKit and Firefox are not release gates.
 
 Things worth knowing before you ship:
 

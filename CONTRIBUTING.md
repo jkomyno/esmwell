@@ -30,7 +30,7 @@ pnpm -C packages/runesm run test:browser
 pnpm -C packages/runesm run check:size
 ```
 
-The browser suite reaches esm.sh. Bun and a Chromium or WebKit backend must be available.
+The browser suite reaches esm.sh. Bun and Chrome must be available. WebKit is optional and is not a release gate.
 
 Tests live under each package's `__tests__` directory. Keep unit tests deterministic and offline. Use integration or browser tests for package boundaries and browser-only behavior.
 
@@ -44,10 +44,14 @@ pnpm changeset
 
 Only `packages/runesm` may be published. The root workspace and demo applications are private, and Changesets is configured not to version or tag private packages.
 
-The GitHub release workflow is intentionally disabled before the first release. To enable npm trusted publishing:
+The GitHub release workflow is intentionally disabled before the first release. Before publishing, make the repository public, enable GitHub private vulnerability reporting, and confirm GitHub Actions can start jobs.
 
-1. Publish `runesm` manually once so the package exists on npm.
-2. In the npm package settings, add a GitHub Actions trusted publisher for `jkomyno/runesm` and `release.yaml`.
-3. Remove the disabled guard in `.github/workflows/release.yaml` and enable the Changesets action step.
+For the first release:
 
-No long-lived npm token is required after trusted publishing is configured.
+1. Run `pnpm version-packages`, review the generated `0.1.0` version and changelog, and commit them as `chore: version packages`.
+2. Run `pnpm release:verify`.
+3. Publish once without provenance: `pnpm -C packages/runesm publish --access public --no-git-checks --provenance=false`. This creates the npm package; later releases use trusted publishing instead.
+4. In the npm package settings, add a GitHub Actions trusted publisher for repository `jkomyno/runesm` and workflow `release.yaml`.
+5. Remove only the `if: false` guard from `.github/workflows/release.yaml`.
+
+`pnpm release` runs lint, typechecking, tests, a clean package build, export validation, the size budget, the packed-consumer build, and the Chrome browser suite before `changeset publish`. No long-lived npm token is required after trusted publishing is configured.

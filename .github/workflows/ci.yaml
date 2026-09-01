@@ -79,6 +79,9 @@ jobs:
       - name: '📏 Check size budget'
         run: pnpm -C packages/runesm run check:size
 
+      - name: '📦 Check packed consumer'
+        run: pnpm -C packages/runesm run test:pack
+
       - name: '📦 pkg.pr.new (preview release)'
         if: github.event_name == 'pull_request'
         run: pnpm exec pkg-pr-new publish './packages/runesm' --packageManager=pnpm
