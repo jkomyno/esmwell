@@ -56,6 +56,29 @@ describe('serializeValue', () => {
     value.self = value
     expect(serializeValue(value)).toBe('{ self: [Circular] }')
   })
+
+  it('bounds strings and collection previews', () => {
+    const longString = 'x'.repeat(20_000)
+    const wideArray = Array.from({ length: 120 }, (_, index) => index)
+
+    expect(serializeValue(longString).length).toBeLessThan(20_000)
+    expect(serializeValue(longString)).toMatch(/…$/)
+    expect(serializeValue(wideArray)).toContain('… 20 more')
+    expect(serializeValue(wideArray)).not.toContain('119')
+  })
+
+  it('returns a stable preview when object inspection throws', () => {
+    const hostile = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error('blocked')
+        },
+      },
+    )
+
+    expect(serializeValue(hostile)).toBe('[Unserializable]')
+  })
 })
 
 describe('installConsoleCapture', () => {
@@ -101,5 +124,26 @@ describe('installConsoleCapture', () => {
 
     expect(firstChunks).toEqual([{ level: 'log', parts: ['during first'] }])
     expect(secondChunks).toEqual([{ level: 'info', parts: ['during second'] }])
+  })
+
+  it('emits one warning and drops output after the capture budget', () => {
+    const chunks: ConsoleChunk[] = []
+    const restore = installConsoleCapture({
+      write: (chunk) => {
+        chunks.push(chunk)
+      },
+    })
+
+    for (let index = 0; index < 100; index += 1) {
+      console.log('x'.repeat(1024))
+    }
+    restore()
+
+    expect(chunks.length).toBeLessThan(100)
+    expect(chunks.at(-1)).toEqual({
+      level: 'warn',
+      parts: ['[Console output truncated after 65536 characters]'],
+    })
+    expect(chunks.filter((chunk) => chunk.level === 'warn')).toHaveLength(1)
   })
 })

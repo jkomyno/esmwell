@@ -8,6 +8,10 @@ export interface ConsoleSink {
 
 /** How deep the serializer descends into nested structures. */
 const MAX_SERIALIZATION_DEPTH = 3
+const MAX_SERIALIZED_ITEMS = 100
+const MAX_SERIALIZED_STRING_LENGTH = 8 * 1024
+const MAX_CONSOLE_CHARACTERS = 64 * 1024
+const CONSOLE_TRUNCATION_MESSAGE = `[Console output truncated after ${MAX_CONSOLE_CHARACTERS} characters]`
 const CONSOLE_LEVELS: readonly ConsoleLevel[] = ['log', 'info', 'warn', 'error', 'debug']
 
 let protectedConsole: Console | undefined
@@ -54,13 +58,17 @@ export function protectConsole(): void {
  * values that cannot be printed (promises, functions, circular references).
  */
 export function serializeValue(value: unknown, depth: number = 0): string {
-  return serializeValueGuarded(value, depth, new WeakSet<object>())
+  try {
+    return serializeValueGuarded(value, depth, new WeakSet<object>())
+  } catch {
+    return '[Unserializable]'
+  }
 }
 
 const serializeValueGuarded = (value: unknown, depth: number, seen: WeakSet<object>): string => {
   switch (typeof value) {
     case 'string':
-      return depth === 0 ? value : quoteString(value)
+      return depth === 0 ? truncateString(value) : quoteString(truncateString(value))
     case 'number':
       return Object.is(value, -0) ? '-0' : String(value)
     case 'bigint':
@@ -106,40 +114,67 @@ const serializeObject = (value: object, depth: number, seen: WeakSet<object>): s
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return '[Map]'
     }
-    const entries = [...value.entries()].map(
+    const entries = takeItems(value.entries()).map(
       ([key, entryValue]) =>
         `${serializeValueGuarded(key, depth + 1, seen)} => ${serializeValueGuarded(entryValue, depth + 1, seen)}`,
     )
+    appendOmittedCount(entries, value.size)
     return `Map(${value.size}) { ${entries.join(', ')} }`
   }
   if (value instanceof Set) {
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return '[Set]'
     }
-    const members = [...value.values()].map((member) => serializeValueGuarded(member, depth + 1, seen))
+    const members = takeItems(value.values()).map((member) => serializeValueGuarded(member, depth + 1, seen))
+    appendOmittedCount(members, value.size)
     return `Set(${value.size}) { ${members.join(', ')} }`
   }
   if (Array.isArray(value)) {
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return '[Array]'
     }
-    const elements = value.map((element) => serializeValueGuarded(element, depth + 1, seen))
+    const elements = value
+      .slice(0, MAX_SERIALIZED_ITEMS)
+      .map((element) => serializeValueGuarded(element, depth + 1, seen))
+    appendOmittedCount(elements, value.length)
     return `[${elements.join(', ')}]`
   }
   if (isTypedArrayView(value)) {
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return `[${value.constructor.name}]`
     }
-    const elements = Array.from(value, (element) => serializeValueGuarded(element, depth + 1, seen))
+    const length = Math.min(value.length, MAX_SERIALIZED_ITEMS)
+    const elements = Array.from({ length }, (_, index) => serializeValueGuarded(value[index], depth + 1, seen))
+    appendOmittedCount(elements, value.length)
     return `${value.constructor.name}(${value.length}) [${elements.join(', ')}]`
   }
   if (depth >= MAX_SERIALIZATION_DEPTH) {
     return '[Object]'
   }
-  const entries = Object.entries(value).map(
-    ([key, entryValue]) => `${formatKey(key)}: ${serializeValueGuarded(entryValue, depth + 1, seen)}`,
-  )
+  const keys = Object.keys(value)
+  const entries = keys
+    .slice(0, MAX_SERIALIZED_ITEMS)
+    .map((key) => `${formatKey(key)}: ${serializeValueGuarded(Reflect.get(value, key), depth + 1, seen)}`)
+  appendOmittedCount(entries, keys.length)
   return `{ ${entries.join(', ')} }`
+}
+
+const truncateString = (value: string): string =>
+  value.length <= MAX_SERIALIZED_STRING_LENGTH ? value : `${value.slice(0, MAX_SERIALIZED_STRING_LENGTH)}…`
+
+const appendOmittedCount = (parts: string[], total: number): void => {
+  if (total > MAX_SERIALIZED_ITEMS) {
+    parts.push(`… ${total - MAX_SERIALIZED_ITEMS} more`)
+  }
+}
+
+const takeItems = <T>(items: Iterable<T>): T[] => {
+  const selected: T[] = []
+  for (const item of items) {
+    if (selected.length === MAX_SERIALIZED_ITEMS) break
+    selected.push(item)
+  }
+  return selected
 }
 
 const serializeFunction = (value: Function): string => {
@@ -171,12 +206,13 @@ const quoteString = (value: string): string => `'${value.replaceAll('\\', '\\\\'
  * during a run is captured instead of printed.
  */
 export function installConsoleCapture(sink: ConsoleSink): () => void {
+  const boundedSink = createBoundedConsoleSink(sink)
   if (protectedConsole !== undefined) {
     if (protectedConsoleCaptureActive) {
       throw new Error('console capture is already active in this execution worker')
     }
     protectedConsoleCaptureActive = true
-    protectedConsoleSink = sink
+    protectedConsoleSink = boundedSink
     return () => {
       protectedConsoleSink = undefined
       protectedConsoleCaptureActive = false
@@ -190,7 +226,7 @@ export function installConsoleCapture(sink: ConsoleSink): () => void {
     const original = consoleObject[level] as unknown as (...args: unknown[]) => void
     originals.set(level, original.bind(consoleObject))
     consoleObject[level] = (...args: unknown[]) => {
-      sink.write({
+      boundedSink.write({
         level,
         parts: args.map((argument) => serializeValue(argument)),
       })
@@ -201,5 +237,26 @@ export function installConsoleCapture(sink: ConsoleSink): () => void {
     for (const [level, original] of originals) {
       consoleObject[level] = original as typeof consoleObject.log
     }
+  }
+}
+
+const createBoundedConsoleSink = (sink: ConsoleSink): ConsoleSink => {
+  let usedCharacters = 0
+  let truncated = false
+
+  return {
+    write(chunk): void {
+      if (truncated) return
+
+      const chunkCharacters = 16 + chunk.parts.reduce((total, part) => total + part.length + 1, 0)
+      if (usedCharacters + chunkCharacters > MAX_CONSOLE_CHARACTERS) {
+        truncated = true
+        sink.write({ level: 'warn', parts: [CONSOLE_TRUNCATION_MESSAGE] })
+        return
+      }
+
+      usedCharacters += chunkCharacters
+      sink.write(chunk)
+    },
   }
 }
