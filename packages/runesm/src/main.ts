@@ -615,8 +615,6 @@ const prepareModuleServiceWorker = async (
     throw new Error('the test-workspace module service worker must be served from the website origin')
   }
   const scope = new URL('./', serviceWorkerUrl).href
-  const existing = await withinTestDeadline(navigator.serviceWorker.getRegistration(scope), deadline, timeoutMs)
-  assertServiceWorkerScopeAvailable(existing, scope, serviceWorkerUrl)
   const registration = await withinTestDeadline(
     navigator.serviceWorker.register(serviceWorkerUrl, { type: 'module', scope }),
     deadline,
@@ -624,23 +622,6 @@ const prepareModuleServiceWorker = async (
   )
   await waitForActiveWorker(registration, deadline, timeoutMs)
   return registration.scope
-}
-
-const assertServiceWorkerScopeAvailable = (
-  registration: ServiceWorkerRegistration | undefined,
-  scope: string,
-  expectedScriptUrl: URL,
-): void => {
-  if (registration === undefined || registration.scope !== scope) return
-
-  const conflictingWorker = [registration.active, registration.waiting, registration.installing].find(
-    (worker) => worker !== null && worker !== undefined && new URL(worker.scriptURL).href !== expectedScriptUrl.href,
-  )
-  if (conflictingWorker !== undefined && conflictingWorker !== null) {
-    throw new Error(
-      `the test-workspace service-worker scope '${scope}' is already owned by '${conflictingWorker.scriptURL}' — serve runesm's test assets from a dedicated directory`,
-    )
-  }
 }
 
 const waitForActiveWorker = async (

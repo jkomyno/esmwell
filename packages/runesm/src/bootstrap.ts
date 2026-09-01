@@ -222,7 +222,7 @@ const SCOPE_MODULE_SOURCE = `const __runesmScope = Object.create(null)
 const __runesmBoundGlobals = new WeakMap()
 export const __runesm = new Proxy(__runesmScope, {
   get(target, key) {
-    if (Object.hasOwn(target, key)) return target[key]
+    if (key in target) return target[key]
     if (!(key in globalThis)) throw new ReferenceError(String(key) + ' is not defined')
     const value = globalThis[key]
     // Preserve identity for prototype-bearing global callables, which do not
@@ -250,7 +250,7 @@ export const __runesm = new Proxy(__runesmScope, {
 })
 export const __runesmTypeof = new Proxy(__runesmScope, {
   get(target, key) {
-    if (Object.hasOwn(target, key)) return target[key]
+    if (key in target) return target[key]
     return globalThis[key]
   },
 })

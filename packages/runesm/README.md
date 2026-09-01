@@ -83,7 +83,7 @@ repl.close()
 
 Each input's completion value (its final expression) comes back as `value`. Named exported declarations persist like ordinary REPL declarations, so an ESM module can seed the scope before interactive inputs. A local export list is accepted but adds no new binding; re-exports and default-export expressions without a named function or class are rejected with a clear error.
 
-The persistent scope is a plain object, so its declaration semantics deliberately differ from a JavaScript module:
+The persistent scope is an internal object, so its declaration semantics deliberately differ from a JavaScript module:
 
 - Re-declaring a name with `let` reassigns it instead of erroring, as does re-declaring a `const` — both `let` and `const` become scope assignments, so a later input can even reassign an earlier `const`.
 
@@ -160,7 +160,7 @@ files; a blob-built execution worker cannot participate in this mode. The
 service worker only answers runesm's versioned virtual-module path beneath its
 scope and leaves other requests untouched.
 
-Serve these assets from a dedicated directory. `runesm` refuses to replace a different service worker already registered at the exact same scope.
+Serve these assets from a dedicated directory so the registration can safely own its scope and update across deployments.
 
 Each test run creates and terminates its own worker. A timeout therefore clears engine registration state and the virtual module graph before the next run.
 

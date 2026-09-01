@@ -52,6 +52,21 @@ describe('REPL persistence', () => {
     expect(owned).toMatchObject({ ok: true, value: true })
   })
 
+  it('keeps bindings when submitted code replaces Object.hasOwn', async () => {
+    const session = createReplSessionInRealm({})
+    const nativeHasOwn = Object.hasOwn
+    let read: ReplResult
+    try {
+      await evaluate(session, 'Object.hasOwn = () => false')
+      await evaluate(session, 'let kept = 42')
+      read = await evaluate(session, 'kept')
+    } finally {
+      Object.hasOwn = nativeHasOwn
+    }
+
+    expect(read).toMatchObject({ ok: true, value: 42 })
+  })
+
   it('function and class declarations persist with live self-references', async () => {
     const session = createReplSessionInRealm({})
     await evaluate(session, 'function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2)\n}')

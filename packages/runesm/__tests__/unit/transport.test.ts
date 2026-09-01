@@ -418,43 +418,6 @@ describe('test-session transport timeout', () => {
       vi.unstubAllGlobals()
     }
   })
-
-  it('rejects a different service worker already owning the exact scope', async () => {
-    vi.stubGlobal('location', new URL('https://example.test/assets/'))
-    const register = vi.fn<() => Promise<ServiceWorkerRegistration>>()
-    vi.stubGlobal('navigator', {
-      serviceWorker: {
-        getRegistration: vi.fn<() => Promise<ServiceWorkerRegistration | undefined>>(() =>
-          Promise.resolve({
-            active: { scriptURL: 'https://example.test/assets/other-worker.mjs' },
-            scope: 'https://example.test/assets/',
-          } as ServiceWorkerRegistration),
-        ),
-        register,
-      },
-    })
-    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
-
-    try {
-      const session = createTestSession({
-        serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs',
-        workerUrl: 'https://example.test/assets/test-worker-entry.mjs',
-      })
-      const result = await session.run({
-        engine: 'vitest',
-        modules: { 'tests/a.test': '' },
-        testFiles: ['tests/a.test'],
-      })
-
-      expect(result).toMatchObject({
-        status: 'error',
-        error: { message: expect.stringContaining('other-worker.mjs') },
-      })
-      expect(register).not.toHaveBeenCalled()
-    } finally {
-      vi.unstubAllGlobals()
-    }
-  })
 })
 
 describe('session transport: lifecycle', () => {

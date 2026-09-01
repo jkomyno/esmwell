@@ -83,8 +83,23 @@ describe('serializeValue', () => {
   it('bounds wide object previews', () => {
     const wideObject = Object.fromEntries(Array.from({ length: 120 }, (_, index) => [`key${index}`, index]))
 
-    expect(serializeValue(wideObject)).toContain('key99: 99, … more')
+    expect(serializeValue(wideObject)).toContain('key99: 99, … 20 more')
     expect(serializeValue(wideObject)).not.toContain('key100')
+  })
+
+  it('bounds work across nested previews', () => {
+    let inspections = 0
+    const nested = Array.from({ length: 100 }, () =>
+      Array.from({ length: 100 }, () => ({
+        get value() {
+          inspections += 1
+          return 1
+        },
+      })),
+    )
+
+    expect(serializeValue(nested)).toContain('…')
+    expect(inspections).toBeLessThan(1_000)
   })
 })
 
@@ -146,7 +161,7 @@ describe('installConsoleCapture', () => {
     }
     restore()
 
-    expect(chunks.length).toBeLessThan(100)
+    expect(chunks.filter((chunk) => chunk.level === 'log')).toHaveLength(62)
     expect(chunks.at(-1)).toEqual({
       level: 'warn',
       parts: ['[Console output truncated after 65536 characters]'],

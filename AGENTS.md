@@ -66,12 +66,13 @@ pnpm test
 pnpm build
 ```
 
-CI additionally gates two checks that are not part of the four above. Run them
+CI additionally gates three checks that are not part of the four above. Run them
 when touching the runner, its build output, or the browser path:
 
 ```bash
-pnpm -C packages/runesm run test:browser  # real-browser suite; needs bun (pinned in .mise.toml) and a Chrome/WebKit backend, and reaches esm.sh
+pnpm -C packages/runesm run test:browser  # real-browser suite; needs bun (pinned in .mise.toml) and a Chrome backend, and reaches esm.sh
 pnpm -C packages/runesm run check:size    # 30 KB gzip budget over the built ESM output; run after pnpm build
+pnpm -C packages/runesm run test:pack     # installs the tarball in a temporary Vite consumer and builds every public worker entrypoint
 ```
 
 For documentation-only changes, `pnpm lint:ci` is sufficient unless the documentation describes executable commands or configuration that also needs validation.

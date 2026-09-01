@@ -49,9 +49,8 @@ The GitHub release workflow is intentionally disabled before the first release. 
 For the first release:
 
 1. Run `pnpm version-packages`, review the generated `0.1.0` version and changelog, and commit them as `chore: version packages`.
-2. Run `pnpm release:verify`.
-3. Publish once without provenance: `pnpm -C packages/runesm publish --access public --no-git-checks --provenance=false`. This creates the npm package; later releases use trusted publishing instead.
-4. In the npm package settings, add a GitHub Actions trusted publisher for repository `jkomyno/runesm` and workflow `release.yaml`.
-5. Remove only the `if: false` guard from `.github/workflows/release.yaml`.
+2. Verify and publish once without provenance in one command: `pnpm release:verify && pnpm -C packages/runesm publish --access public --no-git-checks --provenance=false`. This creates the npm package; later releases use trusted publishing instead.
+3. In the npm package settings, add a GitHub Actions trusted publisher for repository `jkomyno/runesm` and workflow `release.yaml`.
+4. Remove only the `if: false` guard from `.github/workflows/release.yaml`.
 
 `pnpm release` runs lint, typechecking, tests, a clean package build, export validation, the size budget, the packed-consumer build, and the Chrome browser suite before `changeset publish`. No long-lived npm token is required after trusted publishing is configured.

@@ -10,9 +10,15 @@ interface BoundedConsoleSink extends ConsoleSink {
   readonly isTruncated: boolean
 }
 
+interface SerializationState {
+  readonly seen: WeakSet<object>
+  remainingNodes: number
+}
+
 /** How deep the serializer descends into nested structures. */
 const MAX_SERIALIZATION_DEPTH = 3
 const MAX_SERIALIZED_ITEMS = 100
+const MAX_SERIALIZED_NODES = 256
 const MAX_SERIALIZED_STRING_LENGTH = 8 * 1024
 const MAX_CONSOLE_CHARACTERS = 64 * 1024
 const CONSOLE_TRUNCATION_MESSAGE = `[Console output truncated after ${MAX_CONSOLE_CHARACTERS} characters]`
@@ -63,14 +69,24 @@ export function protectConsole(): void {
  * values that cannot be printed (promises, functions, circular references).
  */
 export function serializeValue(value: unknown, depth: number = 0): string {
+  return serializeWithState(value, depth, {
+    seen: new WeakSet<object>(),
+    remainingNodes: MAX_SERIALIZED_NODES,
+  })
+}
+
+const serializeWithState = (value: unknown, depth: number, state: SerializationState): string => {
   try {
-    return serializeValueGuarded(value, depth, new WeakSet<object>())
+    return serializeValueGuarded(value, depth, state)
   } catch {
     return '[Unserializable]'
   }
 }
 
-const serializeValueGuarded = (value: unknown, depth: number, seen: WeakSet<object>): string => {
+const serializeValueGuarded = (value: unknown, depth: number, state: SerializationState): string => {
+  if (state.remainingNodes === 0) return '…'
+  state.remainingNodes -= 1
+
   switch (typeof value) {
     case 'string':
       return depth === 0 ? truncateString(value) : quoteString(truncateString(value))
@@ -91,18 +107,18 @@ const serializeValueGuarded = (value: unknown, depth: number, seen: WeakSet<obje
   if (value === null) {
     return 'null'
   }
-  if (seen.has(value)) {
+  if (state.seen.has(value)) {
     return '[Circular]'
   }
-  seen.add(value)
+  state.seen.add(value)
   try {
-    return serializeObject(value, depth, seen)
+    return serializeObject(value, depth, state)
   } finally {
-    seen.delete(value)
+    state.seen.delete(value)
   }
 }
 
-const serializeObject = (value: object, depth: number, seen: WeakSet<object>): string => {
+const serializeObject = (value: object, depth: number, state: SerializationState): string => {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? 'Invalid Date' : value.toISOString()
   }
@@ -119,77 +135,86 @@ const serializeObject = (value: object, depth: number, seen: WeakSet<object>): s
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return '[Map]'
     }
-    const entries = takeItems(value.entries()).map(
-      ([key, entryValue]) =>
-        `${serializeValueGuarded(key, depth + 1, seen)} => ${serializeValueGuarded(entryValue, depth + 1, seen)}`,
-    )
-    appendOmittedCount(entries, value.size)
+    const entries: string[] = []
+    for (const [key, entryValue] of value) {
+      if (entries.length === MAX_SERIALIZED_ITEMS || state.remainingNodes === 0) break
+      entries.push(
+        `${serializeValueGuarded(key, depth + 1, state)} => ${serializeValueGuarded(entryValue, depth + 1, state)}`,
+      )
+    }
+    appendOmittedCount(entries, value.size, entries.length)
     return `Map(${value.size}) { ${entries.join(', ')} }`
   }
   if (value instanceof Set) {
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return '[Set]'
     }
-    const members = takeItems(value.values()).map((member) => serializeValueGuarded(member, depth + 1, seen))
-    appendOmittedCount(members, value.size)
+    const members: string[] = []
+    for (const member of value) {
+      if (members.length === MAX_SERIALIZED_ITEMS || state.remainingNodes === 0) break
+      members.push(serializeValueGuarded(member, depth + 1, state))
+    }
+    appendOmittedCount(members, value.size, members.length)
     return `Set(${value.size}) { ${members.join(', ')} }`
   }
   if (Array.isArray(value)) {
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return '[Array]'
     }
-    const elements = value
-      .slice(0, MAX_SERIALIZED_ITEMS)
-      .map((element) => serializeValueGuarded(element, depth + 1, seen))
-    appendOmittedCount(elements, value.length)
+    const elements: string[] = []
+    for (let index = 0; index < value.length; index += 1) {
+      if (elements.length === MAX_SERIALIZED_ITEMS || state.remainingNodes === 0) break
+      elements.push(serializeValueGuarded(value[index], depth + 1, state))
+    }
+    appendOmittedCount(elements, value.length, elements.length)
     return `[${elements.join(', ')}]`
   }
   if (isTypedArrayView(value)) {
     if (depth >= MAX_SERIALIZATION_DEPTH) {
       return `[${value.constructor.name}]`
     }
-    const length = Math.min(value.length, MAX_SERIALIZED_ITEMS)
-    const elements = Array.from({ length }, (_, index) => serializeValueGuarded(value[index], depth + 1, seen))
-    appendOmittedCount(elements, value.length)
+    const elements: string[] = []
+    for (let index = 0; index < value.length; index += 1) {
+      if (elements.length === MAX_SERIALIZED_ITEMS || state.remainingNodes === 0) break
+      elements.push(serializeValueGuarded(value[index], depth + 1, state))
+    }
+    appendOmittedCount(elements, value.length, elements.length)
     return `${value.constructor.name}(${value.length}) [${elements.join(', ')}]`
   }
   if (depth >= MAX_SERIALIZATION_DEPTH) {
     return '[Object]'
   }
+  const keys = Object.keys(value)
   const entries: string[] = []
-  for (const key in value) {
-    if (!Object.hasOwn(value, key)) continue
-    if (entries.length === MAX_SERIALIZED_ITEMS) {
-      entries.push('… more')
-      break
-    }
-    entries.push(`${formatKey(key)}: ${serializeValueGuarded(Reflect.get(value, key), depth + 1, seen)}`)
+  for (const key of keys) {
+    if (entries.length === MAX_SERIALIZED_ITEMS || state.remainingNodes === 0) break
+    entries.push(`${formatKey(key)}: ${serializeValueGuarded(Reflect.get(value, key), depth + 1, state)}`)
   }
+  appendOmittedCount(entries, keys.length, entries.length)
   return `{ ${entries.join(', ')} }`
 }
 
 const truncateString = (value: string): string =>
   value.length <= MAX_SERIALIZED_STRING_LENGTH ? value : `${value.slice(0, MAX_SERIALIZED_STRING_LENGTH)}…`
 
-const appendOmittedCount = (parts: string[], total: number): void => {
-  if (total > MAX_SERIALIZED_ITEMS) {
-    parts.push(`… ${total - MAX_SERIALIZED_ITEMS} more`)
+const appendOmittedCount = (parts: string[], total: number, included: number): void => {
+  if (total > included) {
+    parts.push(`… ${total - included} more`)
   }
-}
-
-const takeItems = <T>(items: Iterable<T>): T[] => {
-  const selected: T[] = []
-  for (const item of items) {
-    if (selected.length === MAX_SERIALIZED_ITEMS) break
-    selected.push(item)
-  }
-  return selected
 }
 
 const serializeConsoleArguments = (args: readonly unknown[]): string[] => {
-  const parts = args.slice(0, MAX_SERIALIZED_ITEMS).map((argument) => serializeValue(argument))
-  if (args.length > MAX_SERIALIZED_ITEMS) {
-    parts.push(`… ${args.length - MAX_SERIALIZED_ITEMS} more arguments`)
+  const state: SerializationState = {
+    seen: new WeakSet<object>(),
+    remainingNodes: MAX_SERIALIZED_NODES,
+  }
+  const parts: string[] = []
+  for (const argument of args) {
+    if (parts.length === MAX_SERIALIZED_ITEMS || state.remainingNodes === 0) break
+    parts.push(serializeWithState(argument, 0, state))
+  }
+  if (args.length > parts.length) {
+    parts.push(`… ${args.length - parts.length} more arguments`)
   }
   return parts
 }
