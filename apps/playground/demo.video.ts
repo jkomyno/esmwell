@@ -135,9 +135,11 @@ export default defineVideo(
         const replShortcuts = document.querySelector('#repl-shortcuts')
         const replActions = document.querySelector('#repl-reset')?.parentElement
         const editorShortcuts = document.querySelector('#editor-shortcuts')
-        const testsSummary = document.querySelector('.test-disclosure summary')
-        const testsDisclosure = document.querySelector('.test-disclosure')
+        const editorCursor = document.querySelector('#editor-cursor')
+        const testsSummary = document.querySelector('.test-drawer-handle')
+        const testsDisclosure = document.querySelector('.test-drawer')
         const testDefinitions = document.querySelector('.test-definitions')
+        const testCount = document.querySelector('#test-count')
         if (
           !(editorStage instanceof HTMLElement) ||
           !(editorFooter instanceof HTMLElement) ||
@@ -151,30 +153,45 @@ export default defineVideo(
           !(replShortcuts instanceof HTMLElement) ||
           !(replActions instanceof HTMLElement) ||
           !(editorShortcuts instanceof HTMLElement) ||
+          !(editorCursor instanceof HTMLElement) ||
           !(testsSummary instanceof HTMLElement) ||
           !(testsDisclosure instanceof HTMLDetailsElement) ||
-          !(testDefinitions instanceof HTMLElement)
+          !(testDefinitions instanceof HTMLElement) ||
+          !(testCount instanceof HTMLElement)
         ) {
-          throw new Error('editor tests disclosure is missing')
+          throw new Error('editor tests drawer is missing')
         }
         const stageBounds = editorStage.getBoundingClientRect()
         const footerBounds = editorFooter.getBoundingClientRect()
         const shortcutsBounds = editorShortcuts.getBoundingClientRect()
+        const cursorBounds = editorCursor.getBoundingClientRect()
         const summaryBounds = testsSummary.getBoundingClientRect()
-        const stageCenter = (stageBounds.left + stageBounds.right) / 2
-        const summaryCenter = (summaryBounds.left + summaryBounds.right) / 2
-        const shortcutsCenterLine = (shortcutsBounds.top + shortcutsBounds.bottom) / 2
-        const summaryCenterLine = (summaryBounds.top + summaryBounds.bottom) / 2
-        if (Math.abs(stageCenter - summaryCenter) > 1 || Math.abs(shortcutsCenterLine - summaryCenterLine) > 1) {
-          throw new Error('View tests is not centered on the editor shortcut line')
+        if (testCount.textContent !== '2') {
+          throw new Error('the tests drawer does not announce its case count')
+        }
+        // The handle is a full-width rail inside the well, not a control floating on it.
+        if (Math.abs(summaryBounds.left - stageBounds.left) > 1 || Math.abs(summaryBounds.right - stageBounds.right) > 1) {
+          throw new Error('the tests drawer handle does not span the editor well')
+        }
+        const summaryBackground = getComputedStyle(testsSummary).backgroundColor
+        if (summaryBackground !== 'rgba(0, 0, 0, 0)' && summaryBackground !== 'transparent') {
+          throw new Error('the tests drawer handle has its own background')
         }
         const footerBackground = getComputedStyle(editorFooter).backgroundColor
         if (footerBackground !== 'rgba(0, 0, 0, 0)' && footerBackground !== 'transparent') {
           throw new Error('editor footer has its own background')
         }
         const editorBounds = editor.getBoundingClientRect()
-        if (footerBounds.top < editorBounds.bottom || summaryBounds.top < footerBounds.top) {
-          throw new Error('View tests overlaps editable source')
+        if (summaryBounds.top < editorBounds.bottom || summaryBounds.bottom > stageBounds.bottom) {
+          throw new Error('the tests drawer is not seated at the bottom of the editor well')
+        }
+        // Two ends, no centered third item: the hint and the readout hold the rail.
+        if (
+          footerBounds.top < stageBounds.bottom ||
+          Math.abs(shortcutsBounds.left - stageBounds.left) > 1 ||
+          Math.abs(cursorBounds.right - stageBounds.right) > 1
+        ) {
+          throw new Error('the editor footer rail is not a two-ended metadata line')
         }
         if (Math.abs(stageBounds.top - consoleWell.getBoundingClientRect().top) > 1) {
           throw new Error('Editor and Output wells do not share a top edge')
@@ -195,14 +212,27 @@ export default defineVideo(
         if (runBar.getBoundingClientRect().bottom > innerHeight) {
           throw new Error('editor actions are outside the desktop viewport')
         }
+        // Opening takes height from the source view: the well keeps its size and
+        // the list never floats over the code it describes.
         testsDisclosure.open = true
+        const openStageBounds = editorStage.getBoundingClientRect()
         const definitionsBounds = testDefinitions.getBoundingClientRect()
+        const openSummaryBounds = testsSummary.getBoundingClientRect()
+        if (Math.abs(openStageBounds.height - stageBounds.height) > 1) {
+          throw new Error('opening the tests drawer resized the editor well')
+        }
         if (
-          definitionsBounds.bottom > summaryBounds.top ||
-          definitionsBounds.left < stageBounds.left ||
-          definitionsBounds.right > stageBounds.right
+          definitionsBounds.top < openSummaryBounds.bottom - 1 ||
+          definitionsBounds.bottom > openStageBounds.bottom + 1 ||
+          definitionsBounds.top < editor.getBoundingClientRect().bottom - 1
         ) {
-          throw new Error('test definitions do not open above the control inside the editor')
+          throw new Error('the open tests drawer does not sit below the source inside the well')
+        }
+        if (getComputedStyle(testDefinitions).boxShadow !== 'none') {
+          throw new Error('the tests drawer is a popover rather than a drawer')
+        }
+        if (!testDefinitions.textContent?.includes('solve({"name":"runesm","age":3})')) {
+          throw new Error('the tests drawer does not list its judge cases')
         }
         testsDisclosure.open = false
         const tokenColor = (text) => {
@@ -507,6 +537,10 @@ export default defineVideo(
         if (suggestedValue !== "solve({ name: 'repl', age: 5 })") {
           throw new Error('REPL ArrowRight did not accept the inline suggestion')
         }
+        // The recording starts here: the drawer must be shut for every visible frame.
+        if (document.querySelector('.test-drawer')?.open !== false) {
+          throw new Error('the tests drawer is open on the recorded timeline')
+        }
         window.__demoSetCodeMirror('#repl-input', '')
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
         window.scrollTo(0, 0)
@@ -518,9 +552,8 @@ export default defineVideo(
     await t.sleep('1.2s')
     await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
 
-    // Reveal and run the two cases against the Effect program in the editor.
-    await t.browser.click('.test-disclosure summary')
-    await t.browser.waitFor(/solve\(\{"name":"runesm","age":3\}\)/)
+    // Run the two cases against the Effect program in the editor. The tests
+    // drawer stays shut on camera so the recording never hides the source.
     await t.browser.click('#judge')
     await t.browser.waitFor(/decoded [0-9a-f-]+ for runesm \(age 3\)/)
     await t.browser.waitFor(/decoded [0-9a-f-]+ for effect \(age 4\)/)

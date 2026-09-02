@@ -59,14 +59,18 @@
           <p id="source-status" class="source-status" role="status" hidden></p>
           <div class="editor-stage">
             <div id="editor" class="editor-host"></div>
-            <div class="editor-footer">
-              <p class="pane-note editor-shortcuts" id="editor-shortcuts">⌘↵ run · Ctrl+Space complete · ⌘⇧H types</p>
-              <details class="test-disclosure">
-                <summary>View tests</summary>
-                <ol id="test-definitions" class="test-definitions"></ol>
-              </details>
-              <p class="pane-note editor-cursor" id="editor-cursor" aria-live="off">Ln 1, Col 1</p>
-            </div>
+            <details class="test-drawer" id="test-drawer">
+              <summary class="test-drawer-handle">
+                <span class="test-drawer-caret" aria-hidden="true">›</span>
+                <span>Test cases</span>
+                <span class="test-drawer-count" id="test-count"></span>
+              </summary>
+              <ol id="test-definitions" class="test-definitions"></ol>
+            </details>
+          </div>
+          <div class="editor-footer">
+            <p class="pane-note editor-shortcuts" id="editor-shortcuts">⌘↵ run · Ctrl+Space complete · ⌘⇧H types</p>
+            <p class="pane-note editor-cursor" id="editor-cursor" aria-live="off">Ln 1, Col 1</p>
           </div>
           <div class="run-bar">
             <button id="run" type="button" class="button button--secondary">Run script</button>

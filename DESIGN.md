@@ -89,12 +89,12 @@ components:
     typography: '{typography.code}'
     rounded: '{rounded.sm}'
     padding: '4px 10px'
-  test-disclosure:
-    backgroundColor: '{colors.paper-raised}'
-    textColor: '{colors.graphite}'
+  test-drawer:
+    backgroundColor: '{colors.paper-sunk}'
+    textColor: '{colors.graphite-soft}'
     typography: '{typography.label}'
-    rounded: '{rounded.sm}'
-    padding: '6px 10px'
+    rounded: '{rounded.md}'
+    padding: '0 12px'
   case-row:
     backgroundColor: '{colors.paper}'
     textColor: '{colors.graphite}'
@@ -256,11 +256,12 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 - **State:** `.mjs` is unavailable only while TypeScript compilation is failing. `.ts` becomes unavailable after direct JavaScript edits. A visible status line explains either block.
 - **Restore:** the restore control returns to the initial TypeScript source, invalidates cached JavaScript, re-enables both languages, and resets the REPL scope.
 
-### Test Disclosure
+### Test Drawer
 
-- **Structure:** the editor shortcut hint, native `details`/`summary`, and a `Ln, Col` cursor readout share a footer rail beneath the recessed editor host. The rail has no background of its own; a hairline separates it from editable text, and `View tests` sits on the rail's exact horizontal center at wide widths with the readout at the far end. The editor has no line-number gutter: the readout is the only positional aid, so source text starts at the well's left padding. On compact screens the readout hides while the hint and control stack and center. The test list opens centered above the control and stays inside the editor bounds.
-- **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution.
-- **Style:** the summary is a compact raised control. The expanded list is a genuine popover using `paper-sunk`, the lifted shadow, one hairline between rows, body text for names and expectations, and code typography for invocations.
+- **Structure:** one recessed well holds the source view and, seated at its bottom edge, a native `details`/`summary` drawer: a caret, the label `Test cases`, and the case count at the far end of a full-width handle. Opening the drawer takes its height from the source view rather than from the page, so the well keeps its size, the run actions never move, and the list never covers the code it describes.
+- **Rail:** the editor shortcut hint and a `Ln, Col` readout hold the two ends of a transparent metadata rail beneath the well, with nothing competing between them. The editor has no line-number gutter: the readout is the only positional aid, so source text starts at the well's left padding. On compact screens the readout hides and the hint centers.
+- **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution; the handle states how many cases there are before either action runs them.
+- **Style:** the handle and the list belong to the well and share its `paper-sunk` ground, divided from editable text by a single `rule` hairline. Label typography in graphite-soft darkens to graphite on hover and while open, and the caret rotates a quarter turn. No fill, no border, no shadow: this is a drawer in the bench, not a panel floating over it. The hairline is decorative rather than the control's boundary, because the caret and the label are what identify the handle. Rows carry one hairline between them, body text for names and expectations, and code typography for invocations, and the list scrolls internally rather than crowding the source.
 
 ### Case Result Row
 
@@ -293,7 +294,7 @@ The signature component, and the one place the old design broke a hard rule.
 - **Do** make the primary action graphite fill with paper text. Weight makes it primary, not color.
 - **Do** pair every status color with a text label, so the interface survives with all color removed.
 - **Do** recess surfaces the machine writes into, and keep surfaces the user acts on flush or raised.
-- **Do** keep the editor footer rail transparent; only the editor host receives the `paper-sunk` ground.
+- **Do** keep the editor footer rail transparent; the editor well carries the `paper-sunk` ground for both the source view and its test drawer.
 - **Do** use Martian Mono only for code and machine output. Everything else is Archivo.
 - **Do** vary spacing for rhythm across the 4/8/12/20/32/52 scale. Identical padding on every element is monotony.
 - **Do** honor `prefers-reduced-motion` on every transition, and keep motion to feedback that makes streaming legible.

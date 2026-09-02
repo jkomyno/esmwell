@@ -24,6 +24,7 @@ const sourceResetButton = document.querySelector<HTMLButtonElement>('#source-res
 const sourceStatus = document.querySelector<HTMLParagraphElement>('#source-status')
 const editorCursor = document.querySelector<HTMLParagraphElement>('#editor-cursor')
 const testDefinitions = document.querySelector<HTMLOListElement>('#test-definitions')
+const testCount = document.querySelector<HTMLSpanElement>('#test-count')
 const tape = document.querySelector<HTMLParagraphElement>('#tape')
 const faultView = document.querySelector<HTMLDivElement>('#fault')
 const consoleView = document.querySelector<HTMLDivElement>('#console')
@@ -41,6 +42,7 @@ if (
   sourceStatus === null ||
   editorCursor === null ||
   testDefinitions === null ||
+  testCount === null ||
   tape === null ||
   faultView === null ||
   consoleView === null ||
@@ -174,6 +176,7 @@ const renderTestDefinitions = (): void => {
     return row
   })
   testDefinitions.replaceChildren(...rows)
+  testCount.textContent = String(rows.length)
 }
 
 const caseDetail = (caseResult: JudgeCaseResult): string | undefined => {

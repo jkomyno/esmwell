@@ -27,8 +27,9 @@ in the browser before passing the emitted ESM to runesm; `.mjs` mode passes the
 JavaScript source directly. The two views retain separate source: TypeScript
 edits regenerate `.mjs` on navigation, syntax errors keep the editor in `.ts`,
 and direct JavaScript edits disable `.ts` until Restore initial source resets
-both views. The View tests disclosure exposes every fixed judge case before it
-runs.
+both views. The Test cases drawer opens inside the editor well, taking height
+from the source view rather than covering it, and lists every fixed judge case
+with its exact invocation before it runs.
 
 The default module decodes a typed user with Effect Schema and generates its
 time-ordered UUID v7 through the exact `uniku@0.6.0/uuid/v7` entrypoint.
