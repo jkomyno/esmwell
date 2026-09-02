@@ -44,6 +44,18 @@ Runtime-owned global bindings such as `process`, `console`, and the test-engine 
 
 This provides disposable browser realms and reliable timeout recovery. It is not a security boundary equivalent to a process, VM, V8 isolate, or Cloudflare Workers runtime. Submitted code retains the browser worker capabilities allowed by the host, including network access unless the host restricts it.
 
+## Choosing the right tool
+
+These projects all accept JavaScript-shaped input, but they solve different problems:
+
+| Tool                                                        | Best for                                                                   | Execution model                                                                                             | Packages and environment                                                                                          |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **runesm**                                                  | Embedded browser judges, persistent REPLs, and Vitest/Jest workspaces      | Executes real ESM in browser workers with hard timeout recovery; worker isolation is not a security sandbox | Resolves bare imports through esm.sh; browser APIs, no virtual filesystem or general Node.js runtime              |
+| [**callscript**](https://github.com/vercel-labs/callscript) | AI-authored tool workflows that need bounded, inspectable, resumable plans | Parses a constrained JavaScript surface into inert JSON; only host-provided tools execute                   | Mounts tools through plain adapters, the AI SDK, or MCP; it does not execute arbitrary JavaScript or npm packages |
+| [**almostnode**](https://github.com/macaly/almostnode)      | Node-style browser development environments and playgrounds                | Executes code on the main thread, in a worker, or through its separately deployed cross-origin sandbox      | Provides a virtual filesystem, Node.js API shims, npm installation, CLIs, and Vite/Next.js dev servers            |
+
+`callscript` and runesm both parse JavaScript with Acorn and validate it before work begins, but only runesm continues on to execute the submitted module. `almostnode` is the closer runtime alternative: choose it when Node.js compatibility is the requirement, and runesm when ESM-native execution, structured judge results, or a focused test-workspace API is the requirement.
+
 ## Repository
 
 - [`packages/runesm`](./packages/runesm): publishable library and complete API guide

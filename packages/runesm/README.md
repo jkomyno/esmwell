@@ -366,6 +366,18 @@ isBareSpecifier('./local.js') // false — relative, absolute, `#imports`, and f
 
 These compose by chaining return values (`collectBareSpecifiers(parseUserModule(code))`) without ever needing to name the acorn `Node`/`Program` type. If you do want to type an intermediate AST value yourself, add `acorn` as a direct dependency — this package does not re-export its types.
 
+## Choosing the right tool
+
+These projects all accept JavaScript-shaped input, but they solve different problems:
+
+| Tool                                                        | Best for                                                                   | Execution model                                                                                             | Packages and environment                                                                                          |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **runesm**                                                  | Embedded browser judges, persistent REPLs, and Vitest/Jest workspaces      | Executes real ESM in browser workers with hard timeout recovery; worker isolation is not a security sandbox | Resolves bare imports through esm.sh; browser APIs, no virtual filesystem or general Node.js runtime              |
+| [**callscript**](https://github.com/vercel-labs/callscript) | AI-authored tool workflows that need bounded, inspectable, resumable plans | Parses a constrained JavaScript surface into inert JSON; only host-provided tools execute                   | Mounts tools through plain adapters, the AI SDK, or MCP; it does not execute arbitrary JavaScript or npm packages |
+| [**almostnode**](https://github.com/macaly/almostnode)      | Node-style browser development environments and playgrounds                | Executes code on the main thread, in a worker, or through its separately deployed cross-origin sandbox      | Provides a virtual filesystem, Node.js API shims, npm installation, CLIs, and Vite/Next.js dev servers            |
+
+`callscript` and runesm both parse JavaScript with Acorn and validate it before work begins, but only runesm continues on to execute the submitted module. `almostnode` is the closer runtime alternative: choose it when Node.js compatibility is the requirement, and runesm when ESM-native execution, structured judge results, or a focused test-workspace API is the requirement.
+
 ## Compatibility
 
 `runesm` executes ES2023 modules inside browser workers. Most ECMAScript support therefore comes straight from the host browser — runesm adds a policy layer, an ESM resolver, worker lifecycle management, and result normalization on top.
