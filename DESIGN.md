@@ -46,7 +46,7 @@ typography:
     letterSpacing: '0.08em'
   code:
     fontFamily: 'Martian Mono Variable, ui-monospace, SFMono-Regular, Menlo, monospace'
-    fontSize: '0.8125rem'
+    fontSize: '0.75rem'
     fontWeight: 400
     lineHeight: 1.65
     letterSpacing: 'normal'
@@ -195,7 +195,7 @@ Syntax ink is meaningful only inside source code. It never appears in headings, 
 - **Display** (700, `clamp(2rem, 1.4rem + 2.6vw, 3.25rem)`, 1.05, `-0.02em`): the playground wordmark and nothing else.
 - **Body** (400, 0.9375rem, 1.6): prose, hints, case names. Capped at 65–75ch wherever it runs long.
 - **Label** (600, 0.75rem, 1.2, `0.08em`, uppercase): pane labels and button text.
-- **Code** (400, 0.8125rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, and test invocations.
+- **Code** (400, 0.75rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, and test invocations. Set small on purpose: a laptop viewport shows the whole default program and a full run without scrolling.
 
 The visual hierarchy runs from 0.75rem labels to 0.9375rem body text, then jumps decisively to the fluid display size. Code is a parallel functional track, distinguished by family, width, and context rather than treated as a hierarchy step.
 
@@ -258,7 +258,7 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 
 ### Test Disclosure
 
-- **Structure:** the editor shortcut hint and native `details`/`summary` share a footer rail beneath the recessed editor host. The rail has no background of its own; a hairline separates it from editable text, and `View tests` sits on the rail's exact horizontal center at wide widths. On compact screens the hint and control stack and center. The test list opens centered above the control and stays inside the editor bounds.
+- **Structure:** the editor shortcut hint, native `details`/`summary`, and a `Ln, Col` cursor readout share a footer rail beneath the recessed editor host. The rail has no background of its own; a hairline separates it from editable text, and `View tests` sits on the rail's exact horizontal center at wide widths with the readout at the far end. The editor has no line-number gutter: the readout is the only positional aid, so source text starts at the well's left padding. On compact screens the readout hides while the hint and control stack and center. The test list opens centered above the control and stays inside the editor bounds.
 - **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution.
 - **Style:** the summary is a compact raised control. The expanded list is a genuine popover using `paper-sunk`, the lifted shadow, one hairline between rows, body text for names and expectations, and code typography for invocations.
 

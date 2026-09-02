@@ -16,11 +16,9 @@ import {
   closeHoverTooltip,
   drawSelection,
   EditorView,
-  highlightActiveLineGutter,
   highlightSpecialChars,
   hoverTooltip,
   keymap,
-  lineNumbers,
   placeholder,
   ViewPlugin,
   type KeyBinding,
@@ -50,7 +48,7 @@ const editorTheme = EditorView.theme({
     height: '100%',
     color: 'var(--graphite)',
     backgroundColor: 'var(--paper-sunk)',
-    fontSize: '0.8125rem',
+    fontSize: '0.75rem',
   },
   '&.cm-focused': { outline: '2px solid var(--rust)', outlineOffset: '2px' },
   '.cm-scroller': {
@@ -61,13 +59,7 @@ const editorTheme = EditorView.theme({
   },
   '.cm-content': { padding: 'var(--space-snug) 0', caretColor: 'var(--graphite)' },
   '.cm-line': { padding: '0 var(--space-snug)' },
-  '.cm-gutters': {
-    backgroundColor: 'var(--paper-sunk)',
-    color: 'var(--graphite-soft)',
-    borderRight: '1px solid var(--rule)',
-  },
-  '.cm-lineNumbers .cm-gutterElement': { padding: '0 var(--space-tight) 0 var(--space-snug)' },
-  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--editor-active-line)' },
+  '.cm-activeLine': { backgroundColor: 'var(--editor-active-line)' },
   '.cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
     backgroundColor: 'var(--editor-selection)',
   },
@@ -217,7 +209,19 @@ interface SourceEditorOptions {
   readonly typescript: TypeScriptClient
   readonly completionSource: CompletionSource
   readonly onChange: () => void
+  readonly onCursor: (position: CursorPosition) => void
   readonly onRun: () => void
+}
+
+export interface CursorPosition {
+  readonly line: number
+  readonly column: number
+}
+
+const cursorPosition = (view: EditorView): CursorPosition => {
+  const head = view.state.selection.main.head
+  const line = view.state.doc.lineAt(head)
+  return { line: line.number, column: head - line.from + 1 }
 }
 
 export interface SourceEditor {
@@ -271,8 +275,6 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
     state: EditorState.create({
       doc: options.doc,
       extensions: [
-        lineNumbers(),
-        highlightActiveLineGutter(),
         highlightSpecialChars(),
         sourceHistory.of(history()),
         drawSelection(),
@@ -314,10 +316,14 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
           if (update.docChanged) {
             options.onChange()
           }
+          if (update.docChanged || update.selectionSet) {
+            options.onCursor(cursorPosition(update.view))
+          }
         }),
       ],
     }),
   })
+  options.onCursor(cursorPosition(view))
   return {
     getValue: () => view.state.doc.toString(),
     setValue(value) {
