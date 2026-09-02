@@ -21,6 +21,10 @@ const MAX_SERIALIZED_ITEMS = 100
 const MAX_SERIALIZED_NODES = 256
 const MAX_SERIALIZED_STRING_LENGTH = 8 * 1024
 const MAX_CONSOLE_CHARACTERS = 64 * 1024
+// Per-chunk and per-part allowances the budget charges on top of the parts
+// themselves, so a caller's rendering overhead cannot escape the cap.
+const CONSOLE_CHUNK_OVERHEAD_CHARACTERS = 16
+const CONSOLE_PART_SEPARATOR_CHARACTERS = 1
 const CONSOLE_TRUNCATION_MESSAGE = `[Console output truncated after ${MAX_CONSOLE_CHARACTERS} characters]`
 const CONSOLE_LEVELS: readonly ConsoleLevel[] = ['log', 'info', 'warn', 'error', 'debug']
 
@@ -280,6 +284,32 @@ export function installConsoleCapture(sink: ConsoleSink): () => void {
   }
 }
 
+const chunkCharacterCost = (parts: readonly string[]): number =>
+  CONSOLE_CHUNK_OVERHEAD_CHARACTERS +
+  parts.reduce((total, part) => total + part.length + CONSOLE_PART_SEPARATOR_CHARACTERS, 0)
+
+/**
+ * Keeps the parts that still fit in `budget` and clips the first one that does
+ * not, so a call larger than the whole budget still shows a prefix instead of
+ * vanishing behind the truncation notice.
+ */
+const clipParts = (parts: readonly string[], budget: number): string[] => {
+  const clipped: string[] = []
+  let used = 0
+  for (const part of parts) {
+    const cost = part.length + CONSOLE_PART_SEPARATOR_CHARACTERS
+    if (used + cost <= budget) {
+      clipped.push(part)
+      used += cost
+      continue
+    }
+    const room = budget - used - CONSOLE_PART_SEPARATOR_CHARACTERS
+    if (room > 0) clipped.push(`${part.slice(0, room)}…`)
+    break
+  }
+  return clipped
+}
+
 const createBoundedConsoleSink = (sink: ConsoleSink): BoundedConsoleSink => {
   let usedCharacters = 0
   let truncated = false
@@ -291,15 +321,20 @@ const createBoundedConsoleSink = (sink: ConsoleSink): BoundedConsoleSink => {
     write(chunk): void {
       if (truncated) return
 
-      const chunkCharacters = 16 + chunk.parts.reduce((total, part) => total + part.length + 1, 0)
-      if (usedCharacters + chunkCharacters > MAX_CONSOLE_CHARACTERS) {
-        truncated = true
-        sink.write({ level: 'warn', parts: [CONSOLE_TRUNCATION_MESSAGE] })
+      const remaining = MAX_CONSOLE_CHARACTERS - usedCharacters
+      const chunkCharacters = chunkCharacterCost(chunk.parts)
+      if (chunkCharacters <= remaining) {
+        usedCharacters += chunkCharacters
+        sink.write(chunk)
         return
       }
 
-      usedCharacters += chunkCharacters
-      sink.write(chunk)
+      truncated = true
+      const clipped = clipParts(chunk.parts, remaining - CONSOLE_CHUNK_OVERHEAD_CHARACTERS)
+      if (clipped.length > 0) {
+        sink.write({ ...chunk, parts: clipped })
+      }
+      sink.write({ level: 'warn', parts: [CONSOLE_TRUNCATION_MESSAGE] })
     },
   }
 }

@@ -7,22 +7,54 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+# Least privilege by default. Only the publish job widens this, and it runs
+# nothing but the Changesets action.
 permissions:
-  contents: write
-  pull-requests: write
-  id-token: write # Required for npm trusted publishing (OIDC)
+  contents: read
 
 env:
   CI: 'true'
   BUN_CHROME_PATH: /usr/bin/google-chrome-stable
 
 jobs:
-  release:
+  # The verification chain runs here, without publish credentials. Keeping lint,
+  # typechecking, the test suites, the package build and the browser suite out
+  # of the job that holds `id-token: write` means none of those processes can
+  # reach the npm OIDC token or `GITHUB_TOKEN`.
+  verify:
     # Disabled until the first runesm package and trusted publisher exist.
-    # Follow CONTRIBUTING.md, then remove only this guard.
+    # Follow CONTRIBUTING.md, then remove only this guard: `release` needs this
+    # job, so skipping it skips the publish too.
     if: false
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare git
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: '🧰 Setup (mise)'
+        uses: ./.github/actions/setup-mise
+
+      - name: '✅ Verify release'
+        run: |
+          test -x "$BUN_CHROME_PATH" || {
+            echo "::error::BUN_CHROME_PATH does not point at an executable: $BUN_CHROME_PATH"
+            exit 1
+          }
+          pnpm release:verify
+
+  release:
+    needs: verify
     name: Version & Publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # Required for npm trusted publishing (OIDC)
     steps:
       - name: Prepare git
         run: git config --global core.autocrlf false
@@ -39,7 +71,8 @@ jobs:
         uses: changesets/action@e87c8ed249971350e47fab7515075f44eb134e5b # v1.7.0
         with:
           version: pnpm version-packages
-          # pnpm release runs every local gate before changeset publish.
+          # The verify job already ran every gate; this only rebuilds the
+          # package from the versioned tree and publishes it.
           publish: pnpm release
           commit: 'chore: version packages'
           title: 'chore: version packages'

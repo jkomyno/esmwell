@@ -148,7 +148,7 @@ describe('installConsoleCapture', () => {
     expect(secondChunks).toEqual([{ level: 'info', parts: ['during second'] }])
   })
 
-  it('emits one warning and drops output after the capture budget', () => {
+  it('emits one warning and stops output after the capture budget', () => {
     const chunks: ConsoleChunk[] = []
     const restore = installConsoleCapture({
       write: (chunk) => {
@@ -161,12 +161,37 @@ describe('installConsoleCapture', () => {
     }
     restore()
 
-    expect(chunks.filter((chunk) => chunk.level === 'log')).toHaveLength(62)
+    const logs = chunks.filter((chunk) => chunk.level === 'log')
+    // 62 whole chunks fit; the 63rd is clipped to what remains of the budget.
+    expect(logs).toHaveLength(63)
+    expect(logs.at(-1)?.parts[0]?.length).toBeLessThan(1024)
     expect(chunks.at(-1)).toEqual({
       level: 'warn',
       parts: ['[Console output truncated after 65536 characters]'],
     })
     expect(chunks.filter((chunk) => chunk.level === 'warn')).toHaveLength(1)
+  })
+
+  it('clips a single call larger than the whole budget instead of dropping it', () => {
+    const chunks: ConsoleChunk[] = []
+    const restore = installConsoleCapture({
+      write: (chunk) => {
+        chunks.push(chunk)
+      },
+    })
+
+    console.log(...Array.from({ length: 20 }, () => 'y'.repeat(8 * 1024)))
+    restore()
+
+    // The call alone exceeds the run budget. It must still produce output.
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0]?.level).toBe('log')
+    expect(chunks[0]?.parts[0]).toBe('y'.repeat(8 * 1024))
+    expect(chunks[0]?.parts.join('').length).toBeLessThanOrEqual(64 * 1024)
+    expect(chunks[1]).toEqual({
+      level: 'warn',
+      parts: ['[Console output truncated after 65536 characters]'],
+    })
   })
 
   it('caps arguments in one call and skips inspection after truncation', () => {

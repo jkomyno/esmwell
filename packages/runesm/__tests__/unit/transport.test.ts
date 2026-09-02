@@ -418,6 +418,66 @@ describe('test-session transport timeout', () => {
       vi.unstubAllGlobals()
     }
   })
+
+  it('gives the worker only the budget left after service-worker setup', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('location', new URL('https://example.test/assets/'))
+    vi.stubGlobal('navigator', {
+      serviceWorker: {
+        register: vi.fn<() => Promise<ServiceWorkerRegistration>>(
+          () =>
+            new Promise((resolve) => {
+              setTimeout(
+                () =>
+                  resolve({
+                    active: {},
+                    scope: 'https://example.test/assets/',
+                  } as ServiceWorkerRegistration),
+                400,
+              )
+            }),
+        ),
+      },
+    })
+    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+
+    try {
+      const worker = new FakeWorker()
+      const session = createTestSession({
+        serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs',
+        workerUrl: 'https://example.test/assets/test-worker-entry.mjs',
+        workerFactory: () => worker,
+        timeoutMs: 1_000,
+      })
+
+      let settled = false
+      const pending = session
+        .run({ engine: 'vitest', modules: { 'tests/a.test': '' }, testFiles: ['tests/a.test'] })
+        .then((result) => {
+          settled = true
+          return result
+        })
+
+      await vi.advanceTimersByTimeAsync(400)
+      expect(worker.sent).toHaveLength(1)
+
+      // Setup spent 400ms of the 1000ms budget, so the worker gets the
+      // remaining 600ms. A fresh full timeout would settle at 1400ms instead.
+      await vi.advanceTimersByTimeAsync(599)
+      expect(settled).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(pending).resolves.toMatchObject({
+        status: 'error',
+        error: { name: 'TimeoutError' },
+      })
+      expect(worker.terminated).toBe(true)
+      session.close()
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('session transport: lifecycle', () => {

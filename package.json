@@ -27,8 +27,8 @@
     "bench:watch": "turbo run bench:watch",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install",
-    "release:verify": "pnpm lint:ci && pnpm typecheck && pnpm test && pnpm -C packages/runesm run verify:package && pnpm -C packages/runesm run test:browser",
-    "release": "pnpm release:verify && changeset publish"
+    "release:verify": "pnpm lint:ci && pnpm typecheck && pnpm test && pnpm -C packages/runesm run verify:package && pnpm -C packages/runesm run verify:browser",
+    "release": "pnpm -C packages/runesm run build:release && changeset publish"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",

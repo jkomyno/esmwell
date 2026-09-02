@@ -106,9 +106,10 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:browser": "tsdown && bun run scripts/browser-test.ts",
-    "test:pack": "node scripts/test-pack.mjs",
+    "test:pack": "pnpm build && node scripts/test-pack.mjs",
     "check:size": "node scripts/check-size.mjs",
-    "verify:package": "pnpm build:release && pnpm check:exports && pnpm check:size && pnpm test:pack"
+    "verify:browser": "RUNESM_WEBVIEW_BACKEND=chrome bun run scripts/browser-test.ts",
+    "verify:package": "pnpm build:release && pnpm check:exports && pnpm check:size && node scripts/test-pack.mjs"
   },
   "dependencies": {
     "acorn": "catalog:"

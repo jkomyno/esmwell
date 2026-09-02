@@ -53,4 +53,4 @@ For the first release:
 3. In the npm package settings, add a GitHub Actions trusted publisher for repository `jkomyno/runesm` and workflow `release.yaml`.
 4. Remove only the `if: false` guard from `.github/workflows/release.yaml`.
 
-`pnpm release` runs lint, typechecking, tests, a clean package build, export validation, the size budget, the packed-consumer build, and the Chrome browser suite before `changeset publish`. No long-lived npm token is required after trusted publishing is configured.
+`pnpm release:verify` runs lint, typechecking, tests, a clean package build, export validation, the size budget, the packed-consumer build, and the Chrome browser suite. The release workflow runs it in a separate job that holds no publish credentials; the publish job then runs `pnpm release`, which rebuilds the package and calls `changeset publish` and nothing else. No long-lived npm token is required after trusted publishing is configured.
