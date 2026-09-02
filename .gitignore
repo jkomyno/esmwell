@@ -291,3 +291,8 @@ build/
 # a re-render needs the browser frames re-recorded anyway.
 docs/media/*.cast
 docs/media/*.browser/
+
+### impeccable session state ###
+# Per-machine design-session logs and snapshots written by the impeccable
+# tooling. .impeccable/design.json is real project state and stays tracked.
+.impeccable/live/
