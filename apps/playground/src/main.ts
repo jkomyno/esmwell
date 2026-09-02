@@ -22,6 +22,7 @@ const runButton = document.querySelector<HTMLButtonElement>('#run')
 const judgeButton = document.querySelector<HTMLButtonElement>('#judge')
 const sourceResetButton = document.querySelector<HTMLButtonElement>('#source-reset')
 const sourceStatus = document.querySelector<HTMLParagraphElement>('#source-status')
+const editorCursor = document.querySelector<HTMLParagraphElement>('#editor-cursor')
 const testDefinitions = document.querySelector<HTMLOListElement>('#test-definitions')
 const tape = document.querySelector<HTMLParagraphElement>('#tape')
 const faultView = document.querySelector<HTMLDivElement>('#fault')
@@ -38,6 +39,7 @@ if (
   judgeButton === null ||
   sourceResetButton === null ||
   sourceStatus === null ||
+  editorCursor === null ||
   testDefinitions === null ||
   tape === null ||
   faultView === null ||
@@ -479,6 +481,9 @@ sourceEditor = createSourceEditor({
     sourceTransitionStatus = undefined
     renderSourceControls()
     resetRepl()
+  },
+  onCursor: ({ line, column }) => {
+    editorCursor.textContent = `Ln ${line}, Col ${column}`
   },
   onRun: () => void execute([]),
 })

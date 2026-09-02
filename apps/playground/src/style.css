@@ -366,6 +366,14 @@ a {
   text-align: left;
 }
 
+/* Replaces the gutter: one quiet readout instead of a column of numbers. */
+.editor-cursor {
+  grid-column: 3;
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .test-disclosure {
   position: relative;
   flex: none;
@@ -508,7 +516,7 @@ a {
   border-radius: var(--radius-md);
   padding: var(--space-snug);
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 400;
   font-stretch: 87.5%;
   line-height: 1.65;
@@ -634,7 +642,7 @@ a {
 
 .fault-message {
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-stretch: 87.5%;
   line-height: 1.65;
   overflow-wrap: anywhere;
@@ -802,7 +810,7 @@ a {
 .repl-caret {
   color: var(--sap);
   font-family: var(--font-mono);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-stretch: 87.5%;
 }
 
@@ -935,6 +943,10 @@ a {
     grid-column: 1;
     justify-self: center;
     text-align: center;
+  }
+
+  .editor-cursor {
+    display: none;
   }
 
   /* Narrow the width axis rather than the type size, so wide mono still
