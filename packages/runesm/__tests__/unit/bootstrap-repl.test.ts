@@ -41,6 +41,32 @@ describe('REPL persistence', () => {
     expect(read.value).toBe(2)
   })
 
+  it('treats __proto__ as an ordinary persistent binding', async () => {
+    const session = createReplSessionInRealm({})
+    const declared = await evaluate(session, 'let __proto__ = { marker: 42 }')
+    const read = await evaluate(session, '__proto__.marker')
+    const owned = await evaluate(session, "Object.hasOwn(__runesm, '__proto__')")
+
+    expect(declared.ok).toBe(true)
+    expect(read).toMatchObject({ ok: true, value: 42 })
+    expect(owned).toMatchObject({ ok: true, value: true })
+  })
+
+  it('keeps bindings when submitted code replaces Object.hasOwn', async () => {
+    const session = createReplSessionInRealm({})
+    const nativeHasOwn = Object.hasOwn
+    let read: ReplResult
+    try {
+      await evaluate(session, 'Object.hasOwn = () => false')
+      await evaluate(session, 'let kept = 42')
+      read = await evaluate(session, 'kept')
+    } finally {
+      Object.hasOwn = nativeHasOwn
+    }
+
+    expect(read).toMatchObject({ ok: true, value: 42 })
+  })
+
   it('function and class declarations persist with live self-references', async () => {
     const session = createReplSessionInRealm({})
     await evaluate(session, 'function fib(n) {\n  return n < 2 ? n : fib(n - 1) + fib(n - 2)\n}')
@@ -141,7 +167,7 @@ describe('REPL persistence', () => {
 })
 
 describe('REPL rejections and capture', () => {
-  it('loads editor-style ESM declarations into the persistent scope', async () => {
+  it('loads named ESM declarations into the persistent scope', async () => {
     const session = createReplSessionInRealm({})
     const loaded = await evaluate(session, 'const factor = 2\nexport const solve = (input) => input.value * factor')
     const result = await evaluate(session, 'solve({ value: 21 })')

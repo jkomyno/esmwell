@@ -14,7 +14,7 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 - ✅ **Infinite loops become results, not frozen tabs** — a hard timeout terminates the worker and returns a typed `TimeoutError`
 - ✅ **Console output streams** while the submitted code is still running
 - ✅ **Real Vitest and Jest engines**, loaded lazily so judge and REPL users never pay for them
-- ✅ **Small** — one runtime dependency ([acorn](https://github.com/acornjs/acorn)), 22 KB gzipped under a CI-enforced 30 KB budget, gated against Chromium and WebKit
+- ✅ **Small** — one runtime dependency ([acorn](https://github.com/acornjs/acorn)), 23 KB gzipped under a CI-enforced 30 KB budget, gated in Chrome
 
 👉 [Compatibility reference](https://github.com/jkomyno/runesm/blob/main/COMPATIBILITY.md) · [Contributing](https://github.com/jkomyno/runesm/blob/main/CONTRIBUTING.md)
 
@@ -56,6 +56,8 @@ const result = await session.runJudge(
 session.close()
 ```
 
+Console capture uses a 65,536-character per-run budget, including per-call overhead. Long values and collections are previewed; exhausted output ends with one warning chunk before later calls are dropped.
+
 Results compare structurally (`NaN` equals `NaN`, `+0` ≠ `-0`, `Map`/`Set` ignore insertion order, TypedArrays compare byte-wise, prototypes must match). `RegExp` compares source and flags, boxed primitives compare their wrapped value, and `Error` compares class, `name`, `message`, and `cause` (never `stack`).
 
 ## REPL mode
@@ -81,7 +83,7 @@ repl.close()
 
 Each input's completion value (its final expression) comes back as `value`. Named exported declarations persist like ordinary REPL declarations, so an ESM module can seed the scope before interactive inputs. A local export list is accepted but adds no new binding; re-exports and default-export expressions without a named function or class are rejected with a clear error.
 
-The persistent scope is a plain object, so its declaration semantics deliberately differ from a JavaScript module:
+The persistent scope is an internal object, so its declaration semantics deliberately differ from a JavaScript module:
 
 - Re-declaring a name with `let` reassigns it instead of erroring, as does re-declaring a `const` — both `let` and `const` become scope assignments, so a later input can even reassign an earlier `const`.
 
@@ -131,8 +133,8 @@ tests.close()
 ```
 
 Test sessions default to `timeoutMs: 60000` because the same budget covers
-the engine download and test run. Judge and REPL sessions keep the 5-second
-default.
+service-worker setup, the engine download, and the test run. Judge and REPL
+sessions keep the 5-second default.
 
 For Jest, import the same globals from `@jest/globals`. `jest.fn` and
 `jest.spyOn` use the official `jest-mock` package. Both engines and their
@@ -157,6 +159,8 @@ required outside localhost. Pass explicit URLs when a bundler relocates the
 files; a blob-built execution worker cannot participate in this mode. The
 service worker only answers runesm's versioned virtual-module path beneath its
 scope and leaves other requests untouched.
+
+Serve these assets from a dedicated directory so the registration can safely own its scope and update across deployments.
 
 Each test run creates and terminates its own worker. A timeout therefore clears engine registration state and the virtual module graph before the next run.
 
@@ -351,13 +355,22 @@ import 'runesm/execution-worker-entry'
 - `collectBareSpecifiers(ast)` — lists the bare import specifiers a parsed module references.
 - `resolveDependencies` / `resolveImportSpecifier` — resolve bare specifiers to CDN URLs, throwing `SpecifierResolutionError` on failure (see [Dependencies and autoInstall](#dependencies-and-autoinstall)).
 
+A host that only needs to classify a specifier, without resolving it, can import the predicate on its own from the `runesm/utils` subpath — it pulls in none of the runner:
+
+```ts
+import { isBareSpecifier } from 'runesm/utils'
+
+isBareSpecifier('zod@4') // true — a package name, possibly versioned, scoped, or with a subpath
+isBareSpecifier('./local.js') // false — relative, absolute, `#imports`, and full URLs are all not bare
+```
+
 These compose by chaining return values (`collectBareSpecifiers(parseUserModule(code))`) without ever needing to name the acorn `Node`/`Program` type. If you do want to type an intermediate AST value yourself, add `acorn` as a direct dependency — this package does not re-export its types.
 
 ## Compatibility
 
 `runesm` executes ES2023 modules inside browser workers. Most ECMAScript support therefore comes straight from the host browser — runesm adds a policy layer, an ESM resolver, worker lifecycle management, and result normalization on top.
 
-The current gate covers **Chromium** and **WebKit**. Firefox is not yet part of the claimed matrix.
+The release gate runs in **Chrome**. The compatibility reference also records a dated manual WebKit probe; WebKit and Firefox are not release gates.
 
 Things worth knowing before you ship:
 

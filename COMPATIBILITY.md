@@ -22,9 +22,11 @@ The probe ran through the built package, coordinator worker, and child execution
 - Chrome 151.0.7922.174
 - WKWebView on macOS 14.4.1, reporting AppleWebKit 605.1.15
 
+The hosted release gate runs Chrome. The WebKit rows record this manual snapshot and are not a release gate.
+
 The partial `node:process` contract is also covered by deterministic facade tests and real-browser tests for its exact exports, identity, mutable contents, scheduling, unsupported operations, and judge/REPL lifecycle.
 
-Firefox is not part of the current browser gate. The parser accepts ES2023 module syntax. A newer global may still work when the browser supplies it, even when its related syntax is newer than ES2023.
+Firefox is not part of the compatibility snapshot. The parser accepts ES2023 module syntax. A newer global may still work when the browser supplies it, even when its related syntax is newer than ES2023.
 
 ## ECMAScript built-ins
 

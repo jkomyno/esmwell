@@ -60,6 +60,13 @@
         "default": "./build/index.mjs"
       }
     },
+    "./utils": {
+      "import": {
+        "@jkomyno/source": "./src/utils.ts",
+        "types": "./build/utils.d.mts",
+        "default": "./build/utils.mjs"
+      }
+    },
     "./worker-entry": {
       "import": {
         "@jkomyno/source": "./src/worker-entry.ts",
@@ -89,6 +96,7 @@
   "scripts": {
     "clean": "rimraf build .turbo",
     "build": "tsdown",
+    "build:release": "pnpm clean && pnpm build",
     "build:watch": "tsdown --watch",
     "check:exports": "attw --pack . --profile esm-only",
     "typecheck": "pnpm typecheck:src && pnpm typecheck:test",
@@ -98,7 +106,10 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:browser": "tsdown && bun run scripts/browser-test.ts",
-    "check:size": "node scripts/check-size.mjs"
+    "test:pack": "pnpm build && node scripts/test-pack.mjs",
+    "check:size": "node scripts/check-size.mjs",
+    "verify:browser": "RUNESM_WEBVIEW_BACKEND=chrome bun run scripts/browser-test.ts",
+    "verify:package": "pnpm build:release && pnpm check:exports && pnpm check:size && node scripts/test-pack.mjs"
   },
   "dependencies": {
     "acorn": "catalog:"

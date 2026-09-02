@@ -22,6 +22,18 @@ export interface TypeScriptCompletions {
   readonly options: readonly TypeScriptCompletion[]
 }
 
+export interface TypeScriptDisplayPart {
+  readonly kind: string
+  readonly text: string
+}
+
+export interface TypeScriptQuickInfo {
+  readonly from: number
+  readonly to: number
+  readonly displayParts: readonly TypeScriptDisplayPart[]
+  readonly documentation: string
+}
+
 export type TypeScriptWorkerRequestBody =
   | {
       readonly type: 'completions'
@@ -33,6 +45,12 @@ export type TypeScriptWorkerRequestBody =
       readonly type: 'diagnostics'
       readonly source: string
       readonly language: SourceLanguage
+    }
+  | {
+      readonly type: 'quick-info'
+      readonly source: string
+      readonly language: SourceLanguage
+      readonly position: number
     }
   | {
       readonly type: 'transpile'

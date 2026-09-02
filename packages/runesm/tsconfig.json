@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.test.json",
   "include": ["src", "__tests__"],
   // Browser tests run page-side through the WebView harness (bun), not vitest.
-  "exclude": ["__tests__/browser"],
+  "exclude": ["__tests__/browser", "__tests__/fixtures"],
   "compilerOptions": {
     // Specify an output folder for all emitted files.
     "outDir": "build",

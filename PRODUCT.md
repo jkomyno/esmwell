@@ -55,6 +55,6 @@ Emotional goal: the confidence that comes from having actually run something, no
 WCAG 2.2 AA.
 
 - AA contrast throughout, including code surfaces and the pass/fail/error result states. Result status must never be carried by color alone.
-- Full keyboard operability, with visible focus on every interactive element. The editor, the deps inputs, the run controls, and the REPL entry form all sit on the main path.
+- Full keyboard operability, with visible focus on every interactive element. The editor, language and restore controls, test disclosure, run controls, and REPL entry form all sit on the main path.
 - `prefers-reduced-motion` honored for any streaming, entrance, or state-change motion.
 - Run results and streamed console output are announced to screen readers via appropriate live regions, since the interface updates asynchronously after a user action.

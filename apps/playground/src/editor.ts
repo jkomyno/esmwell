@@ -9,13 +9,16 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { bracketMatching, HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting } from '@codemirror/language'
 import { linter, lintKeymap } from '@codemirror/lint'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
-import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, Prec, Transaction, type Extension } from '@codemirror/state'
 import {
   Decoration,
+  activateHover,
+  closeHoverTooltip,
   drawSelection,
   EditorView,
   highlightActiveLineGutter,
   highlightSpecialChars,
+  hoverTooltip,
   keymap,
   lineNumbers,
   placeholder,
@@ -24,9 +27,9 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { javascript } from '@codemirror/lang-javascript'
-import { tags } from '@lezer/highlight'
+import { tags, type Tag } from '@lezer/highlight'
 import { ReplCommandHistory } from './repl-command-history'
-import type { SourceLanguage } from './typescript-protocol'
+import type { SourceLanguage, TypeScriptDisplayPart } from './typescript-protocol'
 import type { TypeScriptClient } from './typescript-client'
 
 const syntaxColors = HighlightStyle.define([
@@ -75,7 +78,7 @@ const editorTheme = EditorView.theme({
     color: 'var(--graphite)',
     border: '1px solid var(--rule-strong)',
     borderRadius: 'var(--radius-sm)',
-    boxShadow: '0 6px 20px -8px oklch(28% 0.014 70 / 0.22)',
+    boxShadow: 'var(--shadow-lifted)',
     fontFamily: 'var(--font-mono)',
     fontSize: '0.75rem',
   },
@@ -86,6 +89,19 @@ const editorTheme = EditorView.theme({
   },
   '.cm-completionLabel': { color: 'var(--graphite)' },
   '.cm-completionDetail': { color: 'var(--graphite-soft)', fontStyle: 'normal' },
+  '.cm-typescript-info': {
+    maxWidth: 'min(34rem, calc(100vw - 2.5rem))',
+    maxHeight: 'min(20rem, 50vh)',
+    overflow: 'auto',
+    padding: 'var(--space-tight) var(--space-snug)',
+  },
+  '.cm-typescript-info code': { display: 'block', whiteSpace: 'pre-wrap' },
+  '.cm-typescript-info p': {
+    margin: 'var(--space-tight) 0 0',
+    color: 'var(--graphite-soft)',
+    fontFamily: 'var(--font-sans)',
+    lineHeight: '1.5',
+  },
   '.cm-diagnostic-error': { borderLeftColor: 'var(--crimson)' },
   '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: 'underline wavy var(--crimson)' },
   '.cm-placeholder': { color: 'var(--graphite-soft)', fontStyle: 'normal' },
@@ -124,11 +140,72 @@ const highlightActiveCursorLines = ViewPlugin.fromClass(
 
 const languageExtension = (language: SourceLanguage): Extension => javascript({ typescript: language === 'ts' })
 
+const quickInfoTokenTags: Readonly<Record<string, Tag>> = {
+  aliasName: tags.typeName,
+  className: tags.typeName,
+  enumMemberName: tags.propertyName,
+  enumName: tags.typeName,
+  fieldName: tags.propertyName,
+  functionName: tags.function(tags.variableName),
+  interfaceName: tags.typeName,
+  keyword: tags.keyword,
+  localName: tags.variableName,
+  methodName: tags.function(tags.propertyName),
+  moduleName: tags.namespace,
+  numericLiteral: tags.number,
+  operator: tags.punctuation,
+  parameterName: tags.variableName,
+  propertyName: tags.propertyName,
+  punctuation: tags.punctuation,
+  regularExpressionLiteral: tags.string,
+  stringLiteral: tags.string,
+  typeParameterName: tags.typeName,
+}
+
+const quickInfoDom = (
+  displayParts: readonly TypeScriptDisplayPart[],
+  documentation: string,
+): { readonly dom: HTMLElement } => {
+  const dom = document.createElement('div')
+  dom.className = 'cm-typescript-info'
+  dom.setAttribute('role', 'tooltip')
+  dom.setAttribute('aria-live', 'polite')
+  const signature = document.createElement('code')
+  for (const part of displayParts) {
+    const token = document.createElement('span')
+    token.textContent = part.text
+    const tokenTag = quickInfoTokenTags[part.kind]
+    const tokenClass = tokenTag === undefined ? null : syntaxColors.style([tokenTag])
+    if (tokenClass !== null) {
+      token.className = tokenClass
+    }
+    signature.append(token)
+  }
+  dom.append(signature)
+  if (documentation !== '') {
+    const description = document.createElement('p')
+    description.textContent = documentation
+    dom.append(description)
+  }
+  return { dom }
+}
+
 const replaceDocument = (view: EditorView, value: string): void => {
   view.dispatch({
     changes: { from: 0, to: view.state.doc.length, insert: value },
     selection: { anchor: value.length },
   })
+}
+
+const replaceSourceDocument = (view: EditorView, value: string, sourceHistory: Compartment): void => {
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: value },
+    selection: { anchor: value.length },
+    annotations: Transaction.addToHistory.of(false),
+    effects: sourceHistory.reconfigure([]),
+  })
+  // A language switch or source restore starts a new source undo history.
+  view.dispatch({ effects: sourceHistory.reconfigure(history()) })
 }
 
 const REPL_SUGGESTION = "solve({ name: 'repl', age: 5 })"
@@ -145,18 +222,47 @@ interface SourceEditorOptions {
 
 export interface SourceEditor {
   getValue(): string
+  setValue(value: string): void
   setLanguage(language: SourceLanguage): void
+  focus(): void
   destroy(): void
 }
 
 export const createSourceEditor = (options: SourceEditorOptions): SourceEditor => {
   let currentLanguage = options.language
   const language = new Compartment()
+  const sourceHistory = new Compartment()
+  const typeInfoTooltip = hoverTooltip(
+    async (editor, position) => {
+      const info = await options.typescript.quickInfo(editor.state.doc.toString(), currentLanguage, position)
+      if (info === null) {
+        return null
+      }
+      return {
+        pos: info.from,
+        end: info.to,
+        above: true,
+        create: () => quickInfoDom(info.displayParts, info.documentation),
+      }
+    },
+    { hideOnChange: true },
+  )
   const runKeybinding: KeyBinding = {
     key: 'Mod-Enter',
     preventDefault: true,
     run: () => {
       options.onRun()
+      return true
+    },
+  }
+  const typeInfoKeybinding: KeyBinding = {
+    key: 'Mod-Shift-h',
+    preventDefault: true,
+    run: (editor) => {
+      activateHover(editor, editor.state.selection.main.head, 1, {
+        tooltip: typeInfoTooltip,
+        until: (transaction) => transaction.docChanged || transaction.selection !== undefined,
+      })
       return true
     },
   }
@@ -168,7 +274,7 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightSpecialChars(),
-        history(),
+        sourceHistory.of(history()),
         drawSelection(),
         indentOnInput(),
         bracketMatching(),
@@ -182,10 +288,12 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         EditorView.contentAttributes.of({
           'aria-label': 'Module source',
           'aria-describedby': 'editor-shortcuts',
+          'aria-keyshortcuts': 'Meta+Shift+H Control+Shift+H',
           spellcheck: 'false',
         }),
         keymap.of([
           runKeybinding,
+          typeInfoKeybinding,
           ...closeBracketsKeymap,
           ...defaultKeymap,
           ...searchKeymap,
@@ -199,6 +307,7 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         linter((editor) => options.typescript.diagnostics(editor.state.doc.toString(), currentLanguage), {
           delay: 500,
         }),
+        typeInfoTooltip,
         syntaxHighlighting(syntaxColors),
         editorTheme,
         EditorView.updateListener.of((update) => {
@@ -211,10 +320,18 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
   })
   return {
     getValue: () => view.state.doc.toString(),
+    setValue(value) {
+      if (value !== view.state.doc.toString()) {
+        replaceSourceDocument(view, value, sourceHistory)
+      }
+    },
     setLanguage(nextLanguage) {
       currentLanguage = nextLanguage
-      view.dispatch({ effects: language.reconfigure(languageExtension(nextLanguage)) })
+      view.dispatch({
+        effects: [language.reconfigure(languageExtension(nextLanguage)), closeHoverTooltip(typeInfoTooltip)],
+      })
     },
+    focus: () => view.focus(),
     destroy: () => view.destroy(),
   }
 }

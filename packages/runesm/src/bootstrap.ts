@@ -218,7 +218,7 @@ const elapsedMs = (startedAt: number): number => Math.round((performance.now() -
  * stored on the target — user declarations, imports — are also returned
  * untouched.
  */
-const SCOPE_MODULE_SOURCE = `const __runesmScope = {}
+const SCOPE_MODULE_SOURCE = `const __runesmScope = Object.create(null)
 const __runesmBoundGlobals = new WeakMap()
 export const __runesm = new Proxy(__runesmScope, {
   get(target, key) {

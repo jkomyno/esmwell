@@ -27,37 +27,25 @@ colors:
   editor-active-line: 'oklch(91% 0.014 75)'
 typography:
   display:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
     fontSize: 'clamp(2rem, 1.4rem + 2.6vw, 3.25rem)'
     fontWeight: 700
     lineHeight: 1.05
     letterSpacing: '-0.02em'
-  headline:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
-    fontSize: '1.5rem'
-    fontWeight: 650
-    lineHeight: 1.15
-    letterSpacing: '-0.01em'
-  title:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
-    fontSize: '1.1875rem'
-    fontWeight: 600
-    lineHeight: 1.25
-    letterSpacing: 'normal'
   body:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
     fontSize: '0.9375rem'
     fontWeight: 400
     lineHeight: 1.6
     letterSpacing: 'normal'
   label:
-    fontFamily: 'Archivo, ui-sans-serif, system-ui, sans-serif'
+    fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
     fontSize: '0.75rem'
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: '0.08em'
   code:
-    fontFamily: 'Martian Mono, ui-monospace, SFMono-Regular, Menlo, monospace'
+    fontFamily: 'Martian Mono Variable, ui-monospace, SFMono-Regular, Menlo, monospace'
     fontSize: '0.8125rem'
     fontWeight: 400
     lineHeight: 1.65
@@ -66,7 +54,6 @@ typography:
 rounded:
   sm: '2px'
   md: '4px'
-  pill: '999px'
 spacing:
   hair: '4px'
   tight: '8px'
@@ -96,25 +83,30 @@ components:
     typography: '{typography.code}'
     rounded: '{rounded.md}'
     padding: '12px'
-  input-version:
+  source-language-controls:
     backgroundColor: '{colors.paper-raised}'
     textColor: '{colors.graphite}'
     typography: '{typography.code}'
     rounded: '{rounded.sm}'
-    padding: '4px 8px'
-    width: '7rem'
-  dep-row:
-    backgroundColor: '{colors.paper}'
+    padding: '4px 10px'
+  test-disclosure:
+    backgroundColor: '{colors.paper-raised}'
     textColor: '{colors.graphite}'
-    typography: '{typography.code}'
+    typography: '{typography.label}'
     rounded: '{rounded.sm}'
-    padding: '8px 12px'
+    padding: '6px 10px'
   case-row:
     backgroundColor: '{colors.paper}'
     textColor: '{colors.graphite}'
     typography: '{typography.body}'
     rounded: '{rounded.md}'
     padding: '8px 12px'
+  repl-entry:
+    backgroundColor: '{colors.paper-raised}'
+    textColor: '{colors.graphite}'
+    typography: '{typography.code}'
+    rounded: '{rounded.sm}'
+    padding: '7px 12px'
 ---
 
 # Design System: runesm playground
@@ -146,7 +138,7 @@ Warm paper and warm ink, with four saturated UI hues held in reserve for interfa
 
 ### Primary
 
-- **Rust** (`oklch(52% 0.15 45)` / `#ab4400`): the brand hue and the only accent. Links, focus rings, resolved dependency names, and the hover state of the primary action. 5.46:1 on paper, 4.99:1 on wells. It is deliberately _not_ the action color; see the Ink Acts Rule.
+- **Rust** (`oklch(52% 0.15 45)` / `#ab4400`): the brand hue and the only accent. Links, focus rings, and the hover state of the primary action. 5.46:1 on paper, 4.99:1 on wells. It is deliberately _not_ the action color; see the Ink Acts Rule.
 
 ### Secondary
 
@@ -158,7 +150,7 @@ Warm paper and warm ink, with four saturated UI hues held in reserve for interfa
 
 - **Paper** (`oklch(97.5% 0.008 75)` / `#faf6f1`): the page ground. A warm off-white sheet.
 - **Paper Sunk** (`oklch(94.5% 0.010 75)` / `#f1ece6`): every surface the machine writes into. The editor, the console, the REPL history.
-- **Paper Raised** (`oklch(99% 0.005 75)` / `#fefbf8`): controls sitting on top of a sunk well, such as a version input inside a dependency row.
+- **Paper Raised** (`oklch(99% 0.005 75)` / `#fefbf8`): controls sitting on top of a sunk well, such as the language switch, restore control, and REPL entry.
 - **Graphite** (`oklch(28% 0.014 70)` / `#2d2821`): body text, code, and the primary action fill. 13.59:1 on paper.
 - **Graphite Soft** (`oklch(48% 0.012 70)` / `#625d56`): pane labels, hints, secondary metadata. 6.09:1 on paper, 5.57:1 on wells.
 - **Rule** (`oklch(86% 0.012 75)` / `#d6d0c9`): decorative hairlines and dividers only, where the boundary is not needed to identify a control.
@@ -188,7 +180,7 @@ Syntax ink is meaningful only inside source code. It never appears in headings, 
 
 **The Never Hue-Alone Rule.** Status is never carried by color alone. Every pass, fail, running, and error state ships a text label or glyph alongside its hue. Removing all color from the interface must leave it fully readable.
 
-**The Two-Ground Rule.** Only two background values appear in normal use: paper and paper-sunk. A third background is a sign that a container was added that did not need to exist.
+**The Two-Ground Rule.** Structural surfaces use only paper and paper-sunk. Paper-raised is reserved for interactive controls, never a third container layer. Another structural background is a sign that a container was added that did not need to exist.
 
 ## 3. Typography
 
@@ -201,17 +193,15 @@ Syntax ink is meaningful only inside source code. It never appears in headings, 
 ### Hierarchy
 
 - **Display** (700, `clamp(2rem, 1.4rem + 2.6vw, 3.25rem)`, 1.05, `-0.02em`): the playground wordmark and nothing else.
-- **Headline** (650, 1.5rem, 1.15, `-0.01em`): section headings when the page grows past one screen.
-- **Title** (600, 1.1875rem, 1.25): pane titles that need more presence than a label.
 - **Body** (400, 0.9375rem, 1.6): prose, hints, case names. Capped at 65–75ch wherever it runs long.
 - **Label** (600, 0.75rem, 1.2, `0.08em`, uppercase): pane labels and button text.
-- **Code** (400, 0.8125rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, dependency specifiers, version pins.
+- **Code** (400, 0.8125rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, and test invocations.
 
-Steps are 0.75 → 0.9375 → 1.1875 → 1.5, each at least 1.25× the last. Flat scales are prohibited.
+The visual hierarchy runs from 0.75rem labels to 0.9375rem body text, then jumps decisively to the fluid display size. Code is a parallel functional track, distinguished by family, width, and context rather than treated as a hierarchy step.
 
 ### Named Rules
 
-**The Labeled Drawer Rule.** Every pane carries a small uppercase Archivo label in graphite-soft: EDITOR, DEPS, OUTPUT, REPL. This is the deliberate organizing grammar of the system, taken from equipment documentation, and it is the one place repeated uppercase tracked labels are correct. Do not extend the pattern to decorative kickers above ordinary headings.
+**The Labeled Drawer Rule.** Every pane carries a small uppercase Archivo label in graphite-soft: EDITOR, OUTPUT, REPL. This is the deliberate organizing grammar of the system, taken from equipment documentation, and it is the one place repeated uppercase tracked labels are correct. Do not extend the pattern to decorative kickers above ordinary headings.
 
 **The Mono Is For Code Rule.** Martian Mono appears only where the content is code or machine output. Chrome, labels, buttons, hints and prose are Archivo. Monospace used as a costume for "developer tool" is prohibited; this interface has real code in it and that is the only reason mono is here.
 
@@ -219,7 +209,7 @@ Steps are 0.75 → 0.9375 → 1.1875 → 1.5, each at least 1.25× the last. Fla
 
 Flat by default. There are no decorative shadows anywhere in this system, and no glass, blur, or translucency. Depth is tonal and it means one specific thing: recession indicates a surface the machine writes into, rather than a surface the user acts on.
 
-The editor, the console, the REPL history and the dependency list are recessed to `paper-sunk`. Buttons, inputs and the REPL entry field sit flush on `paper` or raised to `paper-raised`. That is the entire depth vocabulary.
+The editor, the console, the REPL history, and the expanded test list are recessed to `paper-sunk`. Buttons and the REPL entry field sit flush on `paper` or raised to `paper-raised`. That is the entire depth vocabulary.
 
 One shadow exists, and only for elements that genuinely float above the page:
 
@@ -253,18 +243,24 @@ One shadow exists, and only for elements that genuinely float above the page:
 
 There are no cards in this system. Panes are defined by a label and a ground change, not by a bordered box, and nested containers are prohibited. When a boundary is genuinely needed, it is a single 1px `rule` hairline.
 
-### Inputs / Fields
-
-- **Style:** paper-raised fill, 1px `rule-strong` border, 2px radius, code typography. The version pin input is 7rem wide and shows `latest` as placeholder text in graphite-soft.
-- **Focus:** 2px rust outline at 2px offset. The border does not change color, so the control does not appear to move.
-- **Error:** 1px crimson border plus a crimson message beneath. Never a border color change alone.
-
 ### Wells
 
 - **Style:** paper-sunk fill, 4px radius, 12px padding, code typography, no border.
 - **Behavior:** scroll internally rather than growing the page. The console well is a polite live region so streamed output is announced.
-- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, and syntax rendering. `.ts` uses the TypeScript language mode and compiles in a dedicated browser worker before runesm executes the emitted module; `.mjs` passes JavaScript source directly to runesm. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
+- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, inferred-type hover help, and syntax rendering. Its dedicated TypeScript worker acquires and caches npm declaration graphs on demand for bare imports and their inline versions. `.ts` compiles in that worker before runesm executes the emitted module; `.mjs` shows the generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
 - **Empty state:** a single line of graphite-soft body text stating what will appear here, never a blank box.
+
+### Source Language Controls
+
+- **Structure:** an icon-only restore control followed by the connected `.ts` and `.mjs` selector. Every icon control has an accessible name and native disabled state.
+- **State:** `.mjs` is unavailable only while TypeScript compilation is failing. `.ts` becomes unavailable after direct JavaScript edits. A visible status line explains either block.
+- **Restore:** the restore control returns to the initial TypeScript source, invalidates cached JavaScript, re-enables both languages, and resets the REPL scope.
+
+### Test Disclosure
+
+- **Structure:** the editor shortcut hint and native `details`/`summary` share a footer rail beneath the recessed editor host. The rail has no background of its own; a hairline separates it from editable text, and `View tests` sits on the rail's exact horizontal center at wide widths. On compact screens the hint and control stack and center. The test list opens centered above the control and stays inside the editor bounds.
+- **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution.
+- **Style:** the summary is a compact raised control. The expanded list is a genuine popover using `paper-sunk`, the lifted shadow, one hairline between rows, body text for names and expectations, and code typography for invocations.
 
 ### Case Result Row
 
@@ -277,14 +273,16 @@ The signature component, and the one place the old design broke a hard rule.
 ### REPL Entry
 
 - **Style:** paper-raised, 1px `rule-strong` border, 2px radius, with a sap `›` caret and a borderless CodeMirror entry that inherits code typography.
-- **Scope:** the current editor module evaluates as the first input. Later declarations persist until reset, source edits, or dependency-pin changes rebuild the scope.
+- **Scope:** the current editor module evaluates as the first input. Later declarations persist until reset, source edits, language changes, or source restore rebuilds the scope.
 - **Input:** `Ctrl+Space` opens completion against the editor module and successful prior inputs. Right arrow accepts the faded inline suggestion while the input is empty. Up and down arrows traverse command history, restoring the unfinished draft after the newest entry.
 - **History:** a sunk well above it. Input lines prefixed `›` in graphite, values prefixed `=` in graphite-soft, errors prefixed `!` in crimson.
 
-### Dependency Row
+### Responsive Bench
 
-- **Style:** the specifier in code typography on paper, a version input aligned right, a 1px `rule` hairline between rows rather than a bordered box per row.
-- **Resolved state:** once a run completes, the resolved version is shown in rust beside the pin, which is the only place rust appears as content.
+- **Wide:** source and response columns share one viewport, with the editor taking slightly more width and both columns distributing the bounded height through internally scrolling wells.
+- **Pane headers:** every pane uses the same label, metadata, and control columns. Editor and Output therefore begin on the same horizontal line, while REPL shortcuts stay attached to its reset action instead of floating between edges.
+- **Stacked:** below `68rem`, the source column comes first, followed by Output and REPL. The page stops stretching the editor to the remaining viewport; its well stays between `20rem` and `25rem`, using `46svh` as the fluid target so the response begins near the first fold.
+- **Compact:** below `40rem`, pane heads and action groups wrap, while the editor footer collapses to one centered column. Code narrows on Martian Mono's width axis. Once the bench stacks, every control retains a `44px` minimum target.
 
 ## 6. Do's and Don'ts
 
@@ -295,6 +293,7 @@ The signature component, and the one place the old design broke a hard rule.
 - **Do** make the primary action graphite fill with paper text. Weight makes it primary, not color.
 - **Do** pair every status color with a text label, so the interface survives with all color removed.
 - **Do** recess surfaces the machine writes into, and keep surfaces the user acts on flush or raised.
+- **Do** keep the editor footer rail transparent; only the editor host receives the `paper-sunk` ground.
 - **Do** use Martian Mono only for code and machine output. Everything else is Archivo.
 - **Do** vary spacing for rhythm across the 4/8/12/20/32/52 scale. Identical padding on every element is monotony.
 - **Do** honor `prefers-reduced-motion` on every transition, and keep motion to feedback that makes streaming legible.

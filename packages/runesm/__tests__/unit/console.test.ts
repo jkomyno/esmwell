@@ -56,6 +56,51 @@ describe('serializeValue', () => {
     value.self = value
     expect(serializeValue(value)).toBe('{ self: [Circular] }')
   })
+
+  it('bounds strings and collection previews', () => {
+    const longString = 'x'.repeat(20_000)
+    const wideArray = Array.from({ length: 120 }, (_, index) => index)
+
+    expect(serializeValue(longString).length).toBeLessThan(20_000)
+    expect(serializeValue(longString)).toMatch(/…$/)
+    expect(serializeValue(wideArray)).toContain('… 20 more')
+    expect(serializeValue(wideArray)).not.toContain('119')
+  })
+
+  it('returns a stable preview when object inspection throws', () => {
+    const hostile = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error('blocked')
+        },
+      },
+    )
+
+    expect(serializeValue(hostile)).toBe('[Unserializable]')
+  })
+
+  it('bounds wide object previews', () => {
+    const wideObject = Object.fromEntries(Array.from({ length: 120 }, (_, index) => [`key${index}`, index]))
+
+    expect(serializeValue(wideObject)).toContain('key99: 99, … 20 more')
+    expect(serializeValue(wideObject)).not.toContain('key100')
+  })
+
+  it('bounds work across nested previews', () => {
+    let inspections = 0
+    const nested = Array.from({ length: 100 }, () =>
+      Array.from({ length: 100 }, () => ({
+        get value() {
+          inspections += 1
+          return 1
+        },
+      })),
+    )
+
+    expect(serializeValue(nested)).toContain('…')
+    expect(inspections).toBeLessThan(1_000)
+  })
 })
 
 describe('installConsoleCapture', () => {
@@ -101,5 +146,78 @@ describe('installConsoleCapture', () => {
 
     expect(firstChunks).toEqual([{ level: 'log', parts: ['during first'] }])
     expect(secondChunks).toEqual([{ level: 'info', parts: ['during second'] }])
+  })
+
+  it('emits one warning and stops output after the capture budget', () => {
+    const chunks: ConsoleChunk[] = []
+    const restore = installConsoleCapture({
+      write: (chunk) => {
+        chunks.push(chunk)
+      },
+    })
+
+    for (let index = 0; index < 100; index += 1) {
+      console.log('x'.repeat(1024))
+    }
+    restore()
+
+    const logs = chunks.filter((chunk) => chunk.level === 'log')
+    // 62 whole chunks fit; the 63rd is clipped to what remains of the budget.
+    expect(logs).toHaveLength(63)
+    expect(logs.at(-1)?.parts[0]?.length).toBeLessThan(1024)
+    expect(chunks.at(-1)).toEqual({
+      level: 'warn',
+      parts: ['[Console output truncated after 65536 characters]'],
+    })
+    expect(chunks.filter((chunk) => chunk.level === 'warn')).toHaveLength(1)
+  })
+
+  it('clips a single call larger than the whole budget instead of dropping it', () => {
+    const chunks: ConsoleChunk[] = []
+    const restore = installConsoleCapture({
+      write: (chunk) => {
+        chunks.push(chunk)
+      },
+    })
+
+    console.log(...Array.from({ length: 20 }, () => 'y'.repeat(8 * 1024)))
+    restore()
+
+    // The call alone exceeds the run budget. It must still produce output.
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0]?.level).toBe('log')
+    expect(chunks[0]?.parts[0]).toBe('y'.repeat(8 * 1024))
+    expect(chunks[0]?.parts.join('').length).toBeLessThanOrEqual(64 * 1024)
+    expect(chunks[1]).toEqual({
+      level: 'warn',
+      parts: ['[Console output truncated after 65536 characters]'],
+    })
+  })
+
+  it('caps arguments in one call and skips inspection after truncation', () => {
+    const chunks: ConsoleChunk[] = []
+    const restore = installConsoleCapture({
+      write: (chunk) => {
+        chunks.push(chunk)
+      },
+    })
+    let inspections = 0
+    const inspected = new Proxy(
+      {},
+      {
+        getPrototypeOf(target) {
+          inspections += 1
+          return Reflect.getPrototypeOf(target)
+        },
+      },
+    )
+
+    console.log(...Array.from({ length: 120 }, (_, index) => index))
+    for (let index = 0; index < 100; index += 1) console.log('x'.repeat(1024))
+    console.log(inspected)
+    restore()
+
+    expect(chunks[0]?.parts.at(-1)).toBe('… 20 more arguments')
+    expect(inspections).toBe(0)
   })
 })

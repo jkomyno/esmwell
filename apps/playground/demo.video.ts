@@ -1,10 +1,29 @@
 import { defineVideo } from 'termcut'
 import { DEFAULT_CODE } from './src/examples'
 
+const ZOD_INFERENCE_CODE = `import { z } from 'zod@4'
+
+const UserInput = z.object({
+  name: z.string(),
+  age: z.number(),
+})
+
+type UserInput = z.infer<typeof UserInput>
+`
+
+const ZOD_COMPLETION_CODE = `import { z } from 'zod@4'
+
+z.`
+
 const INSTALL_CODEMIRROR_HELPERS = `(() => {
-  window.__demoSetCodeMirror = (selector, text) => {
+  const cmContent = (selector) => {
     const target = document.querySelector(selector + ' .cm-content')
     if (!(target instanceof HTMLElement)) throw new Error('CodeMirror target is missing: ' + selector)
+    return target
+  }
+
+  window.__demoSetCodeMirror = (selector, text) => {
+    const target = cmContent(selector)
     target.focus()
     const selection = getSelection()
     const range = document.createRange()
@@ -15,12 +34,51 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
   }
 
   window.__demoPressCodeMirror = (selector, key, init = {}) => {
-    const target = document.querySelector(selector + ' .cm-content')
-    if (!(target instanceof HTMLElement)) throw new Error('CodeMirror target is missing: ' + selector)
+    const target = cmContent(selector)
     target.focus()
     target.dispatchEvent(
       new KeyboardEvent('keydown', { key, code: init.code ?? key, bubbles: true, cancelable: true, ...init }),
     )
+  }
+
+  window.__demoUndoCodeMirror = (selector) => {
+    const target = cmContent(selector)
+    target.focus()
+    target.dispatchEvent(
+      new InputEvent('beforeinput', { inputType: 'historyUndo', bubbles: true, cancelable: true }),
+    )
+  }
+
+  window.__demoHoverCodeMirrorText = (selector, text) => {
+    const walker = document.createTreeWalker(cmContent(selector), NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node) {
+      const offset = node.textContent?.indexOf(text) ?? -1
+      if (offset >= 0 && node.parentElement) {
+        const range = document.createRange()
+        range.setStart(node, offset)
+        range.setEnd(node, offset + text.length)
+        const bounds = range.getBoundingClientRect()
+        const init = {
+          bubbles: true,
+          clientX: bounds.left + bounds.width / 2,
+          clientY: bounds.top + bounds.height / 2,
+        }
+        node.parentElement.dispatchEvent(new MouseEvent('mouseover', init))
+        node.parentElement.dispatchEvent(new MouseEvent('mousemove', init))
+        return
+      }
+      node = walker.nextNode()
+    }
+    throw new Error('CodeMirror text is missing: ' + text)
+  }
+
+  window.__demoWaitFor = async (predicate, message, attempts = 60) => {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (predicate()) return
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    throw new Error(message)
   }
 })()`
 
@@ -59,9 +117,94 @@ export default defineVideo(
         if (!(editor instanceof HTMLDivElement) || !(content instanceof HTMLElement)) {
           throw new Error('CodeMirror editor markup is missing')
         }
-        if (!content.textContent?.includes('type UserInput')) {
+        if (!content.textContent?.includes('type User = typeof User.Type')) {
           throw new Error('TypeScript source is not visible in the editor')
         }
+        if (content.textContent.includes('//')) {
+          throw new Error('default TypeScript source still contains comments')
+        }
+        const editorStage = document.querySelector('.editor-stage')
+        const editorFooter = document.querySelector('.editor-footer')
+        const runBar = document.querySelector('.run-bar')
+        const consoleWell = document.querySelector('#console')
+        const wordmark = document.querySelector('.wordmark')
+        const claim = document.querySelector('.claim')
+        const editorHead = document.querySelector('#label-editor')?.parentElement
+        const outputHead = document.querySelector('#label-output')?.parentElement
+        const replHead = document.querySelector('#label-repl')?.parentElement
+        const replShortcuts = document.querySelector('#repl-shortcuts')
+        const replActions = document.querySelector('#repl-reset')?.parentElement
+        const editorShortcuts = document.querySelector('#editor-shortcuts')
+        const testsSummary = document.querySelector('.test-disclosure summary')
+        const testsDisclosure = document.querySelector('.test-disclosure')
+        const testDefinitions = document.querySelector('.test-definitions')
+        if (
+          !(editorStage instanceof HTMLElement) ||
+          !(editorFooter instanceof HTMLElement) ||
+          !(runBar instanceof HTMLElement) ||
+          !(consoleWell instanceof HTMLElement) ||
+          !(wordmark instanceof HTMLElement) ||
+          !(claim instanceof HTMLElement) ||
+          !(editorHead instanceof HTMLElement) ||
+          !(outputHead instanceof HTMLElement) ||
+          !(replHead instanceof HTMLElement) ||
+          !(replShortcuts instanceof HTMLElement) ||
+          !(replActions instanceof HTMLElement) ||
+          !(editorShortcuts instanceof HTMLElement) ||
+          !(testsSummary instanceof HTMLElement) ||
+          !(testsDisclosure instanceof HTMLDetailsElement) ||
+          !(testDefinitions instanceof HTMLElement)
+        ) {
+          throw new Error('editor tests disclosure is missing')
+        }
+        const stageBounds = editorStage.getBoundingClientRect()
+        const footerBounds = editorFooter.getBoundingClientRect()
+        const shortcutsBounds = editorShortcuts.getBoundingClientRect()
+        const summaryBounds = testsSummary.getBoundingClientRect()
+        const stageCenter = (stageBounds.left + stageBounds.right) / 2
+        const summaryCenter = (summaryBounds.left + summaryBounds.right) / 2
+        const shortcutsCenterLine = (shortcutsBounds.top + shortcutsBounds.bottom) / 2
+        const summaryCenterLine = (summaryBounds.top + summaryBounds.bottom) / 2
+        if (Math.abs(stageCenter - summaryCenter) > 1 || Math.abs(shortcutsCenterLine - summaryCenterLine) > 1) {
+          throw new Error('View tests is not centered on the editor shortcut line')
+        }
+        const footerBackground = getComputedStyle(editorFooter).backgroundColor
+        if (footerBackground !== 'rgba(0, 0, 0, 0)' && footerBackground !== 'transparent') {
+          throw new Error('editor footer has its own background')
+        }
+        const editorBounds = editor.getBoundingClientRect()
+        if (footerBounds.top < editorBounds.bottom || summaryBounds.top < footerBounds.top) {
+          throw new Error('View tests overlaps editable source')
+        }
+        if (Math.abs(stageBounds.top - consoleWell.getBoundingClientRect().top) > 1) {
+          throw new Error('Editor and Output wells do not share a top edge')
+        }
+        if (Math.abs(editorHead.getBoundingClientRect().height - outputHead.getBoundingClientRect().height) > 1) {
+          throw new Error('Editor and Output headers do not share a height')
+        }
+        if (
+          getComputedStyle(replHead).display !== 'grid' ||
+          replShortcuts.getBoundingClientRect().right > replActions.getBoundingClientRect().left ||
+          replActions.getBoundingClientRect().left - replShortcuts.getBoundingClientRect().right > 32
+        ) {
+          throw new Error('REPL metadata and controls do not occupy stable header columns')
+        }
+        if (Math.abs(wordmark.getBoundingClientRect().left - claim.getBoundingClientRect().left) > 1) {
+          throw new Error('masthead copy does not share the page axis')
+        }
+        if (runBar.getBoundingClientRect().bottom > innerHeight) {
+          throw new Error('editor actions are outside the desktop viewport')
+        }
+        testsDisclosure.open = true
+        const definitionsBounds = testDefinitions.getBoundingClientRect()
+        if (
+          definitionsBounds.bottom > summaryBounds.top ||
+          definitionsBounds.left < stageBounds.left ||
+          definitionsBounds.right > stageBounds.right
+        ) {
+          throw new Error('test definitions do not open above the control inside the editor')
+        }
+        testsDisclosure.open = false
         const tokenColor = (text) => {
           const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
           let node = walker.nextNode()
@@ -71,7 +214,7 @@ export default defineVideo(
           }
           return ''
         }
-        const tokenColors = new Set([tokenColor('type'), tokenColor('UserInput'), tokenColor("'effect@beta/Schema'")])
+        const tokenColors = new Set([tokenColor('type'), tokenColor('User'), tokenColor("'effect@beta/Schema'")])
         if (tokenColors.has('') || tokenColors.size !== 3) {
           throw new Error('CodeMirror token categories do not have distinct syntax colors')
         }
@@ -79,33 +222,236 @@ export default defineVideo(
       })()`)
       await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
 
+      await t.browser.evaluate(`(() => {
+        window.__demoHoverCodeMirrorText('#editor', 'User')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('Schema.Struct') === true,
+          'Effect quick info did not load',
+          90,
+        )
+        if (document.querySelector('.cm-typescript-info')?.textContent?.includes('any') === true) {
+          throw new Error('Effect quick info resolved User to any')
+        }
+      })()`)
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', ${JSON.stringify(ZOD_INFERENCE_CODE)})
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'Effect quick info remained visible after loading Zod source',
+        )
+      })()`)
+      await t.browser.evaluate(`(() => {
+        window.__demoHoverCodeMirrorText('#editor', 'UserInput')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('ZodObject') === true,
+          'Zod quick info did not load',
+          90,
+        )
+        if (document.querySelector('.cm-typescript-info')?.textContent?.includes('any') === true) {
+          throw new Error('Zod quick info resolved UserInput to any')
+        }
+      })()`)
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', ${JSON.stringify(ZOD_COMPLETION_CODE)})
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'Zod quick info remained visible before completion check',
+        )
+        if (!document.execCommand('insertText', false, 'o')) {
+          throw new Error('could not trigger Zod member completion')
+        }
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-tooltip-autocomplete')?.textContent?.includes('object') === true,
+          'Zod member completion did not load',
+        )
+        window.__demoPressCodeMirror('#editor', 'Escape', { code: 'Escape' })
+      })()`)
+
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', 'const answer = 42')
+        window.__demoHoverCodeMirrorText('#editor', 'answer')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('const answer: 42') === true,
+          'hover did not show the inferred TypeScript type',
+        )
+        const typeTokens = [...document.querySelectorAll('.cm-typescript-info code span')]
+        const highlightedTokens = ['const', 'answer', '42'].map((text) =>
+          typeTokens.find((token) => token.textContent === text),
+        )
+        if (highlightedTokens.some((token) => token === undefined)) {
+          throw new Error('type hover did not preserve TypeScript display parts')
+        }
+        const tokenColors = new Set(highlightedTokens.map((token) => getComputedStyle(token).color))
+        if (tokenColors.size !== 3) {
+          throw new Error('type hover did not syntax-highlight its signature')
+        }
+        window.__demoSetCodeMirror('#editor', 'const answer = 43')
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'type hover remained visible after the source changed',
+        )
+        window.__demoPressCodeMirror('#editor', 'Home', { code: 'Home' })
+        for (let step = 0; step < 7; step += 1) {
+          window.__demoPressCodeMirror('#editor', 'ArrowRight', { code: 'ArrowRight' })
+        }
+        window.__demoPressCodeMirror('#editor', 'h', {
+          code: 'KeyH',
+          metaKey: true,
+          shiftKey: true,
+        })
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info')?.textContent?.includes('const answer: 43') === true,
+          'keyboard type help did not show the inferred TypeScript type',
+        )
+        window.__demoSetCodeMirror('#editor', ${JSON.stringify(DEFAULT_CODE)})
+        await window.__demoWaitFor(
+          () => document.querySelector('.cm-typescript-info') === null,
+          'type hover remained visible after the source changed',
+        )
+      })()`)
+
+      await t.browser.evaluate(`(() => {
+        const button = document.querySelector('[data-language="mjs"]')
+        if (!(button instanceof HTMLButtonElement)) throw new Error('.mjs control is missing')
+        button.focus()
+      })()`)
       await t.browser.click('[data-language="mjs"]')
       await t.browser.evaluate(`(() => {
-        window.__demoSetCodeMirror('#editor', 'export const solve = (input) => input * 2')
-      })()`)
-      await t.browser.click('#run')
-      await t.browser.evaluate(`(async () => {
-        for (let attempt = 0; attempt < 60; attempt += 1) {
-          if (document.querySelector('.tape-status')?.textContent === 'pass') return
-          await new Promise((resolve) => setTimeout(resolve, 100))
+        const content = document.querySelector('#editor .cm-content')
+        if (!(content instanceof HTMLElement) || document.activeElement !== content) {
+          throw new Error('.mjs activation did not move focus to the editor before disabling its control')
         }
-        throw new Error('.mjs source did not run directly')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(() => {
+          const active = document.querySelector('[data-language="mjs"]')?.getAttribute('aria-pressed') === 'true'
+          const source = document.querySelector('#editor .cm-content')?.textContent ?? ''
+          return active && source.includes('const User =') && !source.includes('type User =')
+        }, '.mjs did not show generated JavaScript')
+      })()`)
+      await t.browser.evaluate(`(() => {
+        const content = document.querySelector('#editor .cm-content')
+        const typeScriptButton = document.querySelector('[data-language="ts"]')
+        if (!(content instanceof HTMLElement) || !(typeScriptButton instanceof HTMLButtonElement)) {
+          throw new Error('source language controls are missing')
+        }
+        const source = content.textContent
+        window.__demoUndoCodeMirror('#editor')
+        if (content.textContent !== source || typeScriptButton.disabled) {
+          throw new Error('Undo crossed the TypeScript to JavaScript history boundary')
+        }
       })()`)
       await t.browser.click('[data-language="ts"]')
       await t.browser.evaluate(`(() => {
-        if (document.querySelector('[data-language="ts"]')?.getAttribute('aria-pressed') !== 'true') {
-          throw new Error('TypeScript language selector did not activate')
+        const source = document.querySelector('#editor .cm-content')?.textContent ?? ''
+        if (!source.includes('type User = typeof User.Type')) {
+          throw new Error('.ts did not restore TypeScript source')
+        }
+        window.__demoSetCodeMirror('#editor', 'export const typed: number = 42')
+      })()`)
+      await t.browser.click('[data-language="mjs"]')
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(() => {
+          const source = document.querySelector('#editor .cm-content')?.textContent ?? ''
+          return source.includes('export const typed = 42;') && !source.includes(': number')
+        }, 'edited TypeScript did not regenerate JavaScript')
+      })()`)
+      await t.browser.click('[data-language="ts"]')
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', 'export const broken: = 1')
+      })()`)
+      await t.browser.click('[data-language="mjs"]')
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(() => {
+          const status = document.querySelector('#source-status')?.textContent ?? ''
+          const stillTypeScript = document.querySelector('[data-language="ts"]')?.getAttribute('aria-pressed') === 'true'
+          return stillTypeScript && status.includes('Cannot open .mjs')
+        }, 'invalid TypeScript did not block .mjs')
+      })()`)
+      await t.browser.evaluate(`(() => {
+        const button = document.querySelector('#source-reset')
+        if (!(button instanceof HTMLButtonElement)) throw new Error('source restore control is missing')
+        button.focus()
+      })()`)
+      await t.browser.click('#source-reset')
+      await t.browser.evaluate(`(() => {
+        const content = document.querySelector('#editor .cm-content')
+        const sourceReset = document.querySelector('#source-reset')
+        if (
+          !(content instanceof HTMLElement) ||
+          !(sourceReset instanceof HTMLButtonElement) ||
+          document.activeElement !== content ||
+          !sourceReset.disabled
+        ) {
+          throw new Error('source restore did not preserve visible focus when disabling itself')
+        }
+      })()`)
+      await t.browser.click('[data-language="mjs"]')
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('[data-language="mjs"]')?.getAttribute('aria-pressed') === 'true',
+          '.mjs did not activate after source restore',
+        )
+      })()`)
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#editor', 'export const solve = (input) => input * 2')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(() => {
+          const typeScriptButton = document.querySelector('[data-language="ts"]')
+          const status = document.querySelector('#source-status')?.textContent ?? ''
+          if (typeScriptButton instanceof HTMLButtonElement && typeScriptButton.disabled) {
+            if (!status.includes('Restore the initial source')) {
+              throw new Error('the JavaScript edit lock is not explained')
+            }
+            return true
+          }
+          return false
+        }, 'editing JavaScript did not disable .ts')
+      })()`)
+      await t.browser.click('#run')
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () => document.querySelector('.tape-status')?.textContent === 'pass',
+          '.mjs source did not run directly',
+        )
+      })()`)
+      await t.browser.click('#source-reset')
+      await t.browser.evaluate(`(() => {
+        const content = document.querySelector('#editor .cm-content')
+        const typeScriptButton = document.querySelector('[data-language="ts"]')
+        const sourceReset = document.querySelector('#source-reset')
+        if (
+          !(content instanceof HTMLElement) ||
+          !(typeScriptButton instanceof HTMLButtonElement) ||
+          !(sourceReset instanceof HTMLButtonElement) ||
+          typeScriptButton.getAttribute('aria-pressed') !== 'true'
+        ) {
+          throw new Error('source restore did not activate TypeScript')
+        }
+        const source = content.textContent
+        window.__demoUndoCodeMirror('#editor')
+        if (content.textContent !== source || typeScriptButton.disabled || !sourceReset.disabled) {
+          throw new Error('Undo crossed the source restore history boundary')
         }
         window.__demoSetCodeMirror('#editor', 'Promise.')
         window.__demoPressCodeMirror('#editor', ' ', { code: 'Space', ctrlKey: true })
       })()`)
       await t.browser.evaluate(`(async () => {
-        for (let attempt = 0; attempt < 60; attempt += 1) {
+        await window.__demoWaitFor(() => {
           const menu = document.querySelector('.cm-tooltip-autocomplete')
-          if (menu?.textContent?.includes('allSettled')) return
-          await new Promise((resolve) => setTimeout(resolve, 100))
-        }
-        throw new Error('editor completion did not include a TypeScript library member')
+          return menu?.textContent?.includes('allSettled') === true
+        }, 'editor completion did not include a TypeScript library member')
       })()`)
       await t.browser.evaluate(`(() => {
         window.__demoPressCodeMirror('#editor', 'Escape')
@@ -114,12 +460,10 @@ export default defineVideo(
         window.__demoPressCodeMirror('#repl-input', ' ', { code: 'Space', ctrlKey: true })
       })()`)
       await t.browser.evaluate(`(async () => {
-        for (let attempt = 0; attempt < 60; attempt += 1) {
+        await window.__demoWaitFor(() => {
           const menus = [...document.querySelectorAll('.cm-tooltip-autocomplete')]
-          if (menus.some((menu) => menu.textContent?.includes('solve'))) return
-          await new Promise((resolve) => setTimeout(resolve, 100))
-        }
-        throw new Error('REPL completion did not include solve from the editor')
+          return menus.some((menu) => menu.textContent?.includes('solve'))
+        }, 'REPL completion did not include solve from the editor')
       })()`)
       await t.browser.evaluate(`(() => {
         window.__demoPressCodeMirror('#repl-input', 'Escape')
@@ -141,6 +485,19 @@ export default defineVideo(
         window.__demoPressCodeMirror('#repl-input', 'Enter')
       })()`)
       await t.browser.waitFor(/= 42/)
+      await t.browser.evaluate(`(() => {
+        window.__demoSetCodeMirror('#repl-input', "solve({ name: 'asd' })")
+        window.__demoPressCodeMirror('#repl-input', 'Enter')
+      })()`)
+      await t.browser.evaluate(`(async () => {
+        await window.__demoWaitFor(
+          () =>
+            [...document.querySelectorAll('#repl-history .repl-line-error')].some((line) =>
+              line.textContent?.includes('age'),
+            ),
+          'invalid solve input did not surface its missing age error',
+        )
+      })()`)
       await t.browser.click('#repl-reset')
       await t.browser.reload()
       await t.browser.waitFor(/effect@beta\/Schema/)
@@ -159,18 +516,27 @@ export default defineVideo(
     // Emit the prepared browser frame on the visible timeline.
     await t.focus('browser')
     await t.sleep('1.2s')
+    await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
 
-    // Judge: two cases against the Effect program in the editor.
+    // Reveal and run the two cases against the Effect program in the editor.
+    await t.browser.click('.test-disclosure summary')
+    await t.browser.waitFor(/solve\(\{"name":"runesm","age":3\}\)/)
     await t.browser.click('#judge')
-    await t.browser.waitFor(/decoded runesm \(age 3\)/)
-    await t.browser.waitFor(/decoded effect \(age 4\)/)
-    await t.browser.waitFor(/greets another user/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for runesm \(age 3\)/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for effect \(age 4\)/)
+    await t.browser.waitFor(/creates another unique user/)
     await t.browser.evaluate(`(async () => {
-      for (let attempt = 0; attempt < 60; attempt += 1) {
-        if (document.querySelector('.tape-status')?.textContent === 'pass') return
-        await new Promise((resolve) => setTimeout(resolve, 100))
+      await window.__demoWaitFor(
+        () => document.querySelector('.tape-status')?.textContent === 'pass',
+        'judge did not report a passing run',
+      )
+      const uuidV7Pattern = /[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i
+      const generatedIds = [...document.querySelectorAll('#console .line')]
+        .map((line) => line.textContent?.match(uuidV7Pattern)?.[0])
+        .filter((id) => id !== undefined)
+      if (generatedIds.length !== 2 || new Set(generatedIds).size !== 2) {
+        throw new Error('judge did not produce two unique UUID v7 identifiers')
       }
-      throw new Error('judge did not report a passing run')
     })()`)
     await t.sleep('1.5s')
 
@@ -180,8 +546,8 @@ export default defineVideo(
       window.__demoSetCodeMirror('#repl-input', "solve({ name: 'repl', age: 5 })")
       window.__demoPressCodeMirror('#repl-input', 'Enter')
     })()`)
-    await t.browser.waitFor(/decoded repl \(age 5\)/)
-    await t.browser.waitFor(/'hello, repl'/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for repl \(age 5\)/)
+    await t.browser.waitFor(/= \{"id":"[0-9a-f-]+","name":"repl","age":5\}/)
     await t.sleep('1.5s')
   },
 )

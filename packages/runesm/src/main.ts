@@ -64,8 +64,8 @@ export interface ReplSession {
 export interface TestSessionOptions extends RunesmOptions {
   /**
    * Hard timeout per run in milliseconds (default 60000 for test sessions).
-   * The budget covers the engine download from esm.sh and the test run itself,
-   * so keep it well above the judge default.
+   * The budget covers service-worker setup, the engine download from esm.sh,
+   * and the test run itself, so keep it well above the judge default.
    */
   readonly timeoutMs?: number
   /**
@@ -190,14 +190,16 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
       }
       const graphId = createGraphId()
       const startedAt = performance.now()
+      const timeoutMs = options.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS
+      const deadline = startedAt + timeoutMs
       let transport: WorkerTransport | undefined
       try {
-        const serviceWorkerScope = await prepareModuleServiceWorker(options)
+        const serviceWorkerScope = await prepareModuleServiceWorker(options, deadline, timeoutMs)
         const testWorkerUrl = resolveTestWorkerUrl(options)
         assertWorkerWithinScope(testWorkerUrl, serviceWorkerScope)
         transport = new WorkerTransport({
           ...options,
-          timeoutMs: options.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS,
+          timeoutMs: remainingTimeoutMs(deadline, timeoutMs),
           workerUrl: testWorkerUrl,
         })
         const outcome = await transport.request(
@@ -212,7 +214,7 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
           'test-result',
           handlers,
         )
-        return asTestResult(outcome, transport.timeoutMs)
+        return asTestResult(outcome, timeoutMs)
       } catch (error) {
         return {
           status: 'error',
@@ -597,7 +599,11 @@ const workerError = (message: string): SerializedError => ({
 const supervisorTimeoutMessage = (timeoutMs: number): string =>
   `the execution supervisor did not settle the request within ${timeoutMs}ms plus its watchdog grace period and was terminated`
 
-const prepareModuleServiceWorker = async (options: TestSessionOptions): Promise<string> => {
+const prepareModuleServiceWorker = async (
+  options: TestSessionOptions,
+  deadline: number,
+  timeoutMs: number,
+): Promise<string> => {
   if (typeof navigator === 'undefined' || navigator.serviceWorker === undefined) {
     throw new Error('test workspaces require Service Worker support in a secure browser context')
   }
@@ -609,12 +615,20 @@ const prepareModuleServiceWorker = async (options: TestSessionOptions): Promise<
     throw new Error('the test-workspace module service worker must be served from the website origin')
   }
   const scope = new URL('./', serviceWorkerUrl).href
-  const registration = await navigator.serviceWorker.register(serviceWorkerUrl, { type: 'module', scope })
-  await waitForActiveWorker(registration)
+  const registration = await withinTestDeadline(
+    navigator.serviceWorker.register(serviceWorkerUrl, { type: 'module', scope }),
+    deadline,
+    timeoutMs,
+  )
+  await waitForActiveWorker(registration, deadline, timeoutMs)
   return registration.scope
 }
 
-const waitForActiveWorker = async (registration: ServiceWorkerRegistration): Promise<void> => {
+const waitForActiveWorker = async (
+  registration: ServiceWorkerRegistration,
+  deadline: number,
+  timeoutMs: number,
+): Promise<void> => {
   if (registration.active !== null) {
     return
   }
@@ -622,19 +636,56 @@ const waitForActiveWorker = async (registration: ServiceWorkerRegistration): Pro
   if (worker === null) {
     throw new Error('the test-workspace module service worker did not start installing')
   }
-  await new Promise<void>((resolve, reject) => {
-    const onStateChange = (): void => {
+  let onStateChange: (() => void) | undefined
+  const activation = new Promise<void>((resolve, reject) => {
+    onStateChange = (): void => {
       if (worker.state === 'activated') {
-        worker.removeEventListener('statechange', onStateChange)
         resolve()
       } else if (worker.state === 'redundant') {
-        worker.removeEventListener('statechange', onStateChange)
         reject(new Error('the test-workspace module service worker became redundant during installation'))
       }
     }
     worker.addEventListener('statechange', onStateChange)
     onStateChange()
   })
+  try {
+    await withinTestDeadline(activation, deadline, timeoutMs)
+  } finally {
+    if (onStateChange !== undefined) {
+      worker.removeEventListener('statechange', onStateChange)
+    }
+  }
+}
+
+class TestRunDeadlineError extends Error {
+  override readonly name = 'TimeoutError'
+
+  constructor(timeoutMs: number) {
+    super(`test workspace run timed out after ${timeoutMs}ms during service-worker setup or execution`)
+  }
+}
+
+const withinTestDeadline = async <T>(promise: Promise<T>, deadline: number, timeoutMs: number): Promise<T> => {
+  const remaining = deadline - performance.now()
+  if (remaining <= 0) throw new TestRunDeadlineError(timeoutMs)
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new TestRunDeadlineError(timeoutMs)), remaining)
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+const remainingTimeoutMs = (deadline: number, timeoutMs: number): number => {
+  const remaining = Math.ceil(deadline - performance.now())
+  if (remaining <= 0) throw new TestRunDeadlineError(timeoutMs)
+  return remaining
 }
 
 const resolveTestWorkerUrl = (options: TestSessionOptions): URL =>
