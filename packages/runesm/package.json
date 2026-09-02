@@ -1,7 +1,7 @@
 {
   "private": false,
   "name": "runesm",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Run unbundled ESM in the browser with hard timeouts and normalized results",
   "keywords": [
     "esm",
