@@ -1,5 +1,5 @@
 import * as ts from 'typescript-legacy'
-import { isBareSpecifier } from 'runesm/utils'
+import { isBareSpecifier } from 'esmwell/utils'
 
 const NPM_REGISTRY_ORIGIN = 'https://registry.npmjs.org'
 const NPM_VERSION_RESOLVER_ORIGIN = 'https://data.jsdelivr.com/v1/package/resolve/npm'
@@ -391,10 +391,10 @@ const relativeDeclaration = (
 }
 
 /** The virtual root every acquired declaration file is mounted under. */
-export const RUNESM_TYPES_ROOT = '/node_modules/.runesm-types/'
+export const ESMWELL_TYPES_ROOT = '/node_modules/.esmwell-types/'
 
 const virtualFileName = (archive: PackageArchive, declaration: string): string =>
-  `${RUNESM_TYPES_ROOT}${archive.metadata.name}@${archive.metadata.version}/${declaration}`
+  `${ESMWELL_TYPES_ROOT}${archive.metadata.name}@${archive.metadata.version}/${declaration}`
 
 const virtualPackagePrefix = (archive: PackageArchive): string => virtualFileName(archive, '')
 

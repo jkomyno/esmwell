@@ -1,1 +1,0 @@
-import 'runesm/worker-entry'

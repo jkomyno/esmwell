@@ -1,4 +1,4 @@
-import { adaptWorker, createReplSession, createRunesm } from 'runesm'
+import { adaptWorker, createReplSession, createEsmwell } from 'esmwell'
 import type {
   ConsoleChunk,
   JudgeCase,
@@ -8,10 +8,10 @@ import type {
   ReplSession,
   SerializedError,
   SourceTransform,
-} from 'runesm'
+} from 'esmwell'
 import { createReplEditor, createSourceEditor, type ReplEditor, type SourceEditor } from './editor'
-import RunesmExecutionWorkerUrl from './runesm-execution-worker?worker&url'
-import RunesmWorker from './runesm-worker?worker'
+import EsmwellExecutionWorkerUrl from './esmwell-execution-worker?worker&url'
+import EsmwellWorker from './esmwell-worker?worker'
 import { DEFAULT_CODE, DEMO_CASES } from './examples'
 import { describeWhere, faultKind, serializeThrown } from './fault'
 import { SourceLanguageState } from './source-language-state'
@@ -88,14 +88,14 @@ let switchingLanguage = false
 let sourceTransitionStatus: { readonly message: string; readonly tone: 'notice' | 'error' } | undefined
 
 // In .ts mode the session compiles through the language-service worker on
-// its way to runesm; .mjs is already the JavaScript the runner executes.
+// its way to esmwell; .mjs is already the JavaScript the runner executes.
 const transformFor = (language: SourceLanguage): SourceTransform | undefined =>
   language === 'ts' ? (source) => typescriptClient.transpile(source) : undefined
 
 function createSession(language: SourceLanguage) {
-  return createRunesm({
-    workerFactory: () => adaptWorker(new RunesmWorker()),
-    executionWorkerUrl: RunesmExecutionWorkerUrl,
+  return createEsmwell({
+    workerFactory: () => adaptWorker(new EsmwellWorker()),
+    executionWorkerUrl: EsmwellExecutionWorkerUrl,
     timeoutMs: 10_000,
     transform: transformFor(language),
   })
@@ -252,7 +252,7 @@ const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
   session = createSession(language)
   try {
     const result = await session.runJudge(sourceState.source, cases, { onConsoleChunk: appendConsoleLine })
-    // runesm sees emitted JavaScript in .ts mode, so only compiler diagnostics
+    // esmwell sees emitted JavaScript in .ts mode, so only compiler diagnostics
     // can truthfully point back to the source currently shown in the editor.
     renderResult(result, language === 'mjs' || result.error?.name === 'TypeScriptError')
   } catch (error) {
@@ -327,8 +327,8 @@ const getReplSession = (): Promise<ReplSession> => {
     const source = sourceState.source
     const language = sourceState.language
     const nextSession = createReplSession({
-      workerFactory: () => adaptWorker(new RunesmWorker()),
-      executionWorkerUrl: RunesmExecutionWorkerUrl,
+      workerFactory: () => adaptWorker(new EsmwellWorker()),
+      executionWorkerUrl: EsmwellExecutionWorkerUrl,
       timeoutMs: 10_000,
       transform: transformFor(language),
     })

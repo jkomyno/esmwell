@@ -1,7 +1,7 @@
 {
   "private": true,
   "type": "module",
-  "name": "runesm-workspace",
+  "name": "esmwell-workspace",
   "description": "Run unbundled ESM in the browser with hard timeouts and normalized results",
   "repository": "https://github.com/jkomyno/runesm.git",
   "author": {
@@ -27,8 +27,8 @@
     "bench:watch": "turbo run bench:watch",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install",
-    "release:verify": "pnpm lint:ci && pnpm typecheck && pnpm test && pnpm -C packages/runesm run verify:package && pnpm -C packages/runesm run verify:browser",
-    "release": "pnpm -C packages/runesm run build:release && changeset publish"
+    "release:verify": "pnpm lint:ci && pnpm typecheck && pnpm test && pnpm -C packages/esmwell run verify:package && pnpm -C packages/esmwell run verify:browser",
+    "release": "pnpm -C packages/esmwell run build:release && changeset publish"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",

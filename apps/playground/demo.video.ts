@@ -206,11 +206,11 @@ export default defineVideo(
     // Everything up to a loaded page is cut, so the first frame of the GIF is
     // already the app rather than a shell prompt.
     await t.hide(async () => {
-      await t.run('pnpm --filter playground build >/tmp/runesm-build.log 2>&1')
-      await t.run('pnpm --filter playground preview </dev/null >/tmp/runesm-preview.log 2>&1 &')
+      await t.run('pnpm --filter playground build >/tmp/esmwell-build.log 2>&1')
+      await t.run('pnpm --filter playground preview </dev/null >/tmp/esmwell-preview.log 2>&1 &')
       await t.clear()
       await t.browser.goto('http://localhost:4173/playground/')
-      await t.browser.waitFor(/runesm playground/)
+      await t.browser.waitFor(/esmwell playground/)
       await t.focus('browser')
       await t.browser.waitFor(/effect@beta\/Schema/)
       await t.browser.evaluate(`(() => {
@@ -351,7 +351,7 @@ export default defineVideo(
         if (getComputedStyle(testDefinitions).boxShadow !== 'none') {
           throw new Error('the tests drawer is a popover rather than a drawer')
         }
-        if (!testDefinitions.textContent?.includes('solve({"name":"runesm"})')) {
+        if (!testDefinitions.textContent?.includes('solve({"name":"esmwell"})')) {
           throw new Error('the tests drawer does not list its judge cases')
         }
         const tokenColor = (text) => {
@@ -712,7 +712,7 @@ export default defineVideo(
         'quick info stayed open after the pointer left the editor',
       )
     })()`)
-    await t.browser.waitFor(/decoded [0-9a-f-]+ for runesm/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for esmwell/)
     await t.browser.waitFor(/decoded [0-9a-f-]+ for effect/)
     await t.browser.waitFor(/creates another unique user/)
     await t.browser.evaluate(`(async () => {

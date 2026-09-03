@@ -145,29 +145,29 @@ describe('TypeScriptTypeAcquirer', () => {
     const cachedGraph = await acquirer.acquire(`// source edit\n${source}`)
 
     expect(graph.files.map((file) => file.fileName)).toEqual([
-      '/node_modules/.runesm-types/effect@4.0.0-beta.20/dist/dts/Schema.d.ts',
-      '/node_modules/.runesm-types/effect@4.0.0-beta.20/dist/dts/Function.d.ts',
-      '/node_modules/.runesm-types/zod@4.1.5/index.d.ts',
-      '/node_modules/.runesm-types/@standard-schema/spec@1.0.0/index.d.ts',
+      '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Schema.d.ts',
+      '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Function.d.ts',
+      '/node_modules/.esmwell-types/zod@4.1.5/index.d.ts',
+      '/node_modules/.esmwell-types/@standard-schema/spec@1.0.0/index.d.ts',
     ])
     expect(graph.resolutions).toEqual([
       {
         specifier: 'effect@beta/Schema',
-        fileName: '/node_modules/.runesm-types/effect@4.0.0-beta.20/dist/dts/Schema.d.ts',
+        fileName: '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Schema.d.ts',
       },
       {
         specifier: 'effect/Function',
-        fileName: '/node_modules/.runesm-types/effect@4.0.0-beta.20/dist/dts/Function.d.ts',
-        containingFilePrefix: '/node_modules/.runesm-types/effect@4.0.0-beta.20/',
+        fileName: '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Function.d.ts',
+        containingFilePrefix: '/node_modules/.esmwell-types/effect@4.0.0-beta.20/',
       },
       {
         specifier: 'zod@4',
-        fileName: '/node_modules/.runesm-types/zod@4.1.5/index.d.ts',
+        fileName: '/node_modules/.esmwell-types/zod@4.1.5/index.d.ts',
       },
       {
         specifier: '@standard-schema/spec',
-        fileName: '/node_modules/.runesm-types/@standard-schema/spec@1.0.0/index.d.ts',
-        containingFilePrefix: '/node_modules/.runesm-types/effect@4.0.0-beta.20/',
+        fileName: '/node_modules/.esmwell-types/@standard-schema/spec@1.0.0/index.d.ts',
+        containingFilePrefix: '/node_modules/.esmwell-types/effect@4.0.0-beta.20/',
       },
     ])
     expect(graph.complete).toBe(true)
@@ -201,7 +201,7 @@ describe('TypeScriptTypeAcquirer', () => {
     expect(await acquirer.acquire("import 'example'")).toMatchObject({ complete: false, files: [] })
     expect(await acquirer.acquire("import 'example'")).toMatchObject({
       complete: true,
-      files: [{ fileName: '/node_modules/.runesm-types/example@1.0.0/index.d.ts' }],
+      files: [{ fileName: '/node_modules/.esmwell-types/example@1.0.0/index.d.ts' }],
     })
     expect(fetchType).toHaveBeenCalledTimes(4)
   })

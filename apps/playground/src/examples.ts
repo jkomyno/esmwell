@@ -1,4 +1,4 @@
-import type { JudgeCase } from 'runesm'
+import type { JudgeCase } from 'esmwell'
 
 export const DEFAULT_CODE = /* typescript */ `import * as Console from 'effect@beta/Console'
 import * as Effect from 'effect@beta/Effect'
@@ -23,6 +23,6 @@ export const solve = (input: Omit<User, 'id'>): Promise<User> => {
 }`
 
 export const DEMO_CASES: readonly JudgeCase[] = [
-  { name: 'creates a decoded user', exportName: 'solve', args: [{ name: 'runesm' }] },
+  { name: 'creates a decoded user', exportName: 'solve', args: [{ name: 'esmwell' }] },
   { name: 'creates another unique user', exportName: 'solve', args: [{ name: 'effect' }] },
 ]

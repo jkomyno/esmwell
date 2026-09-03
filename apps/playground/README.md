@@ -1,6 +1,6 @@
 # playground
 
-Demo for [`runesm`](../../packages/runesm): a TypeScript editor with its generated JavaScript counterpart, an output panel streaming console output, a persistent REPL, and a small set of inspectable cases the module can be checked against. The workers are bundled by vite from the runesm source entry, so the app works under its non-root base (`/playground/`) in dev and build.
+Demo for [`esmwell`](../../packages/esmwell): a TypeScript editor with its generated JavaScript counterpart, an output panel streaming console output, a persistent REPL, and a small set of inspectable cases the module can be checked against. The workers are bundled by vite from the esmwell source entry, so the app works under its non-root base (`/playground/`) in dev and build.
 
 ## Design
 
@@ -25,7 +25,7 @@ npm declaration graphs on demand for bare imports, including inline versions
 such as `effect@beta` and `zod@4`. On load it warms that worker with the default
 module's declarations and one full type-check, so the first hover does not wait
 for the download. In `.ts` mode it compiles the current source
-in the browser before passing the emitted ESM to runesm; `.mjs` mode passes the
+in the browser before passing the emitted ESM to esmwell; `.mjs` mode passes the
 JavaScript source directly. The two views retain separate source: TypeScript
 edits regenerate `.mjs` on navigation, syntax errors keep the editor in `.ts`,
 and direct JavaScript edits disable `.ts` until Restore initial source resets

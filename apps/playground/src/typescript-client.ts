@@ -1,6 +1,6 @@
 import type { Completion, CompletionContext, CompletionResult, CompletionSource } from '@codemirror/autocomplete'
 import type { Diagnostic } from '@codemirror/lint'
-import { createWorkerRpc, type WorkerRpc } from 'runesm/utils'
+import { createWorkerRpc, type WorkerRpc } from 'esmwell/utils'
 import type {
   SourceLanguage,
   TypeScriptCompletions,
@@ -27,7 +27,7 @@ export interface CompletionDocument {
 }
 
 /**
- * The page side of the TypeScript language-service worker. runesm's worker
+ * The page side of the TypeScript language-service worker. esmwell's worker
  * rpc owns the request pairing and the worker's lifecycle; this class only
  * shapes each request and adapts the answers to CodeMirror.
  */

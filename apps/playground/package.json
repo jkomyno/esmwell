@@ -2,7 +2,7 @@
   "private": true,
   "name": "playground",
   "version": "0.1.0",
-  "description": "Private judge and REPL demo for runesm",
+  "description": "Private judge and REPL demo for esmwell",
   "type": "module",
   "scripts": {
     "clean": "rimraf dist .turbo",
@@ -24,7 +24,7 @@
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.9",
     "@lezer/highlight": "^1.2.3",
-    "runesm": "workspace:*",
+    "esmwell": "workspace:*",
     "typescript-legacy": "npm:typescript@5.9.3"
   },
   "devDependencies": {

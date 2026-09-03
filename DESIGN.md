@@ -1,5 +1,5 @@
 ---
-name: runesm playground
+name: esmwell playground
 description: A well-lit workshop bench for running other people's JavaScript in a browser tab.
 colors:
   paper: 'oklch(97.5% 0.008 75)'
@@ -109,17 +109,17 @@ components:
     padding: '7px 12px'
 ---
 
-# Design System: runesm playground
+# Design System: esmwell playground
 
 ## 1. Overview
 
 **Creative North Star: "The Well-Lit Bench"**
 
-A workshop bench under good daylight, with labeled drawers and nothing hidden behind a cover plate. The visitor is a builder deciding whether runesm fits their product, and the fastest way to convince them is to hand them the tool and let them watch it work. Every surface is meant to be picked up and changed. Nothing is a display case.
+A workshop bench under good daylight, with labeled drawers and nothing hidden behind a cover plate. The visitor is a builder deciding whether esmwell fits their product, and the fastest way to convince them is to hand them the tool and let them watch it work. Every surface is meant to be picked up and changed. Nothing is a display case.
 
 The system takes its precision from Rams-era Braun product documentation: a machine explained without ornament, where every part is labeled in the same quiet voice and the labels are the design. It takes its warmth from paper rather than from decoration. The ground is a warm off-white at `oklch(97.5% 0.008 75)`, not white, and the ink is a warm near-black at `oklch(28% 0.014 70)`, not black. Every neutral is tinted toward the same warm hue so the interface reads as a printed sheet under a lamp rather than as a screen.
 
-This explicitly rejects what a developer tool is expected to look like. Not near-black plus one blue accent. Not uniform rounded cards. Not a reflex-default sans. It equally rejects the two anti-references named in PRODUCT.md: no gradient meshes, glassmorphism, floating 3D blobs, purple-to-pink palettes or oversized rounded corners; and no CRT glow, scanlines, blinking block cursors, ASCII art or green-on-black. Only part of this interface is a terminal, and dressing the rest as one would be a lie about what runesm is.
+This explicitly rejects what a developer tool is expected to look like. Not near-black plus one blue accent. Not uniform rounded cards. Not a reflex-default sans. It equally rejects the two anti-references named in PRODUCT.md: no gradient meshes, glassmorphism, floating 3D blobs, purple-to-pink palettes or oversized rounded corners; and no CRT glow, scanlines, blinking block cursors, ASCII art or green-on-black. Only part of this interface is a terminal, and dressing the rest as one would be a lie about what esmwell is.
 
 Color here is information, never decoration. UI state has four semantic hues with one job each. The editor has a separate, scoped syntax-ink palette so language structure is visible without borrowing status meaning.
 
@@ -246,7 +246,7 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 
 - **Style:** paper-sunk fill, 4px radius, 12px padding, code typography, no border.
 - **Behavior:** scroll internally rather than growing the page. The console well has a fixed height, so arriving lines fill it instead of resizing it. It is a polite live region so streamed output is announced.
-- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, inferred-type hover help, and syntax rendering. Its dedicated TypeScript worker acquires and caches npm declaration graphs on demand for bare imports and their inline versions. `.ts` compiles in that worker before runesm executes the emitted module; `.mjs` shows the generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
+- **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, inferred-type hover help, and syntax rendering. Its dedicated TypeScript worker acquires and caches npm declaration graphs on demand for bare imports and their inline versions. `.ts` compiles in that worker before esmwell executes the emitted module; `.mjs` shows the generated JavaScript and passes it directly to esmwell. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
 - **Empty state:** a single line of graphite-soft body text stating what will appear here, never a blank box.
 
 ### Source Language Controls

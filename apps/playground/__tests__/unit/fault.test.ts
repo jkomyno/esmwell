@@ -1,5 +1,5 @@
-import { checkPolicy, parseUserModule, UserSyntaxError } from 'runesm'
-import type { SerializedError } from 'runesm'
+import { checkPolicy, parseUserModule, UserSyntaxError } from 'esmwell'
+import type { SerializedError } from 'esmwell'
 import { describe, expect, it } from 'vitest'
 import { describeWhere, faultKind, serializeThrown } from '../../src/fault'
 import { TypeScriptCompileError } from '../../src/typescript-client'

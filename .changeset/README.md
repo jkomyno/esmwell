@@ -18,4 +18,4 @@ find the full documentation for it [in the changesets repository](https://github
 - Once enabled, pushing to `main` with new changesets triggers the workflow.
 - It opens or updates a "Version Packages" PR with version bumps and changelog.
 - Merging that PR runs the release (build + publish to npm) using [npm trusted publishing (OIDC)](https://docs.npmjs.com/trusted-publishers), with no `NPM_TOKEN` needed. See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for the one-time setup.
-- Only `packages/runesm` is publishable. Private workspace and demo packages are neither versioned nor tagged.
+- Only `packages/esmwell` is publishable. Private workspace and demo packages are neither versioned nor tagged.
