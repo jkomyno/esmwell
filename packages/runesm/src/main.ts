@@ -282,11 +282,14 @@ const transformTestModules = async (
   if (transform === undefined) {
     return modules
   }
-  const transformed: Record<string, string> = {}
-  for (const [id, source] of Object.entries(modules)) {
-    transformed[id] = await applyTransform(transform, source, { kind: 'test', id })
-  }
-  return transformed
+  // One run submits its modules together, so they transform concurrently;
+  // submission order only sequences separate runs.
+  const transformed = await Promise.all(
+    Object.entries(modules).map(
+      async ([id, source]) => [id, await applyTransform(transform, source, { kind: 'test', id })] as const,
+    ),
+  )
+  return Object.fromEntries(transformed)
 }
 
 interface PendingRequest {
@@ -617,13 +620,24 @@ const asTestResult = (outcome: TransportOutcome, timeoutMs: number): TestRunResu
       durationMs: timeoutMs,
     }
   }
+  if (outcome.kind === 'transform-error') {
+    return {
+      status: 'error',
+      ok: false,
+      tests: [],
+      console: [],
+      dependencies: [],
+      error: serializedMainError(outcome.error),
+      durationMs: 0,
+    }
+  }
   return {
     status: 'error',
     ok: false,
     tests: [],
-    console: outcome.kind === 'transform-error' ? [] : outcome.console,
+    console: outcome.console,
     dependencies: [],
-    error: outcome.kind === 'transform-error' ? serializedMainError(outcome.error) : workerError(outcome.message),
+    error: workerError(outcome.message),
     durationMs: 0,
   }
 }
