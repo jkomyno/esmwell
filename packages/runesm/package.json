@@ -67,6 +67,13 @@
         "default": "./build/utils.mjs"
       }
     },
+    "./typescript": {
+      "import": {
+        "@jkomyno/source": "./src/typescript.ts",
+        "types": "./build/typescript.d.mts",
+        "default": "./build/typescript.mjs"
+      }
+    },
     "./worker-entry": {
       "import": {
         "@jkomyno/source": "./src/worker-entry.ts",
@@ -118,5 +125,8 @@
     "access": "public",
     "provenance": true,
     "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "typescript-legacy": "npm:typescript@5.9.3"
   }
 }

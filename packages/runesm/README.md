@@ -89,6 +89,29 @@ The persistent scope is an internal object, so its declaration semantics deliber
 
 Identifier reads otherwise match a browser console: reading a name that was never declared reports `ReferenceError`, while `typeof someUndeclaredName` evaluates to `'undefined'`.
 
+## TypeScript input
+
+Every session accepts a `transform` that rewrites submitted source on the main thread before it is posted to the worker: the judge module, each REPL input, and each test-workspace module. The worker only ever sees the returned text, so a transform changes what gets isolated, never how. Transforms run in submission order, and a thrown error becomes an error result whose `error` keeps the thrown `name`, `message`, and `line`/`column` when the error exposes them.
+
+`runesm/typescript` ships a transform built on `ts.transpileModule`, without depending on the compiler. You hand over the import, so the `.ts` path exists only where `typescript` is installed and a bundler without it still builds:
+
+```ts
+import { createRunesm } from 'runesm'
+import { typescriptTransform } from 'runesm/typescript'
+
+const session = createRunesm({
+  transform: typescriptTransform({ load: () => import('typescript') }),
+})
+
+await session.runJudge(`export const solve = (value: number): number => value * 2`, [
+  { name: 'doubles', exportName: 'solve', args: [21], expected: 42 },
+])
+```
+
+`transpileModule` strips types and compiles syntax for one file at a time with `module: ESNext`, `target: ES2023`, and `verbatimModuleSyntax`; pass `compilerOptions` to override. It never type-checks, so type errors run and syntax errors come back as a `TypeScriptError` result with the diagnostic's line and column. If `load` rejects or resolves to something that is not the compiler, the run reports a `TypeScriptUnavailableError` and the next run retries the load.
+
+The same hook takes any other compiler with the shape `(source, context) => string | Promise<string>`; `context.kind` is `'judge'`, `'repl'`, or `'test'` (with the module `id`).
+
 ## Vitest and Jest workspaces
 
 Run real current Vitest or Jest engine packages over a virtual ESM project.

@@ -15,7 +15,7 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 - **REPL:** keep declarations and imports alive across inputs until reset or timeout.
 - **Test workspace:** run virtual ESM projects with lazy-loaded Vitest or Jest engines.
 
-Bare imports resolve through [esm.sh](https://esm.sh). Inline versions take priority over `deps`, and `deps` take priority over `autoInstall`.
+Bare imports resolve through [esm.sh](https://esm.sh). Inline versions take priority over `deps`, and `deps` take priority over `autoInstall`. TypeScript input works through a session `transform`; `runesm/typescript` provides one that uses whatever `typescript` package you already have, without bundling the compiler.
 
 ```ts
 import { createReplSession } from 'runesm'
