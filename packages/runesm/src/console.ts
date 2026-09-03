@@ -58,7 +58,7 @@ export function protectConsole(): void {
         if (sink.isTruncated) return
         sink.write({
           level,
-          parts: serializeConsoleArguments(args),
+          parts: formatConsoleArguments(args),
         })
       },
     })
@@ -214,10 +214,6 @@ const appendOmittedCount = (parts: string[], total: number, included: number): v
  * output from their own workers can reuse it for identical rendering.
  */
 export function formatConsoleArguments(args: readonly unknown[]): string[] {
-  return serializeConsoleArguments(args)
-}
-
-const serializeConsoleArguments = (args: readonly unknown[]): string[] => {
   const state: SerializationState = {
     seen: new WeakSet<object>(),
     remainingNodes: MAX_SERIALIZED_NODES,
@@ -282,7 +278,7 @@ export function installConsoleCapture(sink: ConsoleSink): () => void {
       if (boundedSink.isTruncated) return
       boundedSink.write({
         level,
-        parts: serializeConsoleArguments(args),
+        parts: formatConsoleArguments(args),
       })
     }
   }
