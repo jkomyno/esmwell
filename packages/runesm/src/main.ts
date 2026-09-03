@@ -1,5 +1,6 @@
 import type { ConsoleChunk, JudgeCase, JudgeRunResult, ReplResult, SerializedError, WorkerResponse } from './types'
-import type { TestRun, TestRunResult } from './test-types'
+import type { TestModules, TestRun, TestRunResult } from './test-types'
+import type { SourceTransform, SourceTransformContext } from './transform'
 
 /** The worker surface the session transport needs; satisfied by a real module Worker. */
 export interface WorkerLike {
@@ -34,6 +35,14 @@ export interface RunesmOptions {
   readonly executionWorkerUrl?: string | URL
   /** Builds the workers; tests inject fakes here. */
   readonly workerFactory?: WorkerFactory
+  /**
+   * Rewrites submitted source on the main thread before it reaches the
+   * worker: judge modules, every REPL input, and each test-workspace module.
+   * Use it to compile TypeScript or JSX into the ESM the runner executes.
+   * Transforms run in submission order, so a slow one delays later inputs
+   * rather than reordering them. A failure becomes an error result.
+   */
+  readonly transform?: SourceTransform
 }
 
 /** Handlers for streamed console output during a run. */
@@ -108,17 +117,20 @@ export function createRunesm(options: RunesmOptions = {}): RunesmSession {
       if (transport.isClosed) {
         return Promise.reject(new Error('runesm session is closed'))
       }
+      const judgeRequest = (source: string): Omit<WorkerRequestShape, 'id'> => ({
+        kind: 'judge',
+        code: source,
+        cases,
+        timeoutMs: transport.timeoutMs,
+        executionWorkerUrl,
+        ...(options.deps === undefined ? {} : { deps: options.deps }),
+        ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
+      })
       return transport
         .request(
-          {
-            kind: 'judge',
-            code,
-            cases,
-            timeoutMs: transport.timeoutMs,
-            executionWorkerUrl,
-            ...(options.deps === undefined ? {} : { deps: options.deps }),
-            ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
-          },
+          options.transform === undefined
+            ? judgeRequest(code)
+            : () => applyTransform(options.transform, code, { kind: 'judge' }).then(judgeRequest),
           'result',
           handlers,
         )
@@ -147,16 +159,19 @@ export function createReplSession(options: RunesmOptions = {}): ReplSession {
       if (closed) {
         return Promise.reject(new Error('runesm session is closed'))
       }
+      const replRequest = (source: string): Omit<WorkerRequestShape, 'id'> => ({
+        kind: 'repl-input',
+        input: source,
+        timeoutMs: transport.timeoutMs,
+        executionWorkerUrl,
+        ...(options.deps === undefined ? {} : { deps: options.deps }),
+        ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
+      })
       return transport
         .request(
-          {
-            kind: 'repl-input',
-            input,
-            timeoutMs: transport.timeoutMs,
-            executionWorkerUrl,
-            ...(options.deps === undefined ? {} : { deps: options.deps }),
-            ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
-          },
+          options.transform === undefined
+            ? replRequest(input)
+            : () => applyTransform(options.transform, input, { kind: 'repl' }).then(replRequest),
           'repl-result',
           handlers,
         )
@@ -194,6 +209,7 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
       const deadline = startedAt + timeoutMs
       let transport: WorkerTransport | undefined
       try {
+        const modules = await transformTestModules(options.transform, run.modules)
         const serviceWorkerScope = await prepareModuleServiceWorker(options, deadline, timeoutMs)
         const testWorkerUrl = resolveTestWorkerUrl(options)
         assertWorkerWithinScope(testWorkerUrl, serviceWorkerScope)
@@ -205,7 +221,7 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
         const outcome = await transport.request(
           {
             kind: 'test',
-            run,
+            run: { ...run, modules },
             graphId,
             serviceWorkerScope,
             ...(options.deps === undefined ? {} : { deps: options.deps }),
@@ -242,6 +258,40 @@ type TransportOutcome =
   | { kind: 'execution-timeout'; console: ConsoleChunk[] }
   | { kind: 'supervisor-timeout'; console: ConsoleChunk[] }
   | { kind: 'worker-error'; message: string; console: ConsoleChunk[] }
+  /** The main-thread `transform` threw before anything reached the worker. */
+  | { kind: 'transform-error'; error: unknown }
+
+/** A request payload, or a thunk that builds it inside the session queue. */
+type RequestInput = Omit<WorkerRequestShape, 'id'> | (() => Promise<Omit<WorkerRequestShape, 'id'>>)
+
+const applyTransform = async (
+  transform: SourceTransform | undefined,
+  source: string,
+  context: SourceTransformContext,
+): Promise<string> => {
+  if (transform === undefined) {
+    return source
+  }
+  const transformed = await transform(source, context)
+  if (typeof transformed !== 'string') {
+    throw new TypeError(`transform must return a string, received ${typeof transformed}`)
+  }
+  return transformed
+}
+
+const transformTestModules = async (
+  transform: SourceTransform | undefined,
+  modules: TestModules,
+): Promise<TestModules> => {
+  if (transform === undefined) {
+    return modules
+  }
+  const transformed: Record<string, string> = {}
+  for (const [id, source] of Object.entries(modules)) {
+    transformed[id] = await applyTransform(transform, source, { kind: 'test', id })
+  }
+  return transformed
+}
 
 interface PendingRequest {
   settle: (outcome: TransportOutcome) => void
@@ -292,16 +342,34 @@ class WorkerTransport {
   }
 
   request(
-    message: Omit<WorkerRequestShape, 'id'>,
+    input: RequestInput,
     resultKind: PendingRequest['resultKind'],
     handlers?: ConsoleStreamHandlers,
   ): Promise<TransportOutcome> {
     const run = this.queue.then(
-      () => this.dispatch(message, resultKind, handlers),
-      () => this.dispatch(message, resultKind, handlers),
+      () => this.prepareAndDispatch(input, resultKind, handlers),
+      () => this.prepareAndDispatch(input, resultKind, handlers),
     )
     this.queue = run.catch(() => undefined)
     return run
+  }
+
+  /**
+   * Builds the payload inside the queue, so an asynchronous transform for one
+   * request cannot let a later request overtake it.
+   */
+  private prepareAndDispatch(
+    input: RequestInput,
+    resultKind: PendingRequest['resultKind'],
+    handlers: ConsoleStreamHandlers | undefined,
+  ): Promise<TransportOutcome> {
+    if (typeof input !== 'function') {
+      return this.dispatch(input, resultKind, handlers)
+    }
+    return input().then(
+      (message) => this.dispatch(message, resultKind, handlers),
+      (error: unknown) => ({ kind: 'transform-error', error }),
+    )
   }
 
   close(): void {
@@ -495,6 +563,17 @@ const asJudgeResult = (outcome: TransportOutcome, timeoutMs: number): JudgeRunRe
   if (outcome.kind === 'execution-timeout') {
     return timeoutResult(timeoutMs, outcome.console)
   }
+  if (outcome.kind === 'transform-error') {
+    return {
+      status: 'error',
+      ok: false,
+      cases: [],
+      console: [],
+      error: serializedMainError(outcome.error),
+      dependencies: [],
+      durationMs: 0,
+    }
+  }
   return workerErrorResult(outcome.message, outcome.console)
 }
 
@@ -518,6 +597,15 @@ const asReplResult = (outcome: TransportOutcome, timeoutMs: number): ReplResult 
       console: outcome.console,
       dependencies: [],
       durationMs: timeoutMs,
+    }
+  }
+  if (outcome.kind === 'transform-error') {
+    return {
+      ok: false,
+      error: serializedMainError(outcome.error),
+      console: [],
+      dependencies: [],
+      durationMs: 0,
     }
   }
   return {
@@ -559,9 +647,9 @@ const asTestResult = (outcome: TransportOutcome, timeoutMs: number): TestRunResu
     status: 'error',
     ok: false,
     tests: [],
-    console: outcome.console,
+    console: outcome.kind === 'transform-error' ? [] : outcome.console,
     dependencies: [],
-    error: workerError(outcome.message),
+    error: outcome.kind === 'transform-error' ? serializedMainError(outcome.error) : workerError(outcome.message),
     durationMs: 0,
   }
 }
@@ -720,7 +808,24 @@ const deleteTestGraphCache = async (graphId: string): Promise<void> => {
   }
 }
 
-const serializedMainError = (error: unknown): SerializedError =>
-  error instanceof Error
-    ? { name: error.name, message: error.message, ...(error.stack === undefined ? {} : { stack: error.stack }) }
-    : { name: 'NonError', message: String(error) }
+const serializedMainError = (error: unknown): SerializedError => {
+  if (!(error instanceof Error)) {
+    return { name: 'NonError', message: String(error) }
+  }
+  const position = errorPosition(error)
+  return {
+    name: error.name,
+    message: error.message,
+    ...(error.stack === undefined ? {} : { stack: error.stack }),
+    ...position,
+  }
+}
+
+/** Carries a transform's `line`/`column` (a compiler diagnostic) into the result. */
+const errorPosition = (error: Error): { line?: number; column?: number } => {
+  const { line, column } = error as { line?: unknown; column?: unknown }
+  return {
+    ...(typeof line === 'number' ? { line } : {}),
+    ...(typeof column === 'number' ? { column } : {}),
+  }
+}

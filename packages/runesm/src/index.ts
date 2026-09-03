@@ -17,6 +17,7 @@ export type {
   WorkerLike,
 } from './main'
 export { createReplSession } from './main'
+export type { SourceTransform, SourceTransformContext } from './transform'
 export type {
   ConsoleChunk,
   ConsoleLevel,
