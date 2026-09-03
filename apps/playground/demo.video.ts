@@ -183,7 +183,9 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
  */
 export default defineVideo(
   {
-    output: ['../../docs/media/playground.gif'],
+    // The 2x master is an ignored intermediate; `demo:social` derives the
+    // committed playground.gif and playground.mp4 from it.
+    output: ['../../docs/media/playground-2x.gif'],
     cols: 60,
     rows: 14,
     browser: { position: 'overlay', width: 1280, height: 800, offset: { x: 0, y: 0 } },

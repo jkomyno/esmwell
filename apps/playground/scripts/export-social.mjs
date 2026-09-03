@@ -1,11 +1,12 @@
-// Derives the social-media cuts of the README recording from the tcut GIF.
+// Derives the committed recordings from the tcut master.
 //
-// The README GIF is rendered at 2x for sharpness (2560x1600, 50 fps), which
-// exceeds what X accepts for a GIF (1280x1080, 350 frames, 300M pixels). This
-// script writes two postable variants next to it:
-//   docs/media/playground.mp4   1280x800, 30 fps, H.264 (X re-encodes GIFs to
-//                               video anyway; this keeps the frame rate)
-//   docs/media/playground-x.gif 1280x800, 15 fps, inside every X GIF limit
+// tcut renders the master at 2x for sharpness (2560x1600, 50 fps), which is
+// too large to commit and exceeds what X accepts for a GIF (1280x1080, 350
+// frames, 300M pixels). This script writes the two files that ship:
+//   docs/media/playground.mp4  1280x800, 30 fps, H.264 (X re-encodes GIFs to
+//                              video anyway; this keeps the frame rate)
+//   docs/media/playground.gif  1280x800, 15 fps, inside every X GIF limit;
+//                              the README embeds it
 //
 // Needs ffmpeg on the PATH. Run after `pnpm --filter playground demo`.
 import { spawnSync } from 'node:child_process'
@@ -14,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const mediaDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'docs', 'media')
-const source = join(mediaDir, 'playground.gif')
+const source = join(mediaDir, 'playground-2x.gif')
 
 if (!existsSync(source)) {
   console.error(`export-social: ${source} is missing; run "pnpm --filter playground demo" first`)
@@ -55,7 +56,7 @@ ffmpeg(
   [
     '-vf',
     'fps=15,scale=1280:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5',
-    join(mediaDir, 'playground-x.gif'),
+    join(mediaDir, 'playground.gif'),
   ],
-  'docs/media/playground-x.gif',
+  'docs/media/playground.gif',
 )
