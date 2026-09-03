@@ -28,6 +28,8 @@ const testCount = document.querySelector<HTMLSpanElement>('#test-count')
 const tape = document.querySelector<HTMLParagraphElement>('#tape')
 const faultView = document.querySelector<HTMLDivElement>('#fault')
 const consoleView = document.querySelector<HTMLDivElement>('#console')
+const resultsView = document.querySelector<HTMLDivElement>('#results')
+const resultsEmpty = document.querySelector<HTMLParagraphElement>('#results-empty')
 const casesView = document.querySelector<HTMLUListElement>('#cases')
 const replHistory = document.querySelector<HTMLDivElement>('#repl-history')
 const replInput = document.querySelector<HTMLDivElement>('#repl-input')
@@ -46,6 +48,8 @@ if (
   tape === null ||
   faultView === null ||
   consoleView === null ||
+  resultsView === null ||
+  resultsEmpty === null ||
   casesView === null ||
   replHistory === null ||
   replInput === null ||
@@ -72,6 +76,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(
 const emptyLine = (text: string): HTMLParagraphElement => el('p', 'well-empty', text)
 
 const CONSOLE_EMPTY = 'Console output from your module appears here as it runs.'
+const RESULTS_EMPTY = 'Case results appear here after Run tests.'
 const REPL_EMPTY = 'Editor declarations load first. Later values persist until reset or the editor changes.'
 const typescriptClient = new TypeScriptClient()
 const sourceState = new SourceLanguageState(DEFAULT_CODE)
@@ -149,6 +154,11 @@ const clearFault = (): void => {
   faultView.hidden = true
 }
 
+/** The results region is never blank: the empty line yields only to rows or a fault. */
+const syncResultsEmpty = (): void => {
+  resultsEmpty.hidden = !faultView.hidden || casesView.childElementCount > 0
+}
+
 /* ------------------------------------------------------------------
    Case rows
    ------------------------------------------------------------------ */
@@ -177,6 +187,8 @@ const renderTestDefinitions = (): void => {
   })
   testDefinitions.replaceChildren(...rows)
   testCount.textContent = String(rows.length)
+  // Reserve the results height up front, so passing rows never shift the REPL.
+  resultsView.style.setProperty('--case-rows', String(Math.max(rows.length, 1)))
 }
 
 const caseDetail = (caseResult: JudgeCaseResult): string | undefined => {
@@ -229,6 +241,7 @@ const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
   clearFault()
   consoleView.replaceChildren(emptyLine(CONSOLE_EMPTY))
   casesView.replaceChildren()
+  syncResultsEmpty()
   renderTape('running', 'running', [])
   session.close()
   session = createSession()
@@ -243,6 +256,7 @@ const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
     renderFault(serializeThrown(error), language === 'mjs' || error instanceof TypeScriptCompileError)
     renderTape('error', 'fail', [])
   } finally {
+    syncResultsEmpty()
     running = false
     runButton.disabled = false
     judgeButton.disabled = false
@@ -491,6 +505,9 @@ sourceEditor = createSourceEditor({
   onRun: () => void execute([]),
 })
 refreshReplCompletionPrefix()
+// Fetch the default module's declarations and check it once now, so the first
+// hover answers from a warm checker. A failure here only means a slower first hover.
+void typescriptClient.warm(DEFAULT_CODE, sourceState.language).catch(() => undefined)
 
 replEditor = createReplEditor({
   parent: replInput,
@@ -534,6 +551,7 @@ window.addEventListener('pagehide', (event) => {
 
 renderSourceControls()
 renderTestDefinitions()
+resultsEmpty.textContent = RESULTS_EMPTY
 consoleView.replaceChildren(emptyLine(CONSOLE_EMPTY))
 replHistory.replaceChildren(emptyLine(REPL_EMPTY))
 renderTape('idle', 'idle', [])

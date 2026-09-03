@@ -56,6 +56,11 @@ export type TypeScriptWorkerRequestBody =
       readonly type: 'transpile'
       readonly source: string
     }
+  | {
+      readonly type: 'warm'
+      readonly source: string
+      readonly language: SourceLanguage
+    }
 
 export type TypeScriptWorkerRequest = TypeScriptWorkerRequestBody & { readonly requestId: number }
 

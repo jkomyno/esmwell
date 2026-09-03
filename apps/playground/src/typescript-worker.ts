@@ -238,6 +238,17 @@ const quickInfo = (source: string, language: SourceLanguage, position: number): 
   )
 }
 
+/**
+ * Acquires the module's declaration graph and type-checks the whole file once,
+ * so the first hover or completion answers from a warm checker instead of
+ * paying for the download and the initial check itself.
+ */
+const warm = (source: string, language: SourceLanguage): null => {
+  setSource(source, language)
+  languageService.getSemanticDiagnostics(activeFileName())
+  return null
+}
+
 const transpile = (source: string): { code: string; diagnostics: readonly TypeScriptDiagnostic[] } => {
   const result = ts.transpileModule(source, {
     compilerOptions: {
@@ -290,6 +301,8 @@ scope.addEventListener('message', async (event: MessageEvent<TypeScriptWorkerReq
           return withTypeGraph(request.source, () => quickInfo(request.source, request.language, request.position))
         case 'transpile':
           return transpile(request.source)
+        case 'warm':
+          return withTypeGraph(request.source, () => warm(request.source, request.language))
       }
     })()
     postToPage({ type: 'result', requestId: request.requestId, result })

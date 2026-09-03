@@ -353,7 +353,7 @@
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "The playground wordmark and nothing else."
+        "purpose": "The playground wordmark and nothing else: a 1rem nameplate on one line with the masthead instruction, not a headline."
       },
       "body": {
         "displayName": "Body",

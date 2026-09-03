@@ -117,24 +117,26 @@ a {
    Masthead
    ============================================================ */
 
+/* One quiet line: the bench's name and the only instruction it needs. The
+   code below is the biggest thing on the page, not the wordmark. */
 .masthead {
   width: 100%;
   max-width: 120rem;
   margin-inline: auto;
-  padding: clamp(var(--space-base), 3vw, var(--space-loose)) var(--page-gutter) var(--space-base);
-}
-
-.masthead-copy {
-  margin-top: var(--space-snug);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-base);
+  padding: var(--space-base) var(--page-gutter);
 }
 
 .wordmark {
   margin: 0;
-  font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem);
+  font-size: 1rem;
   font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
+  line-height: 1.5rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .wordmark-qualifier {
@@ -146,15 +148,8 @@ a {
   margin: 0;
   max-width: 68ch;
   color: var(--graphite-soft);
-  text-wrap: pretty;
-}
-
-.security-note {
-  margin: var(--space-hair) 0 0;
-  max-width: 68ch;
-  color: var(--graphite-soft);
-  font-size: 0.75rem;
-  line-height: 1.5;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
   text-wrap: pretty;
 }
 
@@ -184,6 +179,13 @@ a {
   gap: var(--space-loose);
   min-width: 0;
   min-height: 0;
+}
+
+/* The response column stops where the editor well stops: its bottom padding
+   is the editor's metadata rail and run actions, with the pane gaps between.
+   Keep it in step with .editor-footer, .run-bar, and .pane gap. */
+.column--response {
+  padding-bottom: calc(2rem + var(--space-snug) + 2.5rem + var(--space-snug));
 }
 
 .pane {
@@ -675,9 +677,10 @@ a {
    Console
    ============================================================ */
 
+/* A fixed height, so lines arriving fill the well instead of growing it. */
 .console {
-  min-height: 7.5rem;
-  max-height: 11rem;
+  flex: none;
+  height: 10rem;
 }
 
 .line {
@@ -709,6 +712,25 @@ a {
    Case rows. Status lives in the word, never in a stripe.
    ============================================================ */
 
+/* The results region takes its height from the case count before anything
+   runs, so rows and faults arriving never move the REPL beneath them. Long
+   details scroll inside it. */
+.results {
+  --case-rows: 1;
+  flex: none;
+  height: calc(var(--case-rows) * 2.625rem + (var(--case-rows) - 1) * var(--space-tight));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+.results > .well-empty {
+  padding: var(--space-tight) 0;
+}
+
 .cases {
   list-style: none;
   margin: 0;
@@ -716,6 +738,10 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--space-tight);
+}
+
+.cases:empty {
+  display: none;
 }
 
 .case {
@@ -777,10 +803,11 @@ a {
    REPL
    ============================================================ */
 
+/* Grows to the column's remaining height, so the entry beneath it ends on
+   the editor well's bottom edge. */
 .repl-history {
   flex: 1;
   min-height: 6rem;
-  max-height: 13rem;
   display: flex;
   flex-direction: column;
   gap: var(--space-hair);
@@ -841,6 +868,12 @@ a {
   background: transparent;
 }
 
+/* One line: long input scrolls sideways instead of wrapping the entry taller. */
+.repl-input .cm-scroller {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
 .repl-input .cm-content {
   min-height: 2rem;
   padding: 0.3125rem 0;
@@ -882,6 +915,10 @@ a {
     min-height: auto;
   }
 
+  .column--response {
+    padding-bottom: 0;
+  }
+
   .pane--grow {
     flex: none;
   }
@@ -893,6 +930,10 @@ a {
 
   .editor-host {
     min-height: 0;
+  }
+
+  .repl-history {
+    min-height: 12rem;
   }
 
   .pane-head {
@@ -915,7 +956,7 @@ a {
 
 @media (max-width: 40rem) {
   .masthead {
-    padding-bottom: var(--space-snug);
+    padding-block: var(--space-snug);
   }
 
   .bench {

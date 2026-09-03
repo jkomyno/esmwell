@@ -110,6 +110,11 @@ export class TypeScriptClient {
     return this.#request({ type: 'quick-info', source, language, position })
   }
 
+  /** Downloads the module's declarations and type-checks it once, ahead of the first hover. */
+  async warm(source: string, language: SourceLanguage): Promise<void> {
+    await this.#request<null>({ type: 'warm', source, language })
+  }
+
   completionSource(documentContext: () => CompletionDocument): CompletionSource {
     return async (context: CompletionContext): Promise<CompletionResult | null> => {
       const document = context.state.doc.toString()
