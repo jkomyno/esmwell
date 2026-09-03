@@ -7,6 +7,7 @@ import type {
   ReplResult,
   ReplSession,
   SerializedError,
+  SourceTransform,
 } from 'runesm'
 import { createReplEditor, createSourceEditor, type ReplEditor, type SourceEditor } from './editor'
 import RunesmExecutionWorkerUrl from './runesm-execution-worker?worker&url'
@@ -14,7 +15,7 @@ import RunesmWorker from './runesm-worker?worker'
 import { DEFAULT_CODE, DEMO_CASES } from './examples'
 import { describeWhere, faultKind, serializeThrown } from './fault'
 import { SourceLanguageState } from './source-language-state'
-import { TypeScriptClient, TypeScriptCompileError } from './typescript-client'
+import { TypeScriptClient } from './typescript-client'
 import type { SourceLanguage } from './typescript-protocol'
 
 const editor = document.querySelector<HTMLDivElement>('#editor')
@@ -86,18 +87,21 @@ let replacingEditorSource = false
 let switchingLanguage = false
 let sourceTransitionStatus: { readonly message: string; readonly tone: 'notice' | 'error' } | undefined
 
-const executableSource = (source = sourceState.source, language = sourceState.language): Promise<string> =>
-  language === 'ts' ? typescriptClient.transpile(source) : Promise.resolve(source)
+// In .ts mode the session compiles through the language-service worker on
+// its way to runesm; .mjs is already the JavaScript the runner executes.
+const transformFor = (language: SourceLanguage): SourceTransform | undefined =>
+  language === 'ts' ? (source) => typescriptClient.transpile(source) : undefined
 
-function createSession() {
+function createSession(language: SourceLanguage) {
   return createRunesm({
     workerFactory: () => adaptWorker(new RunesmWorker()),
     executionWorkerUrl: RunesmExecutionWorkerUrl,
     timeoutMs: 10_000,
+    transform: transformFor(language),
   })
 }
 
-let session = createSession()
+let session = createSession(sourceState.language)
 
 /* ------------------------------------------------------------------
    Run tape: status word, duration, and how many deps actually
@@ -243,17 +247,16 @@ const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
   casesView.replaceChildren()
   syncResultsEmpty()
   renderTape('running', 'running', [])
-  session.close()
-  session = createSession()
   const language = sourceState.language
+  session.close()
+  session = createSession(language)
   try {
-    const source = await executableSource(sourceState.source, language)
-    const result = await session.runJudge(source, cases, { onConsoleChunk: appendConsoleLine })
-    renderResult(result, language === 'mjs')
-  } catch (error) {
+    const result = await session.runJudge(sourceState.source, cases, { onConsoleChunk: appendConsoleLine })
     // runesm sees emitted JavaScript in .ts mode, so only compiler diagnostics
     // can truthfully point back to the source currently shown in the editor.
-    renderFault(serializeThrown(error), language === 'mjs' || error instanceof TypeScriptCompileError)
+    renderResult(result, language === 'mjs' || result.error?.name === 'TypeScriptError')
+  } catch (error) {
+    renderFault(serializeThrown(error), false)
     renderTape('error', 'fail', [])
   } finally {
     syncResultsEmpty()
@@ -327,21 +330,16 @@ const getReplSession = (): Promise<ReplSession> => {
       workerFactory: () => adaptWorker(new RunesmWorker()),
       executionWorkerUrl: RunesmExecutionWorkerUrl,
       timeoutMs: 10_000,
+      transform: transformFor(language),
     })
     replSession = nextSession
-    replReady = executableSource(source, language)
-      .then((compiledSource) => {
-        if (generation !== replGeneration) {
-          nextSession.close()
-          throw new Error('the editor changed while its module was loading; run the command again')
-        }
-        return nextSession.evaluate(compiledSource, {
-          onConsoleChunk: (chunk) => {
-            if (generation === replGeneration) {
-              appendReplConsole(chunk)
-            }
-          },
-        })
+    replReady = nextSession
+      .evaluate(source, {
+        onConsoleChunk: (chunk) => {
+          if (generation === replGeneration) {
+            appendReplConsole(chunk)
+          }
+        },
       })
       .then((result) => {
         if (generation !== replGeneration) {
@@ -376,14 +374,13 @@ const renderReplResult = (result: ReplResult): void => {
 
 const submitRepl = async (input: string): Promise<void> => {
   const generation = replGeneration
-  const language = sourceState.language
   appendReplLine('input', '›', input)
   try {
-    const [readySession, compiledInput] = await Promise.all([getReplSession(), executableSource(input, language)])
+    const readySession = await getReplSession()
     if (generation !== replGeneration) {
       return
     }
-    const result = await readySession.evaluate(compiledInput, {
+    const result = await readySession.evaluate(input, {
       onConsoleChunk: (chunk) => {
         if (generation === replGeneration) {
           appendReplConsole(chunk)
