@@ -117,24 +117,26 @@ a {
    Masthead
    ============================================================ */
 
+/* One quiet line: the bench's name and the only instruction it needs. The
+   code below is the biggest thing on the page, not the wordmark. */
 .masthead {
   width: 100%;
   max-width: 120rem;
   margin-inline: auto;
-  padding: clamp(var(--space-base), 3vw, var(--space-loose)) var(--page-gutter) var(--space-base);
-}
-
-.masthead-copy {
-  margin-top: var(--space-snug);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-base);
+  padding: var(--space-base) var(--page-gutter);
 }
 
 .wordmark {
   margin: 0;
-  font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem);
+  font-size: 1rem;
   font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
+  line-height: 1.5rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .wordmark-qualifier {
@@ -146,15 +148,8 @@ a {
   margin: 0;
   max-width: 68ch;
   color: var(--graphite-soft);
-  text-wrap: pretty;
-}
-
-.security-note {
-  margin: var(--space-hair) 0 0;
-  max-width: 68ch;
-  color: var(--graphite-soft);
-  font-size: 0.75rem;
-  line-height: 1.5;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
   text-wrap: pretty;
 }
 
@@ -184,6 +179,13 @@ a {
   gap: var(--space-loose);
   min-width: 0;
   min-height: 0;
+}
+
+/* The response column stops where the editor well stops: its bottom padding
+   is the editor's metadata rail and run actions, with the pane gaps between.
+   Keep it in step with .editor-footer, .run-bar, and .pane gap. */
+.column--response {
+  padding-bottom: calc(2rem + var(--space-snug) + 2.5rem + var(--space-snug));
 }
 
 .pane {
@@ -346,16 +348,14 @@ a {
 }
 
 .editor-footer {
-  position: relative;
   flex: none;
   width: 100%;
-  min-height: 3rem;
+  min-height: 2rem;
   padding: var(--space-tight) 0 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-snug);
-  border-top: 1px solid var(--rule);
 }
 
 .editor-shortcuts {
@@ -368,58 +368,75 @@ a {
 
 /* Replaces the gutter: one quiet readout instead of a column of numbers. */
 .editor-cursor {
-  grid-column: 3;
+  grid-column: 2;
   justify-self: end;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.test-disclosure {
-  position: relative;
+/* A labeled drawer in the bench, not a cover plate over it. The list opens
+   inside the editor well and borrows its height from the source view, so the
+   code under test stays visible and nothing floats over it. */
+.test-drawer {
   flex: none;
-  width: auto;
-  margin: 0;
-  z-index: 2;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rule);
 }
 
-.editor-footer > .test-disclosure {
-  grid-column: 2;
-  justify-self: center;
-  align-self: center;
-}
-
-.test-disclosure summary {
-  width: max-content;
-  margin-left: auto;
+.test-drawer-handle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-tight);
   min-height: 2.25rem;
-  padding: 0.375rem 0.625rem;
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-sm);
-  background: var(--paper-raised);
-  color: var(--graphite);
+  padding: 0 var(--space-snug);
+  list-style: none;
+  color: var(--graphite-soft);
+  font-family: var(--font-sans);
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+.test-drawer-handle::-webkit-details-marker {
+  display: none;
+}
+
+.test-drawer-handle:hover,
+.test-drawer[open] > .test-drawer-handle {
+  color: var(--graphite);
+}
+
+.test-drawer-caret {
+  display: inline-block;
+  font-size: 0.875rem;
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+
+.test-drawer[open] .test-drawer-caret {
+  transform: rotate(90deg);
+}
+
+/* Right-aligned like the cursor readout: how many cases, before they run. */
+.test-drawer-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .test-definitions {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + var(--space-tight));
-  transform: translateX(-50%);
-  width: min(28rem, calc(100vw - 2 * var(--page-gutter) - 2 * var(--space-snug)));
-  max-height: min(20rem, 55vh);
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(11rem, 20vh);
   overflow: auto;
   list-style-position: inside;
   margin: 0;
-  padding: var(--space-hair) var(--space-snug);
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-md);
-  background: var(--paper-sunk);
-  box-shadow: var(--shadow-lifted);
+  padding: 0 var(--space-snug) var(--space-tight);
 }
 
 .test-definition {
@@ -535,6 +552,8 @@ a {
   color: var(--graphite-soft);
 }
 
+/* One well holds the source and its drawer, so the two read as one surface
+   the machine writes into rather than as stacked containers. */
 .editor-stage {
   position: relative;
   flex: 1;
@@ -542,15 +561,15 @@ a {
   width: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   border-radius: var(--radius-md);
+  background: var(--paper-sunk);
 }
 
 .editor-host {
   flex: 1;
   min-height: 0;
   width: 100%;
-  border-radius: var(--radius-md);
-  background: var(--paper-sunk);
 }
 
 .editor-host > .cm-editor {
@@ -658,9 +677,10 @@ a {
    Console
    ============================================================ */
 
+/* A fixed height, so lines arriving fill the well instead of growing it. */
 .console {
-  min-height: 7.5rem;
-  max-height: 11rem;
+  flex: none;
+  height: 10rem;
 }
 
 .line {
@@ -692,6 +712,25 @@ a {
    Case rows. Status lives in the word, never in a stripe.
    ============================================================ */
 
+/* The results region takes its height from the case count before anything
+   runs, so rows and faults arriving never move the REPL beneath them. Long
+   details scroll inside it. */
+.results {
+  --case-rows: 1;
+  flex: none;
+  height: calc(var(--case-rows) * 2.625rem + (var(--case-rows) - 1) * var(--space-tight));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+.results > .well-empty {
+  padding: var(--space-tight) 0;
+}
+
 .cases {
   list-style: none;
   margin: 0;
@@ -699,6 +738,10 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--space-tight);
+}
+
+.cases:empty {
+  display: none;
 }
 
 .case {
@@ -760,10 +803,11 @@ a {
    REPL
    ============================================================ */
 
+/* Grows to the column's remaining height, so the entry beneath it ends on
+   the editor well's bottom edge. */
 .repl-history {
   flex: 1;
   min-height: 6rem;
-  max-height: 13rem;
   display: flex;
   flex-direction: column;
   gap: var(--space-hair);
@@ -824,6 +868,12 @@ a {
   background: transparent;
 }
 
+/* One line: long input scrolls sideways instead of wrapping the entry taller. */
+.repl-input .cm-scroller {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
 .repl-input .cm-content {
   min-height: 2rem;
   padding: 0.3125rem 0;
@@ -865,6 +915,10 @@ a {
     min-height: auto;
   }
 
+  .column--response {
+    padding-bottom: 0;
+  }
+
   .pane--grow {
     flex: none;
   }
@@ -876,6 +930,10 @@ a {
 
   .editor-host {
     min-height: 0;
+  }
+
+  .repl-history {
+    min-height: 12rem;
   }
 
   .pane-head {
@@ -891,14 +949,14 @@ a {
   .language-option,
   .button,
   .button--sm,
-  .test-disclosure summary {
+  .test-drawer-handle {
     min-height: 2.75rem;
   }
 }
 
 @media (max-width: 40rem) {
   .masthead {
-    padding-bottom: var(--space-snug);
+    padding-block: var(--space-snug);
   }
 
   .bench {
@@ -935,11 +993,9 @@ a {
   .editor-footer {
     grid-template-columns: 1fr;
     justify-items: center;
-    row-gap: var(--space-tight);
   }
 
-  .editor-shortcuts,
-  .editor-footer > .test-disclosure {
+  .editor-shortcuts {
     grid-column: 1;
     justify-self: center;
     text-align: center;

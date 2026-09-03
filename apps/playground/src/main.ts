@@ -7,6 +7,7 @@ import type {
   ReplResult,
   ReplSession,
   SerializedError,
+  SourceTransform,
 } from 'runesm'
 import { createReplEditor, createSourceEditor, type ReplEditor, type SourceEditor } from './editor'
 import RunesmExecutionWorkerUrl from './runesm-execution-worker?worker&url'
@@ -14,7 +15,7 @@ import RunesmWorker from './runesm-worker?worker'
 import { DEFAULT_CODE, DEMO_CASES } from './examples'
 import { describeWhere, faultKind, serializeThrown } from './fault'
 import { SourceLanguageState } from './source-language-state'
-import { TypeScriptClient, TypeScriptCompileError } from './typescript-client'
+import { TypeScriptClient } from './typescript-client'
 import type { SourceLanguage } from './typescript-protocol'
 
 const editor = document.querySelector<HTMLDivElement>('#editor')
@@ -24,9 +25,12 @@ const sourceResetButton = document.querySelector<HTMLButtonElement>('#source-res
 const sourceStatus = document.querySelector<HTMLParagraphElement>('#source-status')
 const editorCursor = document.querySelector<HTMLParagraphElement>('#editor-cursor')
 const testDefinitions = document.querySelector<HTMLOListElement>('#test-definitions')
+const testCount = document.querySelector<HTMLSpanElement>('#test-count')
 const tape = document.querySelector<HTMLParagraphElement>('#tape')
 const faultView = document.querySelector<HTMLDivElement>('#fault')
 const consoleView = document.querySelector<HTMLDivElement>('#console')
+const resultsView = document.querySelector<HTMLDivElement>('#results')
+const resultsEmpty = document.querySelector<HTMLParagraphElement>('#results-empty')
 const casesView = document.querySelector<HTMLUListElement>('#cases')
 const replHistory = document.querySelector<HTMLDivElement>('#repl-history')
 const replInput = document.querySelector<HTMLDivElement>('#repl-input')
@@ -41,9 +45,12 @@ if (
   sourceStatus === null ||
   editorCursor === null ||
   testDefinitions === null ||
+  testCount === null ||
   tape === null ||
   faultView === null ||
   consoleView === null ||
+  resultsView === null ||
+  resultsEmpty === null ||
   casesView === null ||
   replHistory === null ||
   replInput === null ||
@@ -70,6 +77,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(
 const emptyLine = (text: string): HTMLParagraphElement => el('p', 'well-empty', text)
 
 const CONSOLE_EMPTY = 'Console output from your module appears here as it runs.'
+const RESULTS_EMPTY = 'Case results appear here after Run tests.'
 const REPL_EMPTY = 'Editor declarations load first. Later values persist until reset or the editor changes.'
 const typescriptClient = new TypeScriptClient()
 const sourceState = new SourceLanguageState(DEFAULT_CODE)
@@ -79,18 +87,21 @@ let replacingEditorSource = false
 let switchingLanguage = false
 let sourceTransitionStatus: { readonly message: string; readonly tone: 'notice' | 'error' } | undefined
 
-const executableSource = (source = sourceState.source, language = sourceState.language): Promise<string> =>
-  language === 'ts' ? typescriptClient.transpile(source) : Promise.resolve(source)
+// In .ts mode the session compiles through the language-service worker on
+// its way to runesm; .mjs is already the JavaScript the runner executes.
+const transformFor = (language: SourceLanguage): SourceTransform | undefined =>
+  language === 'ts' ? (source) => typescriptClient.transpile(source) : undefined
 
-function createSession() {
+function createSession(language: SourceLanguage) {
   return createRunesm({
     workerFactory: () => adaptWorker(new RunesmWorker()),
     executionWorkerUrl: RunesmExecutionWorkerUrl,
     timeoutMs: 10_000,
+    transform: transformFor(language),
   })
 }
 
-let session = createSession()
+let session = createSession(sourceState.language)
 
 /* ------------------------------------------------------------------
    Run tape: status word, duration, and how many deps actually
@@ -147,6 +158,11 @@ const clearFault = (): void => {
   faultView.hidden = true
 }
 
+/** The results region is never blank: the empty line yields only to rows or a fault. */
+const syncResultsEmpty = (): void => {
+  resultsEmpty.hidden = !faultView.hidden || casesView.childElementCount > 0
+}
+
 /* ------------------------------------------------------------------
    Case rows
    ------------------------------------------------------------------ */
@@ -174,6 +190,9 @@ const renderTestDefinitions = (): void => {
     return row
   })
   testDefinitions.replaceChildren(...rows)
+  testCount.textContent = String(rows.length)
+  // Reserve the results height up front, so passing rows never shift the REPL.
+  resultsView.style.setProperty('--case-rows', String(Math.max(rows.length, 1)))
 }
 
 const caseDetail = (caseResult: JudgeCaseResult): string | undefined => {
@@ -226,20 +245,21 @@ const execute = async (cases: readonly JudgeCase[]): Promise<void> => {
   clearFault()
   consoleView.replaceChildren(emptyLine(CONSOLE_EMPTY))
   casesView.replaceChildren()
+  syncResultsEmpty()
   renderTape('running', 'running', [])
-  session.close()
-  session = createSession()
   const language = sourceState.language
+  session.close()
+  session = createSession(language)
   try {
-    const source = await executableSource(sourceState.source, language)
-    const result = await session.runJudge(source, cases, { onConsoleChunk: appendConsoleLine })
-    renderResult(result, language === 'mjs')
-  } catch (error) {
+    const result = await session.runJudge(sourceState.source, cases, { onConsoleChunk: appendConsoleLine })
     // runesm sees emitted JavaScript in .ts mode, so only compiler diagnostics
     // can truthfully point back to the source currently shown in the editor.
-    renderFault(serializeThrown(error), language === 'mjs' || error instanceof TypeScriptCompileError)
+    renderResult(result, language === 'mjs' || result.error?.name === 'TypeScriptError')
+  } catch (error) {
+    renderFault(serializeThrown(error), false)
     renderTape('error', 'fail', [])
   } finally {
+    syncResultsEmpty()
     running = false
     runButton.disabled = false
     judgeButton.disabled = false
@@ -310,21 +330,16 @@ const getReplSession = (): Promise<ReplSession> => {
       workerFactory: () => adaptWorker(new RunesmWorker()),
       executionWorkerUrl: RunesmExecutionWorkerUrl,
       timeoutMs: 10_000,
+      transform: transformFor(language),
     })
     replSession = nextSession
-    replReady = executableSource(source, language)
-      .then((compiledSource) => {
-        if (generation !== replGeneration) {
-          nextSession.close()
-          throw new Error('the editor changed while its module was loading; run the command again')
-        }
-        return nextSession.evaluate(compiledSource, {
-          onConsoleChunk: (chunk) => {
-            if (generation === replGeneration) {
-              appendReplConsole(chunk)
-            }
-          },
-        })
+    replReady = nextSession
+      .evaluate(source, {
+        onConsoleChunk: (chunk) => {
+          if (generation === replGeneration) {
+            appendReplConsole(chunk)
+          }
+        },
       })
       .then((result) => {
         if (generation !== replGeneration) {
@@ -359,14 +374,13 @@ const renderReplResult = (result: ReplResult): void => {
 
 const submitRepl = async (input: string): Promise<void> => {
   const generation = replGeneration
-  const language = sourceState.language
   appendReplLine('input', '›', input)
   try {
-    const [readySession, compiledInput] = await Promise.all([getReplSession(), executableSource(input, language)])
+    const readySession = await getReplSession()
     if (generation !== replGeneration) {
       return
     }
-    const result = await readySession.evaluate(compiledInput, {
+    const result = await readySession.evaluate(input, {
       onConsoleChunk: (chunk) => {
         if (generation === replGeneration) {
           appendReplConsole(chunk)
@@ -488,6 +502,9 @@ sourceEditor = createSourceEditor({
   onRun: () => void execute([]),
 })
 refreshReplCompletionPrefix()
+// Fetch the default module's declarations and check it once now, so the first
+// hover answers from a warm checker. A failure here only means a slower first hover.
+void typescriptClient.warm(DEFAULT_CODE, sourceState.language).catch(() => undefined)
 
 replEditor = createReplEditor({
   parent: replInput,
@@ -531,6 +548,7 @@ window.addEventListener('pagehide', (event) => {
 
 renderSourceControls()
 renderTestDefinitions()
+resultsEmpty.textContent = RESULTS_EMPTY
 consoleView.replaceChildren(emptyLine(CONSOLE_EMPTY))
 replHistory.replaceChildren(emptyLine(REPL_EMPTY))
 renderTape('idle', 'idle', [])

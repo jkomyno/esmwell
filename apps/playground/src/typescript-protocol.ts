@@ -34,7 +34,8 @@ export interface TypeScriptQuickInfo {
   readonly documentation: string
 }
 
-export type TypeScriptWorkerRequestBody =
+/** One request body; runesm's worker rpc wraps it in its own id envelope. */
+export type TypeScriptWorkerRequest =
   | {
       readonly type: 'completions'
       readonly source: string
@@ -56,9 +57,8 @@ export type TypeScriptWorkerRequestBody =
       readonly type: 'transpile'
       readonly source: string
     }
-
-export type TypeScriptWorkerRequest = TypeScriptWorkerRequestBody & { readonly requestId: number }
-
-export type TypeScriptWorkerResponse =
-  | { readonly type: 'result'; readonly requestId: number; readonly result: unknown }
-  | { readonly type: 'error'; readonly requestId: number; readonly message: string }
+  | {
+      readonly type: 'warm'
+      readonly source: string
+      readonly language: SourceLanguage
+    }

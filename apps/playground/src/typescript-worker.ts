@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { serveWorkerRpc } from 'runesm/utils'
 import * as ts from 'typescript-legacy'
 import type {
   SourceLanguage,
@@ -8,7 +9,6 @@ import type {
   TypeScriptDiagnostic,
   TypeScriptQuickInfo,
   TypeScriptWorkerRequest,
-  TypeScriptWorkerResponse,
 } from './typescript-protocol'
 import { serializeQuickInfo } from './typescript-quick-info'
 import {
@@ -238,6 +238,17 @@ const quickInfo = (source: string, language: SourceLanguage, position: number): 
   )
 }
 
+/**
+ * Acquires the module's declaration graph and type-checks the whole file once,
+ * so the first hover or completion answers from a warm checker instead of
+ * paying for the download and the initial check itself.
+ */
+const warm = (source: string, language: SourceLanguage): null => {
+  setSource(source, language)
+  languageService.getSemanticDiagnostics(activeFileName())
+  return null
+}
+
 const transpile = (source: string): { code: string; diagnostics: readonly TypeScriptDiagnostic[] } => {
   const result = ts.transpileModule(source, {
     compilerOptions: {
@@ -267,37 +278,19 @@ const transpile = (source: string): { code: string; diagnostics: readonly TypeSc
   }
 }
 
-interface TypeScriptWorkerScope {
-  postMessage(message: TypeScriptWorkerResponse): void
-  addEventListener(type: 'message', listener: (event: MessageEvent<TypeScriptWorkerRequest>) => void): void
-}
-
-const scope = self as unknown as TypeScriptWorkerScope
-const postToPage = scope.postMessage.bind(scope)
-
-scope.addEventListener('message', async (event: MessageEvent<TypeScriptWorkerRequest>): Promise<void> => {
-  const request = event.data
-  try {
-    const result = await (() => {
-      switch (request.type) {
-        case 'completions':
-          return isModuleSpecifierPosition(request.source, request.position)
-            ? completions(request.source, request.language, request.position)
-            : withTypeGraph(request.source, () => completions(request.source, request.language, request.position))
-        case 'diagnostics':
-          return diagnostics(request.source, request.language)
-        case 'quick-info':
-          return withTypeGraph(request.source, () => quickInfo(request.source, request.language, request.position))
-        case 'transpile':
-          return transpile(request.source)
-      }
-    })()
-    postToPage({ type: 'result', requestId: request.requestId, result })
-  } catch (error) {
-    postToPage({
-      type: 'error',
-      requestId: request.requestId,
-      message: error instanceof Error ? error.message : String(error),
-    })
+serveWorkerRpc<TypeScriptWorkerRequest>((request) => {
+  switch (request.type) {
+    case 'completions':
+      return isModuleSpecifierPosition(request.source, request.position)
+        ? completions(request.source, request.language, request.position)
+        : withTypeGraph(request.source, () => completions(request.source, request.language, request.position))
+    case 'diagnostics':
+      return diagnostics(request.source, request.language)
+    case 'quick-info':
+      return withTypeGraph(request.source, () => quickInfo(request.source, request.language, request.position))
+    case 'transpile':
+      return transpile(request.source)
+    case 'warm':
+      return withTypeGraph(request.source, () => warm(request.source, request.language))
   }
 })

@@ -28,10 +28,10 @@ colors:
 typography:
   display:
     fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
-    fontSize: 'clamp(2rem, 1.4rem + 2.6vw, 3.25rem)'
+    fontSize: '1rem'
     fontWeight: 700
-    lineHeight: 1.05
-    letterSpacing: '-0.02em'
+    lineHeight: 1.5
+    letterSpacing: '-0.01em'
   body:
     fontFamily: 'Archivo Variable, ui-sans-serif, system-ui, sans-serif'
     fontSize: '0.9375rem'
@@ -89,12 +89,12 @@ components:
     typography: '{typography.code}'
     rounded: '{rounded.sm}'
     padding: '4px 10px'
-  test-disclosure:
-    backgroundColor: '{colors.paper-raised}'
-    textColor: '{colors.graphite}'
+  test-drawer:
+    backgroundColor: '{colors.paper-sunk}'
+    textColor: '{colors.graphite-soft}'
     typography: '{typography.label}'
-    rounded: '{rounded.sm}'
-    padding: '6px 10px'
+    rounded: '{rounded.md}'
+    padding: '0 12px'
   case-row:
     backgroundColor: '{colors.paper}'
     textColor: '{colors.graphite}'
@@ -192,12 +192,12 @@ Syntax ink is meaningful only inside source code. It never appears in headings, 
 
 ### Hierarchy
 
-- **Display** (700, `clamp(2rem, 1.4rem + 2.6vw, 3.25rem)`, 1.05, `-0.02em`): the playground wordmark and nothing else.
+- **Display** (700, 1rem, 1.5, `-0.01em`): the playground wordmark and nothing else. It is a nameplate on the bench, not a headline, and sits on one line with the masthead instruction.
 - **Body** (400, 0.9375rem, 1.6): prose, hints, case names. Capped at 65–75ch wherever it runs long.
 - **Label** (600, 0.75rem, 1.2, `0.08em`, uppercase): pane labels and button text.
 - **Code** (400, 0.75rem, 1.65, `wdth 87.5`): editor contents, console output, REPL history, and test invocations. Set small on purpose: a laptop viewport shows the whole default program and a full run without scrolling.
 
-The visual hierarchy runs from 0.75rem labels to 0.9375rem body text, then jumps decisively to the fluid display size. Code is a parallel functional track, distinguished by family, width, and context rather than treated as a hierarchy step.
+The type runs from 0.75rem labels to 0.9375rem body text and stops at the 1rem wordmark. Nothing on the page is display-sized: the code is the largest thing on the bench, and the masthead is one quiet line above it. Code is a parallel functional track, distinguished by family, width, and context rather than treated as a hierarchy step.
 
 ### Named Rules
 
@@ -233,11 +233,10 @@ One shadow exists, and only for elements that genuinely float above the page:
 - **Hover / Focus:** primary shifts fill from graphite to rust over 120ms. Focus-visible is a 2px rust outline at 2px offset on every control, never a removed outline.
 - **Disabled:** graphite-soft text on paper-sunk, no border change, `cursor: not-allowed`. Used while a run is in flight.
 
-### Security Qualifier
+### Masthead
 
-- **Placement:** directly below the masthead claim, where the word "sandbox" first appears.
-- **Style:** label-size Archivo in graphite-soft, on the page ground with no container or icon.
-- **Content:** distinguish hang isolation from hostile-code containment and link to the full security model.
+- **Structure:** one line. The wordmark in display type, then a single body sentence in graphite-soft, centered on the same 1.5rem line box and wrapping beneath the wordmark only when the viewport forces it.
+- **Content:** the least copy that lets a visitor act: edit the module, run it, or call it from the REPL, and where bare imports come from. No security copy, no feature list, no restated headings. The bench itself explains the rest.
 
 ### Cards / Containers
 
@@ -246,7 +245,7 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 ### Wells
 
 - **Style:** paper-sunk fill, 4px radius, 12px padding, code typography, no border.
-- **Behavior:** scroll internally rather than growing the page. The console well is a polite live region so streamed output is announced.
+- **Behavior:** scroll internally rather than growing the page. The console well has a fixed height, so arriving lines fill it instead of resizing it. It is a polite live region so streamed output is announced.
 - **Editor syntax:** CodeMirror 6 owns editing, keyboard navigation, completion, diagnostics, inferred-type hover help, and syntax rendering. Its dedicated TypeScript worker acquires and caches npm declaration graphs on demand for bare imports and their inline versions. `.ts` compiles in that worker before runesm executes the emitted module; `.mjs` shows the generated JavaScript and passes it directly to runesm. TypeScript edits invalidate the generated view. Invalid TypeScript stays in `.ts`. Direct JavaScript edits disable `.ts` until restore resets both views. Token ink and selection grounds use the scoped editor palette; UI semantic hues do not color syntax.
 - **Empty state:** a single line of graphite-soft body text stating what will appear here, never a blank box.
 
@@ -256,11 +255,12 @@ There are no cards in this system. Panes are defined by a label and a ground cha
 - **State:** `.mjs` is unavailable only while TypeScript compilation is failing. `.ts` becomes unavailable after direct JavaScript edits. A visible status line explains either block.
 - **Restore:** the restore control returns to the initial TypeScript source, invalidates cached JavaScript, re-enables both languages, and resets the REPL scope.
 
-### Test Disclosure
+### Test Drawer
 
-- **Structure:** the editor shortcut hint, native `details`/`summary`, and a `Ln, Col` cursor readout share a footer rail beneath the recessed editor host. The rail has no background of its own; a hairline separates it from editable text, and `View tests` sits on the rail's exact horizontal center at wide widths with the readout at the far end. The editor has no line-number gutter: the readout is the only positional aid, so source text starts at the well's left padding. On compact screens the readout hides while the hint and control stack and center. The test list opens centered above the control and stays inside the editor bounds.
-- **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution.
-- **Style:** the summary is a compact raised control. The expanded list is a genuine popover using `paper-sunk`, the lifted shadow, one hairline between rows, body text for names and expectations, and code typography for invocations.
+- **Structure:** one recessed well holds the source view and, seated at its bottom edge, a native `details`/`summary` drawer: a caret, the label `Test cases`, and the case count at the far end of a full-width handle. The drawer is open by default. Opening or closing it takes height from the source view rather than from the page, so the well keeps its size, the run actions never move, and the list never covers the code it describes.
+- **Rail:** the editor shortcut hint and a `Ln, Col` readout hold the two ends of a transparent metadata rail beneath the well, with nothing competing between them. The editor has no line-number gutter: the readout is the only positional aid, so source text starts at the well's left padding. On compact screens the readout hides and the hint centers.
+- **Content:** every judge case shows its name, exact exported-function invocation, and expectation before execution; the handle states how many cases there are before either action runs them.
+- **Style:** the handle and the list belong to the well and share its `paper-sunk` ground, divided from editable text by a single `rule` hairline. Label typography in graphite-soft darkens to graphite on hover and while open, and the caret rotates a quarter turn. No fill, no border, no shadow: this is a drawer in the bench, not a panel floating over it. The hairline is decorative rather than the control's boundary, because the caret and the label are what identify the handle. Rows carry one hairline between them, body text for names and expectations, and code typography for invocations, and the list scrolls internally rather than crowding the source.
 
 ### Case Result Row
 
@@ -268,6 +268,7 @@ The signature component, and the one place the old design broke a hard rule.
 
 - **Structure:** case name (body) on the left, status word (label, uppercase) on the right, optional detail line beneath in graphite-soft.
 - **Status:** the status _word_ is colored, sap for PASS, crimson for FAIL, ochre for ERROR. The row itself carries a full 1px `rule` border and paper ground.
+- **Layout:** rows and any module fault land in a results region beneath the console whose height is reserved from the case count before anything runs. Rows arriving therefore never move the REPL; long details scroll inside the region. Until a run, it holds one graphite-soft empty-state line.
 - **Prohibited:** a colored `border-left` stripe. This is a hard ban and the previous implementation used a 3px left border as the entire status signal. Status lives in the word.
 
 ### REPL Entry
@@ -275,6 +276,7 @@ The signature component, and the one place the old design broke a hard rule.
 - **Style:** paper-raised, 1px `rule-strong` border, 2px radius, with a sap `›` caret and a borderless CodeMirror entry that inherits code typography.
 - **Scope:** the current editor module evaluates as the first input. Later declarations persist until reset, source edits, language changes, or source restore rebuilds the scope.
 - **Input:** `Ctrl+Space` opens completion against the editor module and successful prior inputs. Right arrow accepts the faded inline suggestion while the input is empty. Up and down arrows traverse command history, restoring the unfinished draft after the newest entry.
+- **Height:** the entry is one line; pasted newlines flatten to spaces and long input scrolls sideways. On the wide bench the response column ends where the editor well ends, above the metadata rail and run actions, and the history well fills the space above the entry.
 - **History:** a sunk well above it. Input lines prefixed `›` in graphite, values prefixed `=` in graphite-soft, errors prefixed `!` in crimson.
 
 ### Responsive Bench
@@ -293,7 +295,7 @@ The signature component, and the one place the old design broke a hard rule.
 - **Do** make the primary action graphite fill with paper text. Weight makes it primary, not color.
 - **Do** pair every status color with a text label, so the interface survives with all color removed.
 - **Do** recess surfaces the machine writes into, and keep surfaces the user acts on flush or raised.
-- **Do** keep the editor footer rail transparent; only the editor host receives the `paper-sunk` ground.
+- **Do** keep the editor footer rail transparent; the editor well carries the `paper-sunk` ground for both the source view and its test drawer.
 - **Do** use Martian Mono only for code and machine output. Everything else is Archivo.
 - **Do** vary spacing for rhythm across the 4/8/12/20/32/52 scale. Identical padding on every element is monotony.
 - **Do** honor `prefers-reduced-motion` on every transition, and keep motion to feedback that makes streaming legible.

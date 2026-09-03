@@ -17,21 +17,10 @@
   <body>
     <header class="masthead">
       <h1 class="wordmark">runesm <span class="wordmark-qualifier">playground</span></h1>
-      <div class="masthead-copy">
-        <p class="claim">
-          Run ESM in a worker-thread browser sandbox. Bare imports resolve through
-          <a href="https://esm.sh" rel="noreferrer">esm.sh</a> at runtime. Edit the module, then run it as a script or
-          against the cases.
-        </p>
-        <p class="security-note">
-          Worker isolation contains hangs; it does not make hostile code safe.
-          <a
-            href="https://github.com/jkomyno/runesm/blob/main/COMPATIBILITY.md#is-the-worker-a-security-sandbox-for-hostile-code"
-            rel="noreferrer"
-            >Security model.</a
-          >
-        </p>
-      </div>
+      <p class="claim">
+        Edit the module, run it, or call it from the REPL. Bare imports resolve through
+        <a href="https://esm.sh" rel="noreferrer">esm.sh</a>.
+      </p>
     </header>
 
     <main class="bench">
@@ -59,14 +48,18 @@
           <p id="source-status" class="source-status" role="status" hidden></p>
           <div class="editor-stage">
             <div id="editor" class="editor-host"></div>
-            <div class="editor-footer">
-              <p class="pane-note editor-shortcuts" id="editor-shortcuts">⌘↵ run · Ctrl+Space complete · ⌘⇧H types</p>
-              <details class="test-disclosure">
-                <summary>View tests</summary>
-                <ol id="test-definitions" class="test-definitions"></ol>
-              </details>
-              <p class="pane-note editor-cursor" id="editor-cursor" aria-live="off">Ln 1, Col 1</p>
-            </div>
+            <details class="test-drawer" id="test-drawer" open>
+              <summary class="test-drawer-handle">
+                <span class="test-drawer-caret" aria-hidden="true">›</span>
+                <span>Test cases</span>
+                <span class="test-drawer-count" id="test-count"></span>
+              </summary>
+              <ol id="test-definitions" class="test-definitions"></ol>
+            </details>
+          </div>
+          <div class="editor-footer">
+            <p class="pane-note editor-shortcuts" id="editor-shortcuts">⌘↵ run · Ctrl+Space complete · ⌘⇧H types</p>
+            <p class="pane-note editor-cursor" id="editor-cursor" aria-live="off">Ln 1, Col 1</p>
           </div>
           <div class="run-bar">
             <button id="run" type="button" class="button button--secondary">Run script</button>
@@ -75,15 +68,18 @@
         </section>
       </div>
 
-      <div class="column">
+      <div class="column column--response">
         <section class="pane" aria-labelledby="label-output">
           <div class="pane-head">
             <h2 class="pane-label" id="label-output">Output</h2>
             <p id="tape" class="tape" role="status"></p>
           </div>
-          <div id="fault" class="fault" hidden></div>
           <div id="console" class="console well" role="log" aria-label="Console output"></div>
-          <ul id="cases" class="cases"></ul>
+          <div id="results" class="results" role="status" aria-label="Run results">
+            <p id="results-empty" class="well-empty"></p>
+            <div id="fault" class="fault" hidden></div>
+            <ul id="cases" class="cases"></ul>
+          </div>
         </section>
 
         <section class="pane pane--grow" aria-labelledby="label-repl">

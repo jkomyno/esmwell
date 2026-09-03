@@ -1,6 +1,7 @@
 import { runJudgeInRealm } from 'src/bootstrap'
 import { createReplSession, createRunesm, createTestSession } from 'src/main'
 import type { WorkerFactory, WorkerLike } from 'src/main'
+import type { SourceTransform } from 'src/transform'
 import type { JudgeRunResult, WorkerRequest, WorkerResponse } from 'src/types'
 import { vi } from 'vitest'
 
@@ -81,6 +82,7 @@ interface SessionOptions {
   deps?: Record<string, string>
   autoInstall?: boolean
   timeoutMs?: number
+  transform?: SourceTransform
 }
 
 const createSessionWith = (workers: FakeWorker[], options?: SessionOptions) => {
@@ -690,10 +692,7 @@ describe('session transport: repl', () => {
   })
 })
 
-function createReplSessionForTests(
-  workers: FakeWorker[],
-  options?: { deps?: Record<string, string>; autoInstall?: boolean; timeoutMs?: number },
-) {
+function createReplSessionForTests(workers: FakeWorker[], options?: SessionOptions) {
   const factory: WorkerFactory = () => {
     const worker = workers.shift()
     if (worker === undefined) {
@@ -703,3 +702,178 @@ function createReplSessionForTests(
   }
   return createReplSession({ workerFactory: factory, ...options })
 }
+
+// Transforms run inside the session queue, so a settled request needs a few
+// microtask turns before the worker sees it.
+const flushMicrotasks = async (turns = 8): Promise<void> => {
+  for (let turn = 0; turn < turns; turn += 1) {
+    await Promise.resolve()
+  }
+}
+
+const throwingTransform: SourceTransform = () => {
+  throw Object.assign(new SyntaxError("TS1005: ',' expected."), { name: 'TypeScriptError', line: 3, column: 7 })
+}
+
+const compileOrBoom: SourceTransform = async (source) => {
+  if (source.includes('boom')) throw new Error('cannot compile')
+  return source
+}
+
+describe('session transport: transform', () => {
+  const okReplResult = { ok: true, console: [], dependencies: [], durationMs: 1 }
+
+  it('posts the transformed judge module and tells the transform which entry point it serves', async () => {
+    const worker = new FakeWorker()
+    const contexts: unknown[] = []
+    const transform: SourceTransform = (source, context) => {
+      contexts.push(context)
+      return source.replace(': number', '')
+    }
+    const { session } = createSessionWith([worker], { transform })
+
+    const pending = session.runJudge('export const solve = (n: number) => n', [])
+    await flushMicrotasks()
+
+    expect(contexts).toEqual([{ kind: 'judge' }])
+    expect(worker.sent[0]).toMatchObject({ kind: 'judge', code: 'export const solve = (n) => n' })
+    worker.emitMessage({ kind: 'result', id: 1, result: okResult })
+    await expect(pending).resolves.toEqual(okResult)
+  })
+
+  it('awaits an asynchronous transform and keeps REPL inputs in submission order', async () => {
+    const worker = new FakeWorker()
+    const gates = new Map<string, () => void>()
+    const transform: SourceTransform = (source) =>
+      new Promise<string>((resolve) => {
+        gates.set(source, () => resolve(`${source} /* compiled */`))
+      })
+    const session = createReplSessionForTests([worker], { transform })
+
+    const first = session.evaluate('first')
+    const second = session.evaluate('second')
+    await flushMicrotasks()
+    expect(worker.sent).toHaveLength(0)
+
+    // Only the head of the queue is being transformed; the second input waits its turn.
+    expect([...gates.keys()]).toEqual(['first'])
+    gates.get('first')?.()
+    await flushMicrotasks()
+    expect(worker.sent[0]).toMatchObject({ kind: 'repl-input', id: 1, input: 'first /* compiled */' })
+    worker.emitMessage({ kind: 'repl-result', id: 1, result: okReplResult })
+    await first
+
+    await flushMicrotasks()
+    gates.get('second')?.()
+    await flushMicrotasks()
+    expect(worker.sent[1]).toMatchObject({ kind: 'repl-input', id: 2, input: 'second /* compiled */' })
+    worker.emitMessage({ kind: 'repl-result', id: 2, result: okReplResult })
+    await expect(second).resolves.toMatchObject({ ok: true })
+  })
+
+  it('turns a transform failure into an error result that keeps the diagnostic position', async () => {
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker], { transform: throwingTransform })
+
+    const result = await session.runJudge('const broken: = 1', [])
+
+    expect(worker.sent).toHaveLength(0)
+    expect(result.status).toBe('error')
+    expect(result.error).toMatchObject({
+      name: 'TypeScriptError',
+      message: "TS1005: ',' expected.",
+      line: 3,
+      column: 7,
+    })
+    expect(result.cases).toEqual([])
+  })
+
+  it('reports a REPL transform failure without touching the persistent scope', async () => {
+    const worker = new FakeWorker()
+    const session = createReplSessionForTests([worker], { transform: compileOrBoom })
+
+    const failed = await session.evaluate('boom')
+    expect(failed).toMatchObject({ ok: false, error: { name: 'Error', message: 'cannot compile' } })
+    expect(worker.sent).toHaveLength(0)
+
+    const next = session.evaluate('1 + 1')
+    await flushMicrotasks()
+    expect(worker.sent[0]).toMatchObject({ kind: 'repl-input', id: 1, input: '1 + 1' })
+    worker.emitMessage({ kind: 'repl-result', id: 1, result: { ...okReplResult, value: 2 } })
+    await expect(next).resolves.toMatchObject({ ok: true, value: 2 })
+  })
+
+  it('rejects a transform that does not return a string', async () => {
+    const worker = new FakeWorker()
+    const { session } = createSessionWith([worker], { transform: (() => 42) as unknown as SourceTransform })
+
+    const result = await session.runJudge('export const solve = () => 1', [])
+
+    expect(result.error).toMatchObject({
+      name: 'TypeError',
+      message: 'transform must return a string, received number',
+    })
+  })
+
+  it('transforms every module of a test run at once and posts them by id', async () => {
+    vi.stubGlobal('location', new URL('https://example.test/assets/'))
+    vi.stubGlobal('navigator', {
+      serviceWorker: {
+        register: vi.fn<() => Promise<ServiceWorkerRegistration>>(() =>
+          Promise.resolve({ active: {}, scope: 'https://example.test/assets/' } as ServiceWorkerRegistration),
+        ),
+      },
+    })
+    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+
+    try {
+      const worker = new FakeWorker()
+      const gates = new Map<string, () => void>()
+      const contexts: unknown[] = []
+      const transform: SourceTransform = (source, context) =>
+        new Promise<string>((resolve) => {
+          contexts.push(context)
+          gates.set(source, () => resolve(`${source} /* compiled */`))
+        })
+      const session = createTestSession({
+        serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs',
+        workerUrl: 'https://example.test/assets/test-worker-entry.mjs',
+        workerFactory: () => worker,
+        transform,
+      })
+
+      const pending = session.run({
+        engine: 'vitest',
+        modules: { 'src/add': 'export const add = 1', 'tests/add.test': 'import "../src/add"' },
+        testFiles: ['tests/add.test'],
+      })
+      await flushMicrotasks()
+
+      // Neither module waits for the other: both transforms are in flight before any settles.
+      expect([...gates.keys()]).toEqual(['export const add = 1', 'import "../src/add"'])
+      expect(contexts).toEqual([
+        { kind: 'test', id: 'src/add' },
+        { kind: 'test', id: 'tests/add.test' },
+      ])
+      expect(worker.sent).toHaveLength(0)
+
+      for (const release of [...gates.values()].toReversed()) release()
+      await flushMicrotasks(32)
+      expect(worker.sent[0]).toMatchObject({
+        kind: 'test',
+        run: {
+          modules: {
+            'src/add': 'export const add = 1 /* compiled */',
+            'tests/add.test': 'import "../src/add" /* compiled */',
+          },
+        },
+      })
+      const okTestResult = { status: 'passed', ok: true, tests: [], console: [], dependencies: [], durationMs: 1 }
+      worker.emitMessage({ kind: 'test-result', id: 1, result: okTestResult } as WorkerResponse)
+      await expect(pending).resolves.toMatchObject({ ok: true })
+      session.close()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})

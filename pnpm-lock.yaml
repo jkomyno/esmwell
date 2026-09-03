@@ -177,6 +177,10 @@ importers:
       acorn:
         specifier: 'catalog:'
         version: 8.18.0
+    devDependencies:
+      typescript-legacy:
+        specifier: npm:typescript@5.9.3
+        version: typescript@5.9.3
 
 packages:
 

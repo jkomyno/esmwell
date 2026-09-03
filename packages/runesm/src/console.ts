@@ -58,7 +58,7 @@ export function protectConsole(): void {
         if (sink.isTruncated) return
         sink.write({
           level,
-          parts: serializeConsoleArguments(args),
+          parts: formatConsoleArguments(args),
         })
       },
     })
@@ -207,7 +207,13 @@ const appendOmittedCount = (parts: string[], total: number, included: number): v
   }
 }
 
-const serializeConsoleArguments = (args: readonly unknown[]): string[] => {
+/**
+ * Formats one console call's arguments the way the runner does before it
+ * streams them as a `ConsoleChunk`: each argument becomes one part, sharing
+ * a node budget and circular-reference tracking. Hosts that print console
+ * output from their own workers can reuse it for identical rendering.
+ */
+export function formatConsoleArguments(args: readonly unknown[]): string[] {
   const state: SerializationState = {
     seen: new WeakSet<object>(),
     remainingNodes: MAX_SERIALIZED_NODES,
@@ -272,7 +278,7 @@ export function installConsoleCapture(sink: ConsoleSink): () => void {
       if (boundedSink.isTruncated) return
       boundedSink.write({
         level,
-        parts: serializeConsoleArguments(args),
+        parts: formatConsoleArguments(args),
       })
     }
   }
