@@ -49,8 +49,11 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
     )
   }
 
-  window.__demoHoverCodeMirrorText = (selector, text) => {
-    const walker = document.createTreeWalker(cmContent(selector), NodeFilter.SHOW_TEXT)
+  window.__demoHoverCodeMirrorText = (selector, text, line) => {
+    const content = cmContent(selector)
+    const root = line === undefined ? content : content.querySelectorAll('.cm-line')[line - 1]
+    if (!(root instanceof HTMLElement)) throw new Error('CodeMirror line is missing: ' + line)
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
     let node = walker.nextNode()
     while (node) {
       const offset = node.textContent?.indexOf(text) ?? -1
@@ -70,7 +73,106 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
       }
       node = walker.nextNode()
     }
-    throw new Error('CodeMirror text is missing: ' + text)
+    throw new Error('CodeMirror text is missing: ' + text + (line === undefined ? '' : ' on line ' + line))
+  }
+
+  // The recorder has no pointer of its own, so the visible timeline draws one:
+  // a cursor that travels to its target and fires the mouse events a real
+  // pointer would, so hover tooltips open and close on camera as they do live.
+  const pointer = () => {
+    let cursor = document.querySelector('#demo-pointer')
+    if (cursor instanceof HTMLElement) return cursor
+    cursor = document.createElement('div')
+    cursor.id = 'demo-pointer'
+    cursor.style.cssText =
+      'position:fixed;left:0;top:0;width:18px;height:24px;pointer-events:none;z-index:2147483647;will-change:transform;'
+    cursor.innerHTML =
+      '<svg width="18" height="24" viewBox="0 0 18 24" fill="none"><path d="M2 2L2 19.5L6.5 15.5L9.5 22L12.5 20.5L9.5 14L15.5 14L2 2Z" fill="#111" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+    cursor.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))'
+    document.body.appendChild(cursor)
+    window.__demoPointerAt = { x: innerWidth * 0.62, y: innerHeight * 0.55 }
+    cursor.style.transform = 'translate(' + window.__demoPointerAt.x + 'px,' + window.__demoPointerAt.y + 'px)'
+    return cursor
+  }
+
+  const mouseInit = (x, y, extra = {}) => ({ bubbles: true, cancelable: true, clientX: x, clientY: y, ...extra })
+
+  const emitMove = (x, y) => {
+    const target = document.elementFromPoint(x, y)
+    const editor = target?.closest('.cm-editor') ?? null
+    const previous = window.__demoPointerEditor ?? null
+    if (previous && previous !== editor) previous.dispatchEvent(new MouseEvent('mouseleave', mouseInit(x, y)))
+    if (editor && previous !== editor) editor.dispatchEvent(new MouseEvent('mouseenter', mouseInit(x, y)))
+    window.__demoPointerEditor = editor
+    target?.dispatchEvent(new MouseEvent('mousemove', mouseInit(x, y)))
+  }
+
+  window.__demoMovePointer = (x, y, duration = 480) =>
+    new Promise((resolve) => {
+      const cursor = pointer()
+      const from = { ...window.__demoPointerAt }
+      const start = performance.now()
+      const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+      const step = (now) => {
+        const progress = Math.min(1, (now - start) / duration)
+        const eased = ease(progress)
+        const cx = from.x + (x - from.x) * eased
+        const cy = from.y + (y - from.y) * eased
+        window.__demoPointerAt = { x: cx, y: cy }
+        cursor.style.transform = 'translate(' + cx + 'px,' + cy + 'px)'
+        emitMove(cx, cy)
+        if (progress < 1) requestAnimationFrame(step)
+        else resolve()
+      }
+      requestAnimationFrame(step)
+    })
+
+  window.__demoClick = async (selector) => {
+    const element = document.querySelector(selector)
+    if (!(element instanceof HTMLElement)) throw new Error('click target is missing: ' + selector)
+    const bounds = element.getBoundingClientRect()
+    const x = bounds.left + bounds.width / 2
+    const y = bounds.top + bounds.height / 2
+    await window.__demoMovePointer(x, y)
+    const ring = document.createElement('div')
+    ring.style.cssText =
+      'position:fixed;width:28px;height:28px;border-radius:50%;border:2px solid rgba(17,17,17,0.55);pointer-events:none;z-index:2147483646;transform:translate(-50%,-50%) scale(0.3);opacity:1;transition:transform 260ms ease-out,opacity 260ms ease-out;left:' +
+      x + 'px;top:' + y + 'px;'
+    document.body.appendChild(ring)
+    requestAnimationFrame(() => {
+      ring.style.transform = 'translate(-50%,-50%) scale(1)'
+      ring.style.opacity = '0'
+    })
+    setTimeout(() => ring.remove(), 320)
+    element.dispatchEvent(new MouseEvent('mousedown', mouseInit(x, y, { button: 0 })))
+    element.dispatchEvent(new MouseEvent('mouseup', mouseInit(x, y, { button: 0 })))
+    element.click()
+    await new Promise((resolve) => setTimeout(resolve, 120))
+  }
+
+  window.__demoHoverWithPointer = async (selector, text, line) => {
+    const content = cmContent(selector)
+    const root = line === undefined ? content : content.querySelectorAll('.cm-line')[line - 1]
+    if (!(root instanceof HTMLElement)) throw new Error('CodeMirror line is missing: ' + line)
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    while (node) {
+      const offset = node.textContent?.indexOf(text) ?? -1
+      if (offset >= 0 && node.parentElement) {
+        const range = document.createRange()
+        range.setStart(node, offset)
+        range.setEnd(node, offset + text.length)
+        const bounds = range.getBoundingClientRect()
+        const x = bounds.left + bounds.width / 2
+        const y = bounds.top + bounds.height / 2
+        await window.__demoMovePointer(x, y)
+        node.parentElement.dispatchEvent(new MouseEvent('mouseover', mouseInit(x, y)))
+        node.parentElement.dispatchEvent(new MouseEvent('mousemove', mouseInit(x, y)))
+        return
+      }
+      node = walker.nextNode()
+    }
+    throw new Error('CodeMirror text is missing: ' + text + (line === undefined ? '' : ' on line ' + line))
   }
 
   window.__demoWaitFor = async (predicate, message, attempts = 60) => {
@@ -206,14 +308,32 @@ export default defineVideo(
         ) {
           throw new Error('REPL metadata and controls do not occupy stable header columns')
         }
-        if (Math.abs(wordmark.getBoundingClientRect().left - claim.getBoundingClientRect().left) > 1) {
-          throw new Error('masthead copy does not share the page axis')
+        if (Math.abs(wordmark.getBoundingClientRect().top - claim.getBoundingClientRect().top) > 1) {
+          throw new Error('the masthead wordmark and its instruction do not share one line')
         }
         if (runBar.getBoundingClientRect().bottom > innerHeight) {
           throw new Error('editor actions are outside the desktop viewport')
         }
-        // Opening takes height from the source view: the well keeps its size and
-        // the list never floats over the code it describes.
+        // Results reserve their height up front; the judge run below must not move the REPL.
+        window.__demoReplTop = document.querySelector('#repl-history')?.getBoundingClientRect().top
+        // The REPL entry ends on the editor well's bottom edge, above the metadata
+        // rail: the history well fills the column above it.
+        const replEntry = document.querySelector('.repl-entry')
+        if (
+          !(replEntry instanceof HTMLElement) ||
+          Math.abs(replEntry.getBoundingClientRect().bottom - stageBounds.bottom) > 1
+        ) {
+          throw new Error('the REPL entry is not anchored to the bottom of the editor well')
+        }
+        // The drawer opens by default, and opening takes height from the source
+        // view: the well keeps its size and the list never floats over the code.
+        if (!testsDisclosure.open) {
+          throw new Error('the tests drawer is not open by default')
+        }
+        testsDisclosure.open = false
+        if (Math.abs(editorStage.getBoundingClientRect().height - stageBounds.height) > 1) {
+          throw new Error('closing the tests drawer resized the editor well')
+        }
         testsDisclosure.open = true
         const openStageBounds = editorStage.getBoundingClientRect()
         const definitionsBounds = testDefinitions.getBoundingClientRect()
@@ -231,10 +351,9 @@ export default defineVideo(
         if (getComputedStyle(testDefinitions).boxShadow !== 'none') {
           throw new Error('the tests drawer is a popover rather than a drawer')
         }
-        if (!testDefinitions.textContent?.includes('solve({"name":"runesm","age":3})')) {
+        if (!testDefinitions.textContent?.includes('solve({"name":"runesm"})')) {
           throw new Error('the tests drawer does not list its judge cases')
         }
-        testsDisclosure.open = false
         const tokenColor = (text) => {
           const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
           let node = walker.nextNode()
@@ -515,35 +634,24 @@ export default defineVideo(
         window.__demoPressCodeMirror('#repl-input', 'Enter')
       })()`)
       await t.browser.waitFor(/= 42/)
-      await t.browser.evaluate(`(() => {
-        window.__demoSetCodeMirror('#repl-input', "solve({ name: 'asd' })")
-        window.__demoPressCodeMirror('#repl-input', 'Enter')
-      })()`)
-      await t.browser.evaluate(`(async () => {
-        await window.__demoWaitFor(
-          () =>
-            [...document.querySelectorAll('#repl-history .repl-line-error')].some((line) =>
-              line.textContent?.includes('age'),
-            ),
-          'invalid solve input did not surface its missing age error',
-        )
-      })()`)
       await t.browser.click('#repl-reset')
       await t.browser.reload()
       await t.browser.waitFor(/effect@beta\/Schema/)
       await t.browser.evaluate(`(${INSTALL_CODEMIRROR_HELPERS}, (() => {
         window.__demoPressCodeMirror('#repl-input', 'ArrowRight')
         const suggestedValue = document.querySelector('#repl-input .cm-content')?.textContent
-        if (suggestedValue !== "solve({ name: 'repl', age: 5 })") {
+        if (suggestedValue !== "solve({ name: 'repl' })") {
           throw new Error('REPL ArrowRight did not accept the inline suggestion')
         }
-        // The recording starts here: the drawer must be shut for every visible frame.
-        if (document.querySelector('.test-drawer')?.open !== false) {
-          throw new Error('the tests drawer is open on the recorded timeline')
+        // The recording starts here: the drawer is open by default and stays so on camera.
+        if (document.querySelector('.test-drawer')?.open !== true) {
+          throw new Error('the tests drawer is closed on the recorded timeline')
         }
         window.__demoSetCodeMirror('#repl-input', '')
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
         window.scrollTo(0, 0)
+        // Seat the on-camera pointer before the first visible frame.
+        void window.__demoMovePointer(innerWidth * 0.62, innerHeight * 0.55, 1)
       })())`)
     })
 
@@ -552,11 +660,60 @@ export default defineVideo(
     await t.sleep('1.2s')
     await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
 
-    // Run the two cases against the Effect program in the editor. The tests
-    // drawer stays shut on camera so the recording never hides the source.
-    await t.browser.click('#judge')
-    await t.browser.waitFor(/decoded [0-9a-f-]+ for runesm \(age 3\)/)
-    await t.browser.waitFor(/decoded [0-9a-f-]+ for effect \(age 4\)/)
+    // Hover the exact-version npm import: quick info comes from the declaration
+    // graph the TypeScript worker acquired for uniku@0.6.0.
+    await t.browser.evaluate(`(async () => {
+      await window.__demoHoverWithPointer('#editor', 'uuidv7', 4)
+    })()`)
+    await t.browser.evaluate(`(async () => {
+      await window.__demoWaitFor(
+        () => document.querySelector('.cm-typescript-info')?.textContent?.includes('uuidv7') === true,
+        'uuidv7 quick info did not load',
+        90,
+      )
+      if (document.querySelector('.cm-typescript-info')?.textContent?.includes('any') === true) {
+        throw new Error('uuidv7 quick info resolved to any')
+      }
+      // The well clips its overflow: a tooltip near the top must flip below its token.
+      const tooltip = document.querySelector('.cm-typescript-info')?.closest('.cm-tooltip')
+      const editorBounds = document.querySelector('#editor')?.getBoundingClientRect()
+      if (!(tooltip instanceof HTMLElement) || editorBounds === undefined) {
+        throw new Error('uuidv7 quick info tooltip is missing')
+      }
+      const tooltipBounds = tooltip.getBoundingClientRect()
+      if (tooltipBounds.top < editorBounds.top - 1 || tooltipBounds.bottom > editorBounds.bottom + 1) {
+        throw new Error('uuidv7 quick info runs outside the editor well and is clipped')
+      }
+    })()`)
+    await t.sleep('1.5s')
+
+    // Hover the User type alias: the Effect schema's decoded shape.
+    await t.browser.evaluate(`(async () => {
+      await window.__demoHoverWithPointer('#editor', 'User', 11)
+    })()`)
+    await t.browser.evaluate(`(async () => {
+      await window.__demoWaitFor(
+        () => document.querySelector('.cm-typescript-info')?.textContent?.includes('type User') === true,
+        'User type alias quick info did not load',
+        90,
+      )
+      if (document.querySelector('.cm-typescript-info')?.textContent?.includes('any') === true) {
+        throw new Error('User type alias quick info resolved to any')
+      }
+    })()`)
+    await t.sleep('1.5s')
+
+    // Run the two cases against the Effect program in the editor. The pointer
+    // leaving the token closes its quick info on the way to the button.
+    await t.browser.evaluate(`(async () => {
+      await window.__demoClick('#judge')
+      await window.__demoWaitFor(
+        () => document.querySelector('.cm-typescript-info') === null,
+        'quick info stayed open after the pointer left the editor',
+      )
+    })()`)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for runesm/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for effect/)
     await t.browser.waitFor(/creates another unique user/)
     await t.browser.evaluate(`(async () => {
       await window.__demoWaitFor(
@@ -570,17 +727,68 @@ export default defineVideo(
       if (generatedIds.length !== 2 || new Set(generatedIds).size !== 2) {
         throw new Error('judge did not produce two unique UUID v7 identifiers')
       }
+      const replTop = document.querySelector('#repl-history')?.getBoundingClientRect().top
+      if (replTop === undefined || Math.abs(replTop - window.__demoReplTop) > 1) {
+        throw new Error('case results shifted the REPL when they arrived')
+      }
     })()`)
     await t.sleep('1.5s')
 
+    // Collapse the test cases: the source view takes the drawer's height back.
+    await t.browser.evaluate(`(async () => {
+      await window.__demoClick('.test-drawer-handle')
+      await window.__demoWaitFor(
+        () => document.querySelector('.test-drawer')?.open === false,
+        'the tests drawer did not collapse',
+      )
+    })()`)
+    await t.sleep('1s')
+
     // REPL: the editor module seeds the scope, so its solve export is callable.
-    await t.browser.evaluate(INSTALL_CODEMIRROR_HELPERS)
+    await t.browser.evaluate(`(async () => {
+      await window.__demoClick('#repl-input .cm-content')
+    })()`)
     await t.browser.evaluate(`(() => {
-      window.__demoSetCodeMirror('#repl-input', "solve({ name: 'repl', age: 5 })")
+      window.__demoSetCodeMirror('#repl-input', "solve({ name: 'jkomyno' })")
       window.__demoPressCodeMirror('#repl-input', 'Enter')
     })()`)
-    await t.browser.waitFor(/decoded [0-9a-f-]+ for repl \(age 5\)/)
-    await t.browser.waitFor(/= \{"id":"[0-9a-f-]+","name":"repl","age":5\}/)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for jkomyno/)
+    await t.browser.waitFor(/= \{"id":"[0-9a-f-]+","name":"jkomyno"\}/)
+    await t.sleep('1.5s')
+
+    // ArrowRight on the empty entry accepts the inline suggestion.
+    await t.browser.evaluate(`(() => {
+      const content = document.querySelector('#repl-input .cm-content')
+      if (!(content instanceof HTMLElement)) throw new Error('REPL input is missing')
+      content.focus()
+      window.__demoPressCodeMirror('#repl-input', 'ArrowRight')
+      const suggestedValue = content.textContent
+      if (suggestedValue !== "solve({ name: 'repl' })") {
+        throw new Error('REPL ArrowRight did not accept the inline suggestion')
+      }
+    })()`)
+    await t.sleep('0.8s')
+    await t.browser.evaluate(`(() => {
+      window.__demoPressCodeMirror('#repl-input', 'Enter')
+    })()`)
+    await t.browser.waitFor(/decoded [0-9a-f-]+ for repl/)
+    await t.browser.waitFor(/= \{"id":"[0-9a-f-]+","name":"repl"\}/)
+    await t.sleep('1.5s')
+
+    // Invalid input: the schema rejects the missing name and the REPL shows the error.
+    await t.browser.evaluate(`(() => {
+      window.__demoSetCodeMirror('#repl-input', 'solve({ })')
+      window.__demoPressCodeMirror('#repl-input', 'Enter')
+    })()`)
+    await t.browser.evaluate(`(async () => {
+      await window.__demoWaitFor(
+        () =>
+          [...document.querySelectorAll('#repl-history .repl-line-error')].some((line) =>
+            line.textContent?.includes('name'),
+          ),
+        'invalid solve input did not surface its missing name error',
+      )
+    })()`)
     await t.sleep('1.5s')
   },
 )

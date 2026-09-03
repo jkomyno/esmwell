@@ -20,6 +20,7 @@ import {
   hoverTooltip,
   keymap,
   placeholder,
+  tooltips,
   ViewPlugin,
   type KeyBinding,
   type ViewUpdate,
@@ -100,6 +101,22 @@ const editorTheme = EditorView.theme({
 })
 
 const activeLineDecoration = Decoration.line({ class: 'cm-activeLine' })
+
+// The editor well clips its overflow, and on WebKit CodeMirror positions
+// tooltips inside the editor. Measuring free space against the well instead
+// of the window makes a tooltip flip below its token (or shrink and scroll)
+// rather than run past the top of the well.
+const tooltipsInsideEditor = tooltips({
+  tooltipSpace: (view) => {
+    const bounds = view.dom.getBoundingClientRect()
+    return {
+      top: Math.max(bounds.top, 0),
+      left: Math.max(bounds.left, 0),
+      bottom: Math.min(bounds.bottom, window.innerHeight),
+      right: Math.min(bounds.right, window.innerWidth),
+    }
+  },
+})
 
 const highlightActiveCursorLines = ViewPlugin.fromClass(
   class {
@@ -200,7 +217,7 @@ const replaceSourceDocument = (view: EditorView, value: string, sourceHistory: C
   view.dispatch({ effects: sourceHistory.reconfigure(history()) })
 }
 
-const REPL_SUGGESTION = "solve({ name: 'repl', age: 5 })"
+const REPL_SUGGESTION = "solve({ name: 'repl' })"
 
 interface SourceEditorOptions {
   readonly parent: HTMLElement
@@ -249,7 +266,8 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
         create: () => quickInfoDom(info.displayParts, info.documentation),
       }
     },
-    { hideOnChange: true },
+    // 150ms of rest before asking: the worker is warm, so the wait is the delay.
+    { hideOnChange: true, hoverTime: 150 },
   )
   const runKeybinding: KeyBinding = {
     key: 'Mod-Enter',
@@ -310,6 +328,7 @@ export const createSourceEditor = (options: SourceEditorOptions): SourceEditor =
           delay: 500,
         }),
         typeInfoTooltip,
+        tooltipsInsideEditor,
         syntaxHighlighting(syntaxColors),
         editorTheme,
         EditorView.updateListener.of((update) => {
@@ -406,7 +425,19 @@ export const createReplEditor = (options: ReplEditorOptions): ReplEditor => {
         history(),
         closeBrackets(),
         autocompletion(),
-        EditorView.lineWrapping,
+        // The entry is one line: pasted newlines flatten to spaces, Enter submits.
+        EditorState.transactionFilter.of((transaction) => {
+          if (transaction.newDoc.lines === 1) {
+            return transaction
+          }
+          const insert = transaction.newDoc.toString().replace(/\r?\n/g, ' ')
+          return [
+            {
+              changes: { from: 0, to: transaction.startState.doc.length, insert },
+              selection: { anchor: insert.length },
+            },
+          ]
+        }),
         EditorView.contentAttributes.of({
           'aria-label': 'REPL input',
           'aria-describedby': 'repl-shortcuts',

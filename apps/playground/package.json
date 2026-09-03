@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "demo": "tcut demo.video.ts --from 200ms"
+    "demo": "tcut demo.video.ts --from 200ms",
+    "demo:social": "node scripts/export-social.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

@@ -8,7 +8,6 @@ import { uuidv7 } from 'uniku@0.6.0/uuid/v7'
 const User = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
-  age: Schema.Number,
 })
 
 type User = typeof User.Type
@@ -16,7 +15,7 @@ type User = typeof User.Type
 export const solve = (input: Omit<User, 'id'>): Promise<User> => {
   const program = Effect.gen(function* () {
     const user = Schema.decodeUnknownSync(User)({ ...input, id: uuidv7() })
-    yield* Console.log(\`decoded \${user.id} for \${user.name} (age \${user.age})\`)
+    yield* Console.log(\`decoded \${user.id} for \${user.name}\`)
     return user
   })
 
@@ -24,6 +23,6 @@ export const solve = (input: Omit<User, 'id'>): Promise<User> => {
 }`
 
 export const DEMO_CASES: readonly JudgeCase[] = [
-  { name: 'creates a decoded user', exportName: 'solve', args: [{ name: 'runesm', age: 3 }] },
-  { name: 'creates another unique user', exportName: 'solve', args: [{ name: 'effect', age: 4 }] },
+  { name: 'creates a decoded user', exportName: 'solve', args: [{ name: 'runesm' }] },
+  { name: 'creates another unique user', exportName: 'solve', args: [{ name: 'effect' }] },
 ]

@@ -39,7 +39,7 @@ The private playground uses CodeMirror 6 for both source and REPL input. Its `.t
 - Keep the pre-commit hook in `lefthook.yml` and its staged-file checks in the root `lint-staged` configuration.
 - Let oxfmt and oxlint enforce formatting and lint style.
 - Do not edit generated output, dependency directories, or lockfile sections by hand.
-- `docs/media/playground.gif` is generated, not hand-edited. Re-record it with `pnpm --filter playground demo` (tcut, defined by `apps/playground/demo.video.ts`) whenever the playground UI or its default example changes.
+- `docs/media/playground.gif` is generated, not hand-edited. Re-record it with `pnpm --filter playground demo` (tcut, defined by `apps/playground/demo.video.ts`) whenever the playground UI or its default example changes. Then run `pnpm --filter playground demo:social` (ffmpeg) to derive the postable `docs/media/playground.mp4` and `docs/media/playground-x.gif` from it.
 
 ## TypeScript Rules
 
