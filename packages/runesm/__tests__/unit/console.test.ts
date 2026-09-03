@@ -1,4 +1,4 @@
-import { installConsoleCapture, serializeValue } from 'src/console'
+import { formatConsoleArguments, installConsoleCapture, serializeValue } from 'src/console'
 import type { ConsoleChunk } from 'src/types'
 
 function namedFixture(): void {}
@@ -100,6 +100,31 @@ describe('serializeValue', () => {
 
     expect(serializeValue(nested)).toContain('…')
     expect(inspections).toBeLessThan(1_000)
+  })
+})
+
+describe('formatConsoleArguments', () => {
+  it('renders each argument as one part, matching what a captured chunk carries', () => {
+    const chunks: ConsoleChunk[] = []
+    const restore = installConsoleCapture({ write: (chunk) => chunks.push(chunk) })
+    try {
+      console.log('total', 42, { nested: [1, 'two'] }, undefined)
+    } finally {
+      restore()
+    }
+
+    expect(formatConsoleArguments(['total', 42, { nested: [1, 'two'] }, undefined])).toEqual(chunks[0]?.parts)
+    expect(chunks[0]?.parts).toEqual(['total', '42', "{ nested: [1, 'two'] }", 'undefined'])
+  })
+
+  it('shares circular tracking and the node budget across arguments', () => {
+    const self: Record<string, unknown> = {}
+    self.self = self
+
+    expect(formatConsoleArguments([self, self])).toEqual(['{ self: [Circular] }', '{ self: [Circular] }'])
+    const parts = formatConsoleArguments(Array.from({ length: 150 }, (_, index) => index))
+    expect(parts).toHaveLength(101)
+    expect(parts.at(-1)).toBe('… 50 more arguments')
   })
 })
 

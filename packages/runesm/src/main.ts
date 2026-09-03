@@ -1,14 +1,10 @@
 import type { ConsoleChunk, JudgeCase, JudgeRunResult, ReplResult, SerializedError, WorkerResponse } from './types'
 import type { TestModules, TestRun, TestRunResult } from './test-types'
 import type { SourceTransform, SourceTransformContext } from './transform'
+import { adaptWorker, type WorkerLike } from './worker-like'
 
-/** The worker surface the session transport needs; satisfied by a real module Worker. */
-export interface WorkerLike {
-  send(message: unknown): void
-  terminate(): void
-  addEventListener(type: string, listener: (event: unknown) => void): void
-  removeEventListener(type: string, listener: (event: unknown) => void): void
-}
+export { adaptWorker }
+export type { WorkerLike }
 
 /** Creates the workers a session runs on; injectable for tests and custom hosting. */
 export type WorkerFactory = (url: string) => WorkerLike
@@ -529,28 +525,6 @@ interface WorkerRequestShape {
 const defaultWorkerFactory = (url: string): WorkerLike => {
   const worker = new Worker(url, { type: 'module' })
   return adaptWorker(worker)
-}
-
-/**
- * Adapts a real Worker (for example one built by a bundler's `?worker`
- * import) to the surface the session transport expects.
- */
-export function adaptWorker(worker: Worker): WorkerLike {
-  const postToWorker = worker.postMessage.bind(worker)
-  return {
-    send: (message: unknown) => {
-      postToWorker(message)
-    },
-    terminate: () => {
-      worker.terminate()
-    },
-    addEventListener: (type: string, listener: (event: unknown) => void) => {
-      worker.addEventListener(type, listener as EventListener)
-    },
-    removeEventListener: (type: string, listener: (event: unknown) => void) => {
-      worker.removeEventListener(type, listener as EventListener)
-    },
-  }
 }
 
 const asJudgeResult = (outcome: TransportOutcome, timeoutMs: number): JudgeRunResult => {

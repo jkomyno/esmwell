@@ -389,6 +389,26 @@ isBareSpecifier('./local.js') // false — relative, absolute, `#imports`, and f
 
 These compose by chaining return values (`collectBareSpecifiers(parseUserModule(code))`) without ever needing to name the acorn `Node`/`Program` type. If you do want to type an intermediate AST value yourself, add `acorn` as a direct dependency — this package does not re-export its types.
 
+`runesm/utils` also carries two pieces every host ends up rebuilding around the runner:
+
+- `formatConsoleArguments(args)` and `serializeValue(value)` — the exact rendering the runner applies to captured console output, so a host that prints console calls from its own workers (a compiler, a linter) shows them the same way.
+- `createWorkerRpc` / `serveWorkerRpc` — request/response plumbing for a worker the host owns: correlation ids, a pending map, rejection of in-flight requests when the worker fails, lazy start, `restart()` and `destroy()`, and an `AbortSignal` per request. The worker side routes each request body to one handler and posts its value or error back.
+
+```ts
+// page
+import { createWorkerRpc } from 'runesm/utils'
+
+const compiler = createWorkerRpc<{ source: string }>({
+  createWorker: () => new Worker(new URL('./compile-worker.js', import.meta.url), { type: 'module' }),
+})
+const { code } = await compiler.request<{ code: string }>({ source })
+
+// compile-worker.js
+import { serveWorkerRpc } from 'runesm/utils'
+
+serveWorkerRpc<{ source: string }>(({ source }) => ({ code: compile(source) }))
+```
+
 ## Choosing the right tool
 
 These projects all accept JavaScript-shaped input, but they solve different problems:

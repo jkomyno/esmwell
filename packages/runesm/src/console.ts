@@ -207,6 +207,16 @@ const appendOmittedCount = (parts: string[], total: number, included: number): v
   }
 }
 
+/**
+ * Formats one console call's arguments the way the runner does before it
+ * streams them as a `ConsoleChunk`: each argument becomes one part, sharing
+ * a node budget and circular-reference tracking. Hosts that print console
+ * output from their own workers can reuse it for identical rendering.
+ */
+export function formatConsoleArguments(args: readonly unknown[]): string[] {
+  return serializeConsoleArguments(args)
+}
+
 const serializeConsoleArguments = (args: readonly unknown[]): string[] => {
   const state: SerializationState = {
     seen: new WeakSet<object>(),
