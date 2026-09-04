@@ -918,7 +918,7 @@ const createGraphId = (): string => {
 
 const deleteModuleGraphCache = async (graphId: string): Promise<void> => {
   if (typeof caches !== 'undefined') {
-    await caches.delete(`esmwell:module-graph:v1:${graphId}`)
+    await caches.delete(`esmwell:test-graph:v1:${graphId}`)
   }
 }
 

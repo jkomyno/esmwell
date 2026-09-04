@@ -85,6 +85,29 @@ test('reports missing project entries and local modules with actionable errors',
   }
 })
 
+test('keeps runtime-owned process imports ahead of local module ids', async () => {
+  const session = createModuleProjectSession({ ...projectOptions, autoInstall: false })
+  try {
+    const result = await session.run({
+      modules: {
+        process: `export default { browser: false }`,
+        'src/main': `
+          import process from 'process'
+          export const same = process === globalThis.process
+          export const browser = process.browser
+        `,
+      },
+      entry: 'src/main',
+    })
+
+    assert(result.status === 'pass', `project should pass: ${JSON.stringify(result)}`)
+    assert(result.exports.same === true, 'process import should use the runtime-owned global facade')
+    assert(result.exports.browser === true, 'process import should retain the browser marker')
+  } finally {
+    session.close()
+  }
+})
+
 test('terminates a synchronous project loop and removes its virtual graph', async () => {
   const session = createModuleProjectSession({ ...projectOptions, timeoutMs: 500 })
   try {
@@ -96,7 +119,7 @@ test('terminates a synchronous project loop and removes its virtual graph', asyn
     assert(result.error?.name === 'TimeoutError', `hung project should time out: ${JSON.stringify(result)}`)
     const cacheNames = await caches.keys()
     assert(
-      cacheNames.every((name) => !name.startsWith('esmwell:module-graph:')),
+      cacheNames.every((name) => !name.startsWith('esmwell:test-graph:')),
       `module graph caches should be removed after timeout: ${cacheNames.join(', ')}`,
     )
   } finally {

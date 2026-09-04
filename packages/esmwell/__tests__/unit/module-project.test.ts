@@ -111,7 +111,7 @@ describe('module-project session transport', () => {
     workers[0]!.emitMessage({ kind: 'module-project-result', id: 1, result: okProjectResult })
     await expect(first).resolves.toEqual(okProjectResult)
     expect(workers[0]!.terminated).toBe(true)
-    expect(caches.delete).toHaveBeenCalledWith(expect.stringMatching(/^esmwell:module-graph:v1:/))
+    expect(caches.delete).toHaveBeenCalledWith(expect.stringMatching(/^esmwell:test-graph:v1:/))
 
     const second = session.run({ modules: { main: `export const answer = 42` }, entry: 'main' })
     await flushMicrotasks()

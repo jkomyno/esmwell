@@ -8,7 +8,9 @@ import type { ResolvedDependency, ResolveOptions } from './resolve'
 import { readNodeChild, readNodeString, walkNodes } from './walk'
 
 const GRAPH_DIRECTORY = '__esmwell_graphs__/v1/'
-const CACHE_PREFIX = 'esmwell:module-graph:v1:'
+// Keep the v1 cache key stable while older pages and service workers can still
+// control one another during a rolling deployment.
+const CACHE_PREFIX = 'esmwell:test-graph:v1:'
 const INTERNAL_MODULE_PREFIX = '__esmwell_internal__/'
 const JAVASCRIPT_TYPE = 'text/javascript; charset=utf-8'
 
@@ -156,15 +158,18 @@ const resolveGraphSpecifier = (
   importerId: string,
   context: TransformContext,
 ): { readonly url: string; readonly dependency?: ResolvedDependency } => {
+  if (specifier === 'process' || specifier.startsWith('node:')) {
+    return resolveImportSpecifier(specifier, context)
+  }
   const localId = specifier.startsWith('.') ? resolveRelativeModuleId(importerId, specifier) : specifier
   if (context.moduleIdSet.has(localId)) {
     return { url: context.moduleUrl(localId) }
   }
-  const aliasId = context.specifierAliases?.[specifier]
+  const aliasId = lookupOwnString(context.specifierAliases, specifier)
   if (aliasId !== undefined) {
     return { url: context.moduleUrl(aliasId) }
   }
-  const blockedMessage = context.blockedSpecifiers?.[specifier]
+  const blockedMessage = lookupOwnString(context.blockedSpecifiers, specifier)
   if (blockedMessage !== undefined) {
     throw new SpecifierResolutionError('unsupported', specifier, blockedMessage)
   }
@@ -175,6 +180,14 @@ const resolveGraphSpecifier = (
     throw missingLocalModule(localId, importerId)
   }
   return resolveImportSpecifier(specifier, context)
+}
+
+const lookupOwnString = (record: Readonly<Record<string, string>> | undefined, key: string): string | undefined => {
+  if (record === undefined || !Object.hasOwn(record, key)) {
+    return undefined
+  }
+  const value = record[key]
+  return typeof value === 'string' ? value : undefined
 }
 
 const resolveRelativeModuleId = (importerId: string, specifier: string): string => {
