@@ -1,5 +1,12 @@
 # esmwell
 
+## 0.2.0
+
+### Minor Changes
+
+- c7ba31f: Add one-shot virtual ESM module-project execution with relative imports, native cycles and live bindings, runtime bare-package resolution, and hard worker timeouts.
+- e3de2c8: Add the opt-in `esmwell/typescript-editor` declaration-acquisition kit for browser editors.
+
 ## 0.1.0
 
 ### Minor Changes
