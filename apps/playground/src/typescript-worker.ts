@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { serveWorkerRpc } from 'runesm/utils'
+import { serveWorkerRpc } from 'esmwell/utils'
 import * as ts from 'typescript-legacy'
 import type {
   SourceLanguage,
@@ -13,7 +13,7 @@ import type {
 import { serializeQuickInfo } from './typescript-quick-info'
 import {
   isModuleSpecifierPosition,
-  RUNESM_TYPES_ROOT,
+  ESMWELL_TYPES_ROOT,
   typeResolutionKey,
   TypeScriptTypeAcquirer,
   type TypeScriptTypeGraph,
@@ -76,12 +76,12 @@ const declarationExtension = (fileName: string): ts.Extension => {
 }
 
 const containingPackagePrefix = (fileName: string): string | undefined => {
-  if (!fileName.startsWith(RUNESM_TYPES_ROOT)) {
+  if (!fileName.startsWith(ESMWELL_TYPES_ROOT)) {
     return undefined
   }
-  const segments = fileName.slice(RUNESM_TYPES_ROOT.length).split('/')
+  const segments = fileName.slice(ESMWELL_TYPES_ROOT.length).split('/')
   const packageSegments = segments[0]?.startsWith('@') ? segments.slice(0, 2) : segments.slice(0, 1)
-  return packageSegments.length === 0 ? undefined : `${RUNESM_TYPES_ROOT}${packageSegments.join('/')}/`
+  return packageSegments.length === 0 ? undefined : `${ESMWELL_TYPES_ROOT}${packageSegments.join('/')}/`
 }
 
 const host: ts.LanguageServiceHost = {

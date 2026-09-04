@@ -22,7 +22,7 @@ jobs:
   # of the job that holds `id-token: write` means none of those processes can
   # reach the npm OIDC token or `GITHUB_TOKEN`.
   verify:
-    # Disabled until the first runesm package and trusted publisher exist.
+    # Disabled until the first esmwell package and trusted publisher exist.
     # Follow CONTRIBUTING.md, then remove only this guard: `release` needs this
     # job, so skipping it skips the publish too.
     if: false

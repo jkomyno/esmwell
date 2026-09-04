@@ -34,7 +34,7 @@ export interface TypeScriptQuickInfo {
   readonly documentation: string
 }
 
-/** One request body; runesm's worker rpc wraps it in its own id envelope. */
+/** One request body; esmwell's worker rpc wraps it in its own id envelope. */
 export type TypeScriptWorkerRequest =
   | {
       readonly type: 'completions'

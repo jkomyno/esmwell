@@ -1,0 +1,132 @@
+{
+  "private": false,
+  "name": "esmwell",
+  "version": "0.1.0",
+  "description": "Run unbundled ESM in the browser with hard timeouts and normalized results",
+  "keywords": [
+    "esm",
+    "browser",
+    "web-worker",
+    "code-runner",
+    "code-execution",
+    "repl",
+    "judge",
+    "playground",
+    "vitest",
+    "jest",
+    "esm.sh",
+    "timeout",
+    "isolation",
+    "unbundled"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "./src/worker-entry.ts",
+    "./src/execution-worker-entry.ts",
+    "./src/module-service-worker.ts",
+    "./src/test-worker-entry.ts",
+    "./build/worker-entry.mjs",
+    "./build/execution-worker-entry.mjs",
+    "./build/module-service-worker.mjs",
+    "./build/test-worker-entry.mjs"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jkomyno/esmwell.git",
+    "directory": "packages/esmwell"
+  },
+  "homepage": "https://github.com/jkomyno/esmwell#readme",
+  "bugs": {
+    "url": "https://github.com/jkomyno/esmwell/issues"
+  },
+  "author": {
+    "name": "Alberto Schiabel",
+    "email": "alberto.schiabel@gmail.com"
+  },
+  "license": "MIT",
+  "files": [
+    "build",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "types": "./build/index.d.mts",
+  "__exports-comment": "// Import-only export map: esmwell targets browsers and ships ESM exclusively",
+  "exports": {
+    ".": {
+      "import": {
+        "@jkomyno/source": "./src/index.ts",
+        "types": "./build/index.d.mts",
+        "default": "./build/index.mjs"
+      }
+    },
+    "./utils": {
+      "import": {
+        "@jkomyno/source": "./src/utils.ts",
+        "types": "./build/utils.d.mts",
+        "default": "./build/utils.mjs"
+      }
+    },
+    "./typescript": {
+      "import": {
+        "@jkomyno/source": "./src/typescript.ts",
+        "types": "./build/typescript.d.mts",
+        "default": "./build/typescript.mjs"
+      }
+    },
+    "./worker-entry": {
+      "import": {
+        "@jkomyno/source": "./src/worker-entry.ts",
+        "default": "./build/worker-entry.mjs"
+      }
+    },
+    "./execution-worker-entry": {
+      "import": {
+        "@jkomyno/source": "./src/execution-worker-entry.ts",
+        "default": "./build/execution-worker-entry.mjs"
+      }
+    },
+    "./module-service-worker": {
+      "import": {
+        "@jkomyno/source": "./src/module-service-worker.ts",
+        "default": "./build/module-service-worker.mjs"
+      }
+    },
+    "./test-worker-entry": {
+      "import": {
+        "@jkomyno/source": "./src/test-worker-entry.ts",
+        "default": "./build/test-worker-entry.mjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "clean": "rimraf build .turbo",
+    "build": "tsdown",
+    "build:release": "pnpm clean && pnpm build",
+    "build:watch": "tsdown --watch",
+    "check:exports": "attw --pack . --profile esm-only",
+    "typecheck": "pnpm typecheck:src && pnpm typecheck:test",
+    "typecheck:src": "tsc --noEmit -p tsconfig.build.json",
+    "typecheck:test": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:browser": "tsdown && bun run scripts/browser-test.ts",
+    "test:pack": "pnpm build && node scripts/test-pack.mjs",
+    "check:size": "node scripts/check-size.mjs",
+    "verify:browser": "ESMWELL_WEBVIEW_BACKEND=chrome bun run scripts/browser-test.ts",
+    "verify:package": "pnpm build:release && pnpm check:exports && pnpm check:size && node scripts/test-pack.mjs"
+  },
+  "dependencies": {
+    "acorn": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "typescript-legacy": "npm:typescript@5.9.3"
+  }
+}

@@ -1,19 +1,19 @@
-# runesm compatibility
+# esmwell compatibility
 
-`runesm` executes ES2023 modules inside browser workers. It does not replace the browser's JavaScript engine, so most ECMAScript support comes directly from the host browser. `runesm` adds a small policy layer, an ESM resolver, worker lifecycle management, and result normalization.
+`esmwell` executes ES2023 modules inside browser workers. It does not replace the browser's JavaScript engine, so most ECMAScript support comes directly from the host browser. `esmwell` adds a small policy layer, an ESM resolver, worker lifecycle management, and result normalization.
 
 This reference answers two separate questions.
 
 1. Which standard ECMAScript APIs can submitted code reach?
-2. Which package and runtime assumptions fit runesm's browser-first model?
+2. Which package and runtime assumptions fit esmwell's browser-first model?
 
 ## How to read the tables
 
 | Mark | Meaning                                                                                                  |
 | ---- | -------------------------------------------------------------------------------------------------------- |
-| ✅   | Available in both tested browser backends through runesm's child execution worker                        |
+| ✅   | Available in both tested browser backends through esmwell's child execution worker                       |
 | ⚠️   | Available with a policy restriction, browser-version condition, host requirement, or deprecation warning |
-| ❌   | Outside runesm's contract or unavailable in both tested backends                                         |
+| ❌   | Outside esmwell's contract or unavailable in both tested backends                                        |
 
 The ECMAScript inventory follows every entry in MDN's [Standard built-in objects](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects) index as checked on August 28, 2026. It records API entry-point availability, not a replacement for MDN's per-method browser data. New methods still depend on the user's browser.
 
@@ -66,18 +66,18 @@ Firefox is not part of the compatibility snapshot. The parser accepts ES2023 mod
 
 ### Error objects
 
-| API               | Status | Notes                                                                                                           |
-| ----------------- | :----: | --------------------------------------------------------------------------------------------------------------- |
-| `Error`           |   ✅   | Native error type. Serialized results preserve `name`, `message`, and an available `stack`.                     |
-| `AggregateError`  |   ✅   | Available in both backends.                                                                                     |
-| `EvalError`       |   ✅   | The constructor exists even though `eval` references are rejected.                                              |
-| `RangeError`      |   ✅   | Available in both backends.                                                                                     |
-| `ReferenceError`  |   ✅   | Available in both backends.                                                                                     |
-| `SuppressedError` |   ⚠️   | Available in Chrome 151, absent in the tested WebKit.                                                           |
-| `SyntaxError`     |   ✅   | Available in both backends. Parse failures become runesm `UserSyntaxError` results with line and column fields. |
-| `TypeError`       |   ✅   | Available in both backends.                                                                                     |
-| `URIError`        |   ✅   | Available in both backends.                                                                                     |
-| `InternalError`   |   ❌   | Absent in both tested backends. This is primarily a Firefox-specific error type.                                |
+| API               | Status | Notes                                                                                                            |
+| ----------------- | :----: | ---------------------------------------------------------------------------------------------------------------- |
+| `Error`           |   ✅   | Native error type. Serialized results preserve `name`, `message`, and an available `stack`.                      |
+| `AggregateError`  |   ✅   | Available in both backends.                                                                                      |
+| `EvalError`       |   ✅   | The constructor exists even though `eval` references are rejected.                                               |
+| `RangeError`      |   ✅   | Available in both backends.                                                                                      |
+| `ReferenceError`  |   ✅   | Available in both backends.                                                                                      |
+| `SuppressedError` |   ⚠️   | Available in Chrome 151, absent in the tested WebKit.                                                            |
+| `SyntaxError`     |   ✅   | Available in both backends. Parse failures become esmwell `UserSyntaxError` results with line and column fields. |
+| `TypeError`       |   ✅   | Available in both backends.                                                                                      |
+| `URIError`        |   ✅   | Available in both backends.                                                                                      |
+| `InternalError`   |   ❌   | Absent in both tested backends. This is primarily a Firefox-specific error type.                                 |
 
 ### Numbers and dates
 
@@ -181,7 +181,7 @@ Firefox is not part of the compatibility snapshot. The parser accepts ES2023 mod
 
 ## Packages and workloads that fit
 
-`runesm` works best with JavaScript packages that publish ESM or a browser-compatible entry point. esm.sh may convert CommonJS inside a dependency graph, but submitted modules remain ESM.
+`esmwell` works best with JavaScript packages that publish ESM or a browser-compatible entry point. esm.sh may convert CommonJS inside a dependency graph, but submitted modules remain ESM.
 
 | Workload                     | Status | Verified examples                                                                                                                                                                                                                                                                             |
 | ---------------------------- | :----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -198,9 +198,9 @@ Firefox is not part of the compatibility snapshot. The parser accepts ES2023 mod
 Pin the `beta` tag because the unqualified `effect` latest tag may point at a different major version.
 
 ```ts
-import { createRunesm } from 'runesm'
+import { createEsmwell } from 'esmwell'
 
-const session = createRunesm({ autoInstall: false, timeoutMs: 30_000 })
+const session = createEsmwell({ autoInstall: false, timeoutMs: 30_000 })
 
 const result = await session.runJudge(
   `import * as Effect from 'effect@beta/Effect'
@@ -222,11 +222,11 @@ session.close()
 Test workspaces need the published worker and service-worker assets served from the same origin.
 
 ```ts
-import { createTestSession } from 'runesm'
+import { createTestSession } from 'esmwell'
 
 const tests = createTestSession({
-  workerUrl: '/assets/runesm/test-worker-entry.mjs',
-  serviceWorkerUrl: '/assets/runesm/module-service-worker.mjs',
+  workerUrl: '/assets/esmwell/test-worker-entry.mjs',
+  serviceWorkerUrl: '/assets/esmwell/module-service-worker.mjs',
   deps: { zod: '4' },
   autoInstall: false,
 })
@@ -252,28 +252,28 @@ tests.close()
 
 ## Node.js 24 LTS built-in module coverage
 
-Compared with [Node.js 24.20.0](https://nodejs.org/download/release/v24.20.0/docs/api/process.html), runesm has no completely supported `node:*` module. Its only partial module is `node:process`, which is also available through the bare `process` specifier. Every other `node:*` import is rejected before module evaluation and is omitted here.
+Compared with [Node.js 24.20.0](https://nodejs.org/download/release/v24.20.0/docs/api/process.html), esmwell has no completely supported `node:*` module. Its only partial module is `node:process`, which is also available through the bare `process` specifier. Every other `node:*` import is rejected before module evaluation and is omitted here.
 
-| Node built-in                          | Support    | What runesm provides                                                                                                                                                                                                       | Difference from Node.js 24 LTS                                                                                                               |
+| Node built-in                          | Support    | What esmwell provides                                                                                                                                                                                                      | Difference from Node.js 24 LTS                                                                                                               |
 | -------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `node:process` and the `process` alias | ⚠️ Partial | One frozen, browser-identified facade shared by the default import and `globalThis.process`. It provides a small export set for environment reads, virtual paths, microtask scheduling, and dependency platform detection. | It does not represent an operating-system process, Node event loop, command invocation, standard I/O channel, IPC channel, or signal target. |
 
 ### `node:process` differences
 
-| Surface                               | runesm behavior                                                                                                                                                                                                                                       | Node.js 24 LTS behavior                                                                                                                                                              |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Imports and identity                  | `node:process`, `process`, the default export, the extra named `process` export, and `globalThis.process` refer to the same facade.                                                                                                                   | `node:process` and `process` expose the Node process object. Node provides a default export, but no named `process` export.                                                          |
-| Named exports                         | `browser`, `title`, `env`, `argv`, `version`, `versions`, `platform`, `cwd`, `chdir`, and `nextTick`.                                                                                                                                                 | Exposes module-level process properties and functions as named exports. Event-emitter methods remain on the default process object. Node does not provide runesm's `browser` marker. |
-| `browser`                             | Always `true`. This lets browser-aware dependencies reject Node-only paths.                                                                                                                                                                           | Not part of the Node.js process API.                                                                                                                                                 |
-| `env`                                 | Starts as an empty mutable object. It contains no host environment variables. Assigned JavaScript values are kept as written.                                                                                                                         | Starts from the process environment. Assigned values are converted to strings, although implicit conversion is deprecated.                                                           |
-| `argv`                                | Starts as an empty mutable array. runesm has no command line.                                                                                                                                                                                         | Contains the Node executable path, program entry point, and supplied arguments.                                                                                                      |
-| `cwd()`                               | Always returns `/`.                                                                                                                                                                                                                                   | Returns the process's current operating-system directory.                                                                                                                            |
-| `chdir(directory)`                    | Always throws an actionable unsupported-operation error.                                                                                                                                                                                              | Changes the current operating-system directory when permitted.                                                                                                                       |
-| `nextTick(callback, ...args)`         | Delegates to `queueMicrotask()` and forwards the callback arguments. It does not reproduce Node's separate next-tick queue.                                                                                                                           | Uses Node's next-tick queue, which has its own event-loop ordering. Node 24 marks this API as legacy.                                                                                |
-| Event methods                         | `on`, `once`, `off`, `addListener`, and `removeListener` return the facade without registering anything. `emit` always returns `false`.                                                                                                               | The process object is an `EventEmitter` with lifecycle, rejection, exception, warning, IPC, worker, and signal events.                                                               |
-| `title`                               | Fixed to `browser` because the facade is frozen.                                                                                                                                                                                                      | Starts from the executable name and can be assigned, subject to platform-specific limits.                                                                                            |
-| `version`, `versions`, and `platform` | `version` is an empty string, `versions` starts empty, and `platform` is `undefined`. In particular, `versions.node` is absent.                                                                                                                       | Reports the Node release, dependency versions, and operating-system platform.                                                                                                        |
-| Remaining process API                 | Absent. This includes process control, IDs, architecture, executable paths, standard I/O, IPC, signals, permissions, resource and memory statistics, reports, source-map controls, user and group IDs, `getBuiltinModule()`, and `.env` file loading. | Available according to the host platform and the Node.js 24 process contract.                                                                                                        |
+| Surface                               | esmwell behavior                                                                                                                                                                                                                                      | Node.js 24 LTS behavior                                                                                                                                                               |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Imports and identity                  | `node:process`, `process`, the default export, the extra named `process` export, and `globalThis.process` refer to the same facade.                                                                                                                   | `node:process` and `process` expose the Node process object. Node provides a default export, but no named `process` export.                                                           |
+| Named exports                         | `browser`, `title`, `env`, `argv`, `version`, `versions`, `platform`, `cwd`, `chdir`, and `nextTick`.                                                                                                                                                 | Exposes module-level process properties and functions as named exports. Event-emitter methods remain on the default process object. Node does not provide esmwell's `browser` marker. |
+| `browser`                             | Always `true`. This lets browser-aware dependencies reject Node-only paths.                                                                                                                                                                           | Not part of the Node.js process API.                                                                                                                                                  |
+| `env`                                 | Starts as an empty mutable object. It contains no host environment variables. Assigned JavaScript values are kept as written.                                                                                                                         | Starts from the process environment. Assigned values are converted to strings, although implicit conversion is deprecated.                                                            |
+| `argv`                                | Starts as an empty mutable array. esmwell has no command line.                                                                                                                                                                                        | Contains the Node executable path, program entry point, and supplied arguments.                                                                                                       |
+| `cwd()`                               | Always returns `/`.                                                                                                                                                                                                                                   | Returns the process's current operating-system directory.                                                                                                                             |
+| `chdir(directory)`                    | Always throws an actionable unsupported-operation error.                                                                                                                                                                                              | Changes the current operating-system directory when permitted.                                                                                                                        |
+| `nextTick(callback, ...args)`         | Delegates to `queueMicrotask()` and forwards the callback arguments. It does not reproduce Node's separate next-tick queue.                                                                                                                           | Uses Node's next-tick queue, which has its own event-loop ordering. Node 24 marks this API as legacy.                                                                                 |
+| Event methods                         | `on`, `once`, `off`, `addListener`, and `removeListener` return the facade without registering anything. `emit` always returns `false`.                                                                                                               | The process object is an `EventEmitter` with lifecycle, rejection, exception, warning, IPC, worker, and signal events.                                                                |
+| `title`                               | Fixed to `browser` because the facade is frozen.                                                                                                                                                                                                      | Starts from the executable name and can be assigned, subject to platform-specific limits.                                                                                             |
+| `version`, `versions`, and `platform` | `version` is an empty string, `versions` starts empty, and `platform` is `undefined`. In particular, `versions.node` is absent.                                                                                                                       | Reports the Node release, dependency versions, and operating-system platform.                                                                                                         |
+| Remaining process API                 | Absent. This includes process control, IDs, architecture, executable paths, standard I/O, IPC, signals, permissions, resource and memory statistics, reports, source-map controls, user and group IDs, `getBuiltinModule()`, and `.env` file loading. | Available according to the host platform and the Node.js 24 process contract.                                                                                                         |
 
 ## Unsupported and conditional behavior
 
@@ -282,8 +282,8 @@ Compared with [Node.js 24.20.0](https://nodejs.org/download/release/v24.20.0/doc
 | Boundary                            | Status | Exact behavior                                                                                                                                                                                                                                                                          |
 | ----------------------------------- | :----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CommonJS user code                  |   ❌   | `require`, `module.exports`, `exports`, and `.cjs` execution are explicitly out of scope. Use [almostnode](https://github.com/macaly/almostnode) when a browser project needs a CommonJS runtime, virtual filesystem, or Node-style package execution.                                  |
-| ESM-to-CJS runtime transforms       |   ❌   | runesm never converts submitted ESM to CommonJS. esm.sh may convert a dependency's published CommonJS internals before serving browser ESM.                                                                                                                                             |
-| TypeScript, TSX, and JSX source     |   ❌   | runesm itself accepts JavaScript and does not ship a compiler. The private playground's `.ts` mode compiles TypeScript in a separate browser worker before submitting the emitted module; TSX and JSX remain unsupported there.                                                         |
+| ESM-to-CJS runtime transforms       |   ❌   | esmwell never converts submitted ESM to CommonJS. esm.sh may convert a dependency's published CommonJS internals before serving browser ESM.                                                                                                                                            |
+| TypeScript, TSX, and JSX source     |   ❌   | esmwell itself accepts JavaScript and does not ship a compiler. The private playground's `.ts` mode compiles TypeScript in a separate browser worker before submitting the emitted module; TSX and JSX remain unsupported there.                                                        |
 | Syntax newer than ES2023            |   ❌   | The Acorn parser is fixed to ES2023. This includes `using` and `await using`, even when a browser exposes disposal objects.                                                                                                                                                             |
 | `var` declarations                  |   ❌   | Rejected before execution. Use `let` or `const`.                                                                                                                                                                                                                                        |
 | `eval` references                   |   ❌   | Rejected before execution.                                                                                                                                                                                                                                                              |
@@ -299,7 +299,7 @@ Compared with [Node.js 24.20.0](https://nodejs.org/download/release/v24.20.0/doc
 | Node globals                       |   ❌   | `Buffer`, `global`, `__dirname`, `__filename`, and Node's full process behavior are not provided.                                                                     |
 | Node-API and native `.node` addons |   ❌   | Browser workers cannot load native binaries. Choose a browser or WebAssembly build.                                                                                   |
 | DOM APIs                           |   ❌   | Submitted code runs in a worker. `window`, `document`, DOM nodes, and synchronous page access are unavailable. Pass structured data or build an explicit host bridge. |
-| Host network policy                |   ⚠️   | `fetch`, WebSocket, and CDN imports follow browser CORS, Content Security Policy, permissions, and connectivity. runesm does not bypass them.                         |
+| Host network policy                |   ⚠️   | `fetch`, WebSocket, and CDN imports follow browser CORS, Content Security Policy, permissions, and connectivity. esmwell does not bypass them.                        |
 | Shared memory                      |   ⚠️   | `SharedArrayBuffer` needs a cross-origin-isolated host page with the required COOP and COEP headers.                                                                  |
 | Security isolation                 |   ❌   | Same-origin workers provide termination and fresh realms, not hostile-code containment. Submitted code keeps the worker capabilities granted by the host.             |
 
@@ -307,14 +307,14 @@ Compared with [Node.js 24.20.0](https://nodejs.org/download/release/v24.20.0/doc
 
 | Boundary                 | Status | Exact behavior                                                                                                                                                  |
 | ------------------------ | :----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vitest or Jest CLI       |   ❌   | runesm loads selected official engine components. It does not run either Node CLI.                                                                              |
+| Vitest or Jest CLI       |   ❌   | esmwell loads selected official engine components. It does not run either Node CLI.                                                                             |
 | Config files and plugins |   ❌   | `vitest.config.*`, Jest config, Vite plugins, setup discovery, and custom runners are not loaded.                                                               |
 | Watch mode and coverage  |   ❌   | Each call is one finite run in a fresh worker. Coverage instrumentation and watch processes are absent.                                                         |
 | Filesystem discovery     |   ❌   | The host supplies `modules` and `testFiles` explicitly. There is no globbing or disk scan.                                                                      |
 | Node test environments   |   ❌   | Tests run in a browser worker, not `node`, `jsdom`, or a custom environment.                                                                                    |
 | CommonJS tests           |   ❌   | Test modules and local source modules must be ESM JavaScript.                                                                                                   |
 | Module mocking           |   ❌   | `vi.mock`, `jest.mock`, and loader-level module replacement are not supported. Function mocks and spies are supported.                                          |
-| Persistent snapshots     |   ⚠️   | Vitest snapshots live in memory for one run and are returned in the result. runesm does not read or write snapshot files.                                       |
+| Persistent snapshots     |   ⚠️   | Vitest snapshots live in memory for one run and are returned in the result. esmwell does not read or write snapshot files.                                      |
 | Jest assertion counts    |   ❌   | `expect.assertions()` and `expect.hasAssertions()` cannot be enforced without Jest's private environment adapter.                                               |
 | Empty test workspaces    |   ❌   | A run that registers no tests returns an error instead of a passing result.                                                                                     |
 | Service-worker hosting   |   ⚠️   | Test mode needs HTTPS outside localhost. Both published test assets must share an origin and directory so the service-worker scope can serve the virtual graph. |
@@ -336,18 +336,18 @@ Compared with [Node.js 24.20.0](https://nodejs.org/download/release/v24.20.0/doc
 
 They are one policy gate over submitted source, checked after parsing and before anything executes. Each violation is a `PolicyViolation` carrying its `rule` and 1-based `line`, so a host can point at the offending line instead of surfacing a runtime failure. The gate reads the submitted module only: dependency code fetched from esm.sh is never scanned, and aliasing (`const f = globalThis.Function`) is out of scope. It is a predictability and code-quality gate, not a security boundary — see [Is the worker a security sandbox for hostile code?](#is-the-worker-a-security-sandbox-for-hostile-code) for that question.
 
-`eval` and `Function` are rejected because runesm reports what a submission will do before it runs. The dependency list comes from static analysis of import statements, so imports assembled from a string at runtime would never appear in it. In REPL mode the cost is larger: every top-level identifier reference is rewritten into a read or write on the persistent scope object, and the input runs inside an async wrapper. A direct `eval` would see that wrapper rather than the REPL scope, so bindings it created would silently fail to persist to the next evaluation. Rejecting both keeps the pre-execution report and the REPL scope honest. A host that embeds runesm under a Content Security Policy without `unsafe-eval` gets the same benefit earlier: a clear message at submit time instead of a runtime failure inside the worker.
+`eval` and `Function` are rejected because esmwell reports what a submission will do before it runs. The dependency list comes from static analysis of import statements, so imports assembled from a string at runtime would never appear in it. In REPL mode the cost is larger: every top-level identifier reference is rewritten into a read or write on the persistent scope object, and the input runs inside an async wrapper. A direct `eval` would see that wrapper rather than the REPL scope, so bindings it created would silently fail to persist to the next evaluation. Rejecting both keeps the pre-execution report and the REPL scope honest. A host that embeds esmwell under a Content Security Policy without `unsafe-eval` gets the same benefit earlier: a clear message at submit time instead of a runtime failure inside the worker.
 
 `var` is rejected because the REPL scope analyzer is purely lexical. It decides which identifiers become persistent-scope reads by asking whether a binding in the input covers the reference, and `var`'s function-scoped hoisting escapes the blocks that question is built on. Keeping `var` out of the language means the analyzer never has to model hoisting, and submitted code follows one rule in both judge and REPL mode. Use `let` or `const`; in REPL mode both become assignments on the persistent scope.
 
-### Can runesm execute CommonJS packages or `require()` calls?
+### Can esmwell execute CommonJS packages or `require()` calls?
 
-No. CommonJS user code is explicitly out of scope. esm.sh can convert some package internals to browser ESM, but runesm never exposes `require`, `module.exports`, or a Node module loader. Use [almostnode](https://github.com/macaly/almostnode) when CommonJS and Node-style execution are requirements.
+No. CommonJS user code is explicitly out of scope. esm.sh can convert some package internals to browser ESM, but esmwell never exposes `require`, `module.exports`, or a Node module loader. Use [almostnode](https://github.com/macaly/almostnode) when CommonJS and Node-style execution are requirements.
 
 ### Is the worker a security sandbox for hostile code?
 
-No. The worker gives runesm a disposable realm and a hard termination path for infinite loops. Same-origin submitted code still has the browser capabilities granted to that worker, including network access. Use a separate origin and a stricter capability design when code is untrusted.
+No. The worker gives esmwell a disposable realm and a hard termination path for infinite loops. Same-origin submitted code still has the browser capabilities granted to that worker, including network access. Use a separate origin and a stricter capability design when code is untrusted.
 
 ### Why can an API or package work in Chrome and fail in WebKit?
 
-`runesm` uses the host JavaScript engine and browser APIs. Proposal-era built-ins, WebAssembly packaging, CDN output, CORS, and worker support can differ by browser. Pin package versions, test every target browser, and treat ⚠️ rows as conditional.
+`esmwell` uses the host JavaScript engine and browser APIs. Proposal-era built-ins, WebAssembly packaging, CDN output, CORS, and worker support can differ by browser. Pin package versions, test every target browser, and treat ⚠️ rows as conditional.

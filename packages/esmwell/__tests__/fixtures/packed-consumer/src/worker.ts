@@ -1,0 +1,1 @@
+import 'esmwell/worker-entry'

@@ -25,13 +25,13 @@ Before changing anything the user sees in [`apps/playground`](apps/playground), 
 
 ## Project Identity
 
-This repository builds `runesm` — an ESM-only in-browser code runner with judge, REPL, and lazy Vitest/Jest workspace modes — as a pnpm/Turborepo monorepo maintained with Vitest, tsdown, oxfmt, oxlint, Changesets, and mise. The only publishable package lives in `packages/runesm`; the workspace root and every demo under `apps/` must stay private and excluded from Changesets publishing.
+This repository builds `esmwell` — an ESM-only in-browser code runner with judge, REPL, and lazy Vitest/Jest workspace modes — as a pnpm/Turborepo monorepo maintained with Vitest, tsdown, oxfmt, oxlint, Changesets, and mise. The only publishable package lives in `packages/esmwell`; the workspace root and every demo under `apps/` must stay private and excluded from Changesets publishing.
 
 Preserve the runner's invariants: submitted judge and REPL modules run only inside a same-origin child execution worker, never inside their coordinator worker. Each judge run gets a fresh child. A REPL child persists only until reset, timeout, fatal failure, or session close. Named ESM declarations can seed its persistent scope; local export lists add no bindings, while re-exports remain unsupported. Missing REPL identifiers report `ReferenceError`, while a direct `typeof` check returns `'undefined'`. Test workspaces use one fresh directly owned worker per run because their service-worker-backed module graph must work in Chromium and WebKit. Runtime-owned global bindings cannot be overwritten, redefined, or deleted, while intended contents such as `process.env` remain mutable. Bare imports resolve via esm.sh (inline versions override `deps`, which override `autoInstall`), `process`, `node:process`, and `globalThis.process` expose the same browser-identified process object, test workspaces resolve exact canonical local ids before packages and load official engine components lazily, and error messages stay self-contained and actionable.
 
-Every session accepts a main-thread `transform` that rewrites submitted source before it is posted to the worker, in submission order, with failures surfacing as error results. `runesm/typescript` builds one on `ts.transpileModule` from a compiler the host supplies through `load`, so the package never bundles or depends on TypeScript. `runesm/utils` also exports the worker RPC pair (`createWorkerRpc`, `serveWorkerRpc`) and the console formatter so hosts stop re-implementing them.
+Every session accepts a main-thread `transform` that rewrites submitted source before it is posted to the worker, in submission order, with failures surfacing as error results. `esmwell/typescript` builds one on `ts.transpileModule` from a compiler the host supplies through `load`, so the package never bundles or depends on TypeScript. `esmwell/utils` also exports the worker RPC pair (`createWorkerRpc`, `serveWorkerRpc`) and the console formatter so hosts stop re-implementing them.
 
-The private playground uses CodeMirror 6 for both source and REPL input. Its `.ts` mode compiles in a dedicated language-service worker, reached through runesm's worker RPC and wired into each session as its `transform`; that worker also acquires and caches exact-version npm declaration graphs on demand for hover and completion. `.mjs` shows the generated JavaScript and passes it directly. TypeScript edits invalidate the generated view, invalid TypeScript cannot open `.mjs`, and direct JavaScript edits lock `.ts` until the source restore control resets both views. This is a playground authoring feature, not a runesm package capability.
+The private playground uses CodeMirror 6 for both source and REPL input. Its `.ts` mode compiles in a dedicated language-service worker, reached through esmwell's worker RPC and wired into each session as its `transform`; that worker also acquires and caches exact-version npm declaration graphs on demand for hover and completion. `.mjs` shows the generated JavaScript and passes it directly. TypeScript edits invalidate the generated view, invalid TypeScript cannot open `.mjs`, and direct JavaScript edits lock `.ts` until the source restore control resets both views. This is a playground authoring feature, not a esmwell package capability.
 
 ## Tooling Rules
 
@@ -72,9 +72,9 @@ CI additionally gates three checks that are not part of the four above. Run them
 when touching the runner, its build output, or the browser path:
 
 ```bash
-pnpm -C packages/runesm run test:browser  # real-browser suite; needs bun (pinned in .mise.toml) and a Chrome backend, and reaches esm.sh
-pnpm -C packages/runesm run check:size    # 30 KB gzip budget over the built ESM output; run after pnpm build
-pnpm -C packages/runesm run test:pack     # builds, then installs the tarball in a temporary Vite consumer and builds every public worker entrypoint
+pnpm -C packages/esmwell run test:browser  # real-browser suite; needs bun (pinned in .mise.toml) and a Chrome backend, and reaches esm.sh
+pnpm -C packages/esmwell run check:size    # 30 KB gzip budget over the built ESM output; run after pnpm build
+pnpm -C packages/esmwell run test:pack     # builds, then installs the tarball in a temporary Vite consumer and builds every public worker entrypoint
 ```
 
 For documentation-only changes, `pnpm lint:ci` is sufficient unless the documentation describes executable commands or configuration that also needs validation.

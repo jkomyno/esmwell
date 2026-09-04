@@ -60,7 +60,7 @@ jobs:
 
       # Chrome is preinstalled on GitHub's ubuntu runners; pin the path for
       # the WebView chrome backend. One retry absorbs CDN hiccups (esm.sh).
-      # Addressed by path (not `pnpm --filter runesm`) because a filter that
+      # Addressed by path (not `pnpm --filter esmwell`) because a filter that
       # matches nothing exits 0 and would silently skip this gate.
       - name: '🌐 Run browser tests'
         run: |
@@ -68,20 +68,20 @@ jobs:
             echo "::error::BUN_CHROME_PATH does not point at an executable: $BUN_CHROME_PATH"
             exit 1
           }
-          pnpm -C packages/runesm run test:browser || {
+          pnpm -C packages/esmwell run test:browser || {
             echo '::warning::browser tests failed on first attempt, retrying once'
             echo '### :warning: Browser tests flaked and needed a retry' >> "$GITHUB_STEP_SUMMARY"
-            pnpm -C packages/runesm run test:browser
+            pnpm -C packages/esmwell run test:browser
           }
         env:
           BUN_CHROME_PATH: /usr/bin/google-chrome-stable
 
       - name: '📏 Check size budget'
-        run: pnpm -C packages/runesm run check:size
+        run: pnpm -C packages/esmwell run check:size
 
       - name: '📦 Check packed consumer'
-        run: pnpm -C packages/runesm run test:pack
+        run: pnpm -C packages/esmwell run test:pack
 
       - name: '📦 pkg.pr.new (preview release)'
         if: github.event_name == 'pull_request'
-        run: pnpm exec pkg-pr-new publish './packages/runesm' --packageManager=pnpm
+        run: pnpm exec pkg-pr-new publish './packages/esmwell' --packageManager=pnpm

@@ -1,4 +1,4 @@
-import type { SerializedError } from 'runesm'
+import type { SerializedError } from 'esmwell'
 import { TypeScriptCompileError } from './typescript-client'
 
 const FAULT_KINDS: Readonly<Record<string, string>> = {
@@ -23,7 +23,7 @@ export const serializeThrown = (error: unknown): SerializedError => {
 }
 
 /**
- * The detail the error's own message does not already carry. runesm keeps its
+ * The detail the error's own message does not already carry. esmwell keeps its
  * messages self-contained: a resolution failure names its specifier and reason,
  * a syntax error appends its own line and column, and a policy violation appends
  * its own line — so only the rule that fired is news. A compiler diagnostic is
