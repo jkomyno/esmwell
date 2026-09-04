@@ -12,29 +12,40 @@ pnpm install
 
 When changing a tool version, update `.mise.toml`, run `mise lock`, and keep the root `packageManager` pin aligned.
 
-## Development
+## Checks
 
-Use the existing workspace scripts:
+Run the narrowest relevant check while iterating. Before opening a pull request, run all four:
 
 ```bash
-pnpm build
+pnpm lint:ci
 pnpm typecheck
 pnpm test
-pnpm lint:ci
+pnpm build
 ```
 
 Changes to the runner, its built assets, or browser behavior also require:
 
 ```bash
-pnpm -C packages/esmwell run test:browser
-pnpm -C packages/esmwell run check:size
+pnpm -C packages/esmwell run test:browser  # needs Bun and Chrome, reaches esm.sh
+pnpm -C packages/esmwell run check:size    # 30 KB gzip budget; run after pnpm build
+pnpm -C packages/esmwell run test:pack     # installs the tarball in a temporary Vite consumer
 ```
 
-The browser suite reaches esm.sh. Bun and Chrome must be available. WebKit is optional and is not a release gate.
+WebKit is optional and is not a release gate.
 
-Tests live under each package's `__tests__` directory. Keep unit tests deterministic and offline. Use integration or browser tests for package boundaries and browser-only behavior.
+## Tests
 
-## Changesets and publishing
+Tests live under each package's `__tests__` directory: `unit` for deterministic, offline tests, `integration` for package boundaries, and `browser` for behavior that needs real workers and esm.sh.
+
+## Playground
+
+```bash
+pnpm --filter playground dev   # http://localhost:5173/playground/
+```
+
+The demo recording in `docs/media` is generated. See the [playground README](./apps/playground/README.md) to re-record it after a UI change.
+
+## Changesets
 
 User-visible library changes need a changeset:
 
@@ -42,15 +53,4 @@ User-visible library changes need a changeset:
 pnpm changeset
 ```
 
-Only `packages/esmwell` may be published. The root workspace and demo applications are private, and Changesets is configured not to version or tag private packages.
-
-The GitHub release workflow is intentionally disabled before the first release. Before publishing, make the repository public, enable GitHub private vulnerability reporting, and confirm GitHub Actions can start jobs.
-
-For the first release:
-
-1. Run `pnpm version-packages`, review the generated version and changelog, and commit them as `chore: version packages`.
-2. Verify and publish once without provenance in one command: `pnpm release:verify && pnpm -C packages/esmwell publish --access public --no-git-checks --provenance=false`. This creates the npm package; later releases use trusted publishing instead.
-3. In the npm package settings, add a GitHub Actions trusted publisher for repository `jkomyno/esmwell` and workflow `release.yaml`.
-4. Remove only the `if: false` guard from `.github/workflows/release.yaml`.
-
-`pnpm release:verify` runs lint, typechecking, tests, a clean package build, export validation, the size budget, the packed-consumer build, and the Chrome browser suite. The release workflow runs it in a separate job that holds no publish credentials; the publish job then runs `pnpm release`, which rebuilds the package and calls `changeset publish` and nothing else. No long-lived npm token is required after trusted publishing is configured.
+Maintainers publish from `main` through the release workflow. See [docs/RELEASING.md](./docs/RELEASING.md).

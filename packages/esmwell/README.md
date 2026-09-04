@@ -1,5 +1,6 @@
 # esmwell
 
+[![CI](https://github.com/jkomyno/esmwell/actions/workflows/ci.yaml/badge.svg)](https://github.com/jkomyno/esmwell/actions/workflows/ci.yaml)
 [![npm version](https://img.shields.io/npm/v/esmwell?color=blue)](https://npmjs.com/package/esmwell)
 [![npm downloads](https://img.shields.io/npm/dm/esmwell?color=blue)](https://npm.chart.dev/esmwell)
 [![install size](https://badgen.net/packagephobia/install/esmwell?color=blue)](https://packagephobia.com/result?p=esmwell)
@@ -10,25 +11,41 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 ![esmwell playground running an Effect v4 program](https://raw.githubusercontent.com/jkomyno/esmwell/main/docs/media/playground.gif)
 
 - ✅ **Judge, REPL, and test-workspace modes** from one small ESM-only package
-- ✅ **Bare imports just work** — `import { z } from 'zod'` resolves through [esm.sh](https://esm.sh) at runtime, no bundler and no install step
-- ✅ **Infinite loops become results, not frozen tabs** — a hard timeout terminates the worker and returns a typed `TimeoutError`
+- ✅ **Bare imports just work.** `import { z } from 'zod'` resolves through [esm.sh](https://esm.sh) at runtime, with no bundler and no install step
+- ✅ **Infinite loops become results, not frozen tabs.** A hard timeout terminates the worker and returns a typed `TimeoutError`
 - ✅ **Console output streams** while the submitted code is still running
+- ✅ **TypeScript input** through a transform that uses your own `typescript` package
 - ✅ **Real Vitest and Jest engines**, loaded lazily so judge and REPL users never pay for them
-- ✅ **Small** — one runtime dependency ([acorn](https://github.com/acornjs/acorn)), 23 KB gzipped under a CI-enforced 30 KB budget, gated in Chrome
+- ✅ **Small.** One runtime dependency ([acorn](https://github.com/acornjs/acorn)) and a CI-enforced 30 KB gzip budget
 
-👉 [Compatibility reference](https://github.com/jkomyno/esmwell/blob/main/COMPATIBILITY.md) · [Contributing](https://github.com/jkomyno/esmwell/blob/main/CONTRIBUTING.md)
+👉 [Compatibility reference](https://github.com/jkomyno/esmwell/blob/main/COMPATIBILITY.md) · [Recipes](https://github.com/jkomyno/esmwell/tree/main/docs/recipes) · [Playground source](https://github.com/jkomyno/esmwell/tree/main/apps/playground) · [Contributing](https://github.com/jkomyno/esmwell/blob/main/CONTRIBUTING.md)
+
+## Contents
+
+- [Install](#install)
+- [Quick start](#quick-start)
+- [REPL mode](#repl-mode)
+- [TypeScript input](#typescript-input)
+- [Vitest and Jest workspaces](#vitest-and-jest-workspaces)
+- [API](#api)
+- [Workers and bundlers](#workers-and-bundlers)
+- [Execution model](#execution-model)
+- [Errors and policy](#errors-and-policy)
+- [Compatibility](#compatibility)
+- [Recipes](#recipes)
 
 ## Install
 
 ```bash
-pnpm add esmwell
+npm install esmwell
+# pnpm add esmwell · yarn add esmwell · bun add esmwell
 ```
 
-The package ships ESM only (`.mjs`).
+The package ships ESM only (`.mjs`) and targets browsers. It loads two worker scripts next to the main module by default. If your bundler relocates assets, read [Workers and bundlers](#workers-and-bundlers) before the first run.
 
 ## Quick start
 
-Judge mode runs a module once against named-export test cases:
+Judge mode runs a module once and checks its named exports against structured cases:
 
 ```ts
 import { createEsmwell } from 'esmwell'
@@ -56,13 +73,13 @@ const result = await session.runJudge(
 session.close()
 ```
 
-Console capture uses a 65,536-character per-run budget, including per-call overhead. Long values and collections are previewed; exhausted output ends with one warning chunk before later calls are dropped.
+Expected and actual values compare structurally: `NaN` equals `NaN`, `+0` and `-0` differ, `Map` and `Set` ignore insertion order, TypedArrays compare byte-wise, and prototypes must match. `RegExp` compares source and flags, boxed primitives compare their wrapped value, and `Error` compares class, `name`, `message`, and `cause`, never `stack`.
 
-Results compare structurally (`NaN` equals `NaN`, `+0` ≠ `-0`, `Map`/`Set` ignore insertion order, TypedArrays compare byte-wise, prototypes must match). `RegExp` compares source and flags, boxed primitives compare their wrapped value, and `Error` compares class, `name`, `message`, and `cause` (never `stack`).
+Console capture has a 65,536-character per-run budget, including per-call overhead. Long values and collections are previewed. When the budget runs out, one warning chunk is emitted and later calls are dropped.
 
 ## REPL mode
 
-A Node-style persistent scope: declarations, imports, and reassignments survive across inputs; closures observe later changes.
+A Node-style persistent scope. Declarations, imports, and reassignments survive across inputs, and closures observe later changes:
 
 ```ts
 import { createReplSession } from 'esmwell'
@@ -75,25 +92,24 @@ const { value } = await repl.evaluate('count') // 1
 
 await repl.evaluate('const get = () => count')
 await repl.evaluate('count = 5')
-const live = (await repl.evaluate('get()')).value // 5 — live binding
+const live = (await repl.evaluate('get()')).value // 5, a live binding
 
 await repl.reset() // fresh scope
 repl.close()
 ```
 
-Each input's completion value (its final expression) comes back as `value`. Named exported declarations persist like ordinary REPL declarations, so an ESM module can seed the scope before interactive inputs. A local export list is accepted but adds no new binding; re-exports and default-export expressions without a named function or class are rejected with a clear error.
+Each input's completion value (its final expression) comes back as `value`. Named exported declarations persist like ordinary REPL declarations, so an ESM module can seed the scope before interactive inputs. A local export list is accepted but adds no new binding. Re-exports and default-export expressions without a named function or class are rejected with a clear error.
 
 The persistent scope is an internal object, so its declaration semantics deliberately differ from a JavaScript module:
 
-- Re-declaring a name with `let` reassigns it instead of erroring, as does re-declaring a `const` — both `let` and `const` become scope assignments, so a later input can even reassign an earlier `const`.
-
-Identifier reads otherwise match a browser console: reading a name that was never declared reports `ReferenceError`, while `typeof someUndeclaredName` evaluates to `'undefined'`.
+- Re-declaring a name with `let` or `const` reassigns it instead of erroring. Both become scope assignments, so a later input can reassign an earlier `const`.
+- Reading a name that was never declared reports `ReferenceError`, while `typeof someUndeclaredName` evaluates to `'undefined'`, matching a browser console.
 
 ## TypeScript input
 
-Every session accepts a `transform` that rewrites submitted source on the main thread before it is posted to the worker: the judge module, each REPL input, and each test-workspace module. The worker only ever sees the returned text, so a transform changes what gets isolated, never how. Transforms run in submission order, and a thrown error becomes an error result whose `error` keeps the thrown `name`, `message`, and `line`/`column` when the error exposes them.
+Every session accepts a `transform` that rewrites submitted source on the main thread before it is posted to the worker: the judge module, each REPL input, and each test-workspace module. The worker only ever sees the returned text, so a transform changes what gets isolated, never how. Transforms run in submission order. A thrown error becomes an error result whose `error` keeps the thrown `name`, `message`, and `line`/`column` when the error exposes them.
 
-`esmwell/typescript` ships a transform built on `ts.transpileModule`, without depending on the compiler. You hand over the import, so the `.ts` path exists only where `typescript` is installed and a bundler without it still builds:
+`esmwell/typescript` ships a transform built on `ts.transpileModule` without depending on the compiler. You hand over the import, so the `.ts` path exists only where `typescript` is installed, and a bundler without it still builds:
 
 ```ts
 import { createEsmwell } from 'esmwell'
@@ -108,15 +124,13 @@ await session.runJudge(`export const solve = (value: number): number => value * 
 ])
 ```
 
-`transpileModule` strips types and compiles syntax for one file at a time with `module: ESNext`, `target: ES2023`, and `verbatimModuleSyntax`; pass `compilerOptions` to override. It never type-checks, so type errors run and syntax errors come back as a `TypeScriptError` result with the diagnostic's line and column. If `load` rejects or resolves to something that is not the compiler, the run reports a `TypeScriptUnavailableError` and the next run retries the load.
+`transpileModule` strips types and compiles syntax one file at a time with `module: ESNext`, `target: ES2023`, and `verbatimModuleSyntax`. Pass `compilerOptions` to override. It never type-checks, so type errors run, while syntax errors come back as a `TypeScriptError` result with the diagnostic's line and column. If `load` rejects or resolves to something that is not the compiler, the run reports a `TypeScriptUnavailableError` and the next run retries the load.
 
-The same hook takes any other compiler with the shape `(source, context) => string | Promise<string>`; `context.kind` is `'judge'`, `'repl'`, or `'test'` (with the module `id`).
+The same hook takes any other compiler with the shape `(source, context) => string | Promise<string>`. `context.kind` is `'judge'`, `'repl'`, or `'test'` (with the module `id`).
 
 ## Vitest and Jest workspaces
 
-Run real current Vitest or Jest engine packages over a virtual ESM project.
-Canonical local ids take precedence over npm packages, so test files can use
-imports such as `import { impl } from 'src/impl'` without a filesystem:
+Run real, current Vitest or Jest engine packages over a virtual ESM project. Canonical local ids take precedence over npm packages, so test files can use imports such as `import { impl } from 'src/impl'` without a filesystem:
 
 ```ts
 import { createTestSession } from 'esmwell'
@@ -155,33 +169,15 @@ const result = await tests.run({
 tests.close()
 ```
 
-Test sessions default to `timeoutMs: 60000` because the same budget covers
-service-worker setup, the engine download, and the test run. Judge and REPL
-sessions keep the 5-second default.
+Test sessions default to `timeoutMs: 60000` because the same budget covers service-worker setup, the engine download, and the test run. Judge and REPL sessions keep the 5-second default.
 
-For Jest, import the same globals from `@jest/globals`. `jest.fn` and
-`jest.spyOn` use the official `jest-mock` package. Both engines and their
-assertion libraries load lazily from esm.sh; judge and REPL users do not pay
-their download cost. The current browser test payload is much larger than the
-runner core—roughly 2.1 MB uncompressed for Jest—so websites should start the
-download when a user opens or runs a test playground, not during initial page
-load.
+For Jest, import the same globals from `@jest/globals`. `jest.fn` and `jest.spyOn` use the official `jest-mock` package. Both engines and their assertion libraries load lazily from esm.sh, so judge and REPL users do not pay their download cost. The browser test payload is a few megabytes uncompressed, so start the download when a user opens or runs a test playground, not during initial page load.
 
-The virtual graph uses native browser ESM, including cycles, live bindings,
-relative imports, re-exports, and literal dynamic imports. Exact canonical ids
-under `src/` and `tests/` are treated as local; missing ids produce an
-actionable workspace error instead of resolving an npm package with the same
-name.
+The virtual graph uses native browser ESM, including cycles, live bindings, relative imports, re-exports, and literal dynamic imports. Exact canonical ids under `src/` and `tests/` are treated as local. Missing ids produce an actionable workspace error instead of resolving an npm package with the same name.
 
 ### Hosting the test assets
 
-Test mode needs the published `test-worker-entry.mjs` and
-`module-service-worker.mjs` files served from the website's origin and from
-the same directory. That directory becomes the service-worker scope. HTTPS is
-required outside localhost. Pass explicit URLs when a bundler relocates the
-files; a blob-built execution worker cannot participate in this mode. The
-service worker only answers esmwell's versioned virtual-module path beneath its
-scope and leaves other requests untouched.
+Test mode needs the published `test-worker-entry.mjs` and `module-service-worker.mjs` files served from the website's origin and from the same directory. That directory becomes the service-worker scope. HTTPS is required outside localhost. Pass explicit URLs when a bundler relocates the files. A blob-built execution worker cannot participate in this mode. The service worker only answers esmwell's versioned virtual-module path beneath its scope and leaves other requests untouched.
 
 Serve these assets from a dedicated directory so the registration can safely own its scope and update across deployments.
 
@@ -189,165 +185,76 @@ Each test run creates and terminates its own worker. A timeout therefore clears 
 
 ### What the engines support
 
-This is an ESM playground API backed by official engine components, not the
-Vitest or Jest Node CLI. It supports suites, tests, hooks, upstream assertions,
-Vitest `vi.fn`, Jest mock functions, and normalized results. Config files,
-plugins, watch mode, coverage, filesystem discovery, CJS, Node environments,
-and module mocking are not supported. Snapshots are currently in-memory for a
-single Vitest run. Jest assertion-count enforcement is unavailable because it
-depends on Jest's private environment adapter. A workspace that registers no
-tests is an error; a clean engine outcome with no registered tests becomes a
-`NoTestsError`, while an engine's own error details are preserved.
-`it.only`/`describe.only` narrow the run on both engines.
+This is an ESM playground API backed by official engine components, not the Vitest or Jest Node CLI. It supports suites, tests, hooks, upstream assertions, Vitest `vi.fn`, Jest mock functions, `it.only`/`describe.only`, and normalized results.
 
-## Execution model
+Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node environments, and module mocking are not supported. Snapshots are in-memory for a single Vitest run. Jest assertion-count enforcement is unavailable because it depends on Jest's private environment adapter. A workspace that registers no tests is an error: a clean engine outcome with no registered tests becomes a `NoTestsError`, while an engine's own error details are preserved.
 
-Judge and REPL sessions use two worker levels:
+## API
 
-```text
-page → coordinator worker → execution worker
-```
+### `createEsmwell(options?)` → `EsmwellSession`
 
-The coordinator never evaluates submitted code. It owns the deadline and terminates the execution worker on timeout or fatal failure. Every judge run starts in a fresh execution worker. A REPL keeps one worker so declarations persist, then discards it on reset, timeout, or fatal failure.
+| Method                             | Returns                   | Description                                                               |
+| ---------------------------------- | ------------------------- | ------------------------------------------------------------------------- |
+| `runJudge(code, cases, handlers?)` | `Promise<JudgeRunResult>` | Runs `code` once and checks each `JudgeCase`. Runs serialize per session. |
+| `close()`                          | `void`                    | Terminates the workers and invalidates the session.                       |
 
-Test workspaces use one fresh page-owned worker per run. Their virtual module graph is backed by a scoped service worker, and direct ownership keeps that graph portable across Chromium and WebKit.
+### `createReplSession(options?)` → `ReplSession`
 
-Bindings installed by esmwell, including `globalThis.process`, `globalThis.console`, and test-engine bridges, are non-writable and non-configurable. Submitted code cannot replace or delete them. Their intended contents can still be mutable, so `process.env.KEY = 'value'` remains supported.
+| Method                       | Returns               | Description                                         |
+| ---------------------------- | --------------------- | --------------------------------------------------- |
+| `evaluate(input, handlers?)` | `Promise<ReplResult>` | Evaluates one input against the persistent scope.   |
+| `reset()`                    | `Promise<void>`       | Starts a fresh scope in a fresh worker.             |
+| `close()`                    | `void`                | Terminates the workers and invalidates the session. |
 
-### Not a security sandbox
+### `createTestSession(options?)` → `TestSession`
 
-Worker isolation makes execution disposable and lets the host recover from synchronous infinite loops. It does not turn a browser worker into a process, VM, V8 isolate, or workerd security boundary. Submitted code retains browser worker capabilities allowed by the page, including same-origin and network access unless the host restricts them.
+| Method                | Returns                  | Description                                                            |
+| --------------------- | ------------------------ | ---------------------------------------------------------------------- |
+| `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`) in a fresh worker. |
+| `close()`             | `void`                   | Prevents future runs. An in-flight run still settles.                  |
 
-## Dependencies and autoInstall
+### Options
 
-- Bare specifiers in `import` / `export … from` / literal dynamic `import()` rewrite to `https://esm.sh/{name}@{version}` at runtime — no manifest, no bundler.
-- `deps` pins exact versions; an inline version such as `effect@beta/Option` takes precedence; `autoInstall: true` (the default) resolves everything else to the CDN's latest.
-- `autoInstall: false` makes an unpinned bare import an error: `could not resolve 'x' — check the package name or add it to deps`.
-- Absolute URLs pass through untouched; relative specifiers error (user code runs from an in-memory URL). `process` and `node:process` resolve to the worker's browser process object; other `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` → `globalThis.crypto`, `node:http` → `fetch()`, …).
-- Both modes surface the resolved dependency list (`name`, `version`, `url`) in their results so hosts can display what a run actually used.
+`EsmwellOptions` is shared by all three factories. `TestSessionOptions` extends it.
 
-### Effect v4 beta
+| Option               | Type                          | Default                               | Description                                                                                                              |
+| -------------------- | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `deps`               | `Record<string, string>`      | `{}`                                  | Package name to pinned version for bare-import resolution. Inline versions in the source take precedence.                |
+| `autoInstall`        | `boolean`                     | `true`                                | Resolve unpinned bare imports to the CDN's latest. When `false`, an unpinned bare import is an error.                    |
+| `timeoutMs`          | `number`                      | `5000` (`60000` for test sessions)    | Hard timeout per run. Exceeding it terminates the execution worker and returns a `TimeoutError` result.                  |
+| `transform`          | `SourceTransform`             | none                                  | Rewrites submitted source on the main thread before it reaches the worker. See [TypeScript input](#typescript-input).    |
+| `workerUrl`          | `string \| URL`               | `worker-entry.mjs` beside the module  | URL of the coordinator entry (or `test-worker-entry.mjs` for test sessions).                                             |
+| `executionWorkerUrl` | `string \| URL`               | `execution-worker-entry.mjs`          | Same-origin child worker that owns submitted judge and REPL code.                                                        |
+| `workerFactory`      | `(url: string) => WorkerLike` | `new Worker(url, { type: 'module' })` | Builds the workers. Wrap a bundler-emitted worker with `adaptWorker`. See [Workers and bundlers](#workers-and-bundlers). |
+| `serviceWorkerUrl`   | `string \| URL`               | `module-service-worker.mjs`           | Test sessions only. Same-origin service worker backing the virtual module graph.                                         |
 
-Use the `beta` tag in each import because esm.sh's unqualified `latest` version is Effect v3. An exact version such as `effect@4.0.0-beta.107/Schema` works too. The core `effect` package runs directly in the browser worker; no `@effect/platform-*` package is needed.
+`handlers` on every run method is `{ onConsoleChunk?: (chunk: ConsoleChunk) => void }`. Chunks stream as the code runs and are also collected on the result.
 
-This is the program shown in the demo above — a `Schema` decode inside `Effect.gen`, a `yield* Console.log` that streams out while the fiber runs, and `Effect.runFork` observed to completion:
+### Results
 
-```js
-import * as Console from 'effect@beta/Console'
-import * as Effect from 'effect@beta/Effect'
-import * as Schema from 'effect@beta/Schema'
+Every result carries `status`, `console` (the collected `ConsoleChunk`s), `dependencies` (`{ specifier, name, version, url }[]`), `durationMs`, and an optional `error` of type `SerializedError`.
 
-const User = Schema.Struct({ name: Schema.String, age: Schema.Number })
+| Result           | Extra fields                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------- |
+| `JudgeRunResult` | `cases: JudgeCaseResult[]`, each with `status`, `actual`, `expected`, and `error`                          |
+| `ReplResult`     | `value`, the completion value of the input                                                                 |
+| `TestRunResult`  | `engine: { name, version, packages }` and `tests: TestCaseResult[]` with `pass`, `fail`, `skip`, or `todo` |
 
-export const solve = (input) => {
-  const program = Effect.gen(function* () {
-    const user = Schema.decodeUnknownSync(User)(input)
-    yield* Console.log(`decoded ${user.name} (age ${user.age})`)
-    return `hello, ${user.name}`
-  })
+### Subpath exports
 
-  return new Promise((resolve) => {
-    Effect.runFork(program).addObserver((exit) => resolve(exit.value))
-  })
-}
-```
-
-```ts
-const session = createEsmwell({ autoInstall: false, timeoutMs: 30_000 })
-
-const result = await session.runJudge(code, [
-  {
-    name: 'greets a decoded user',
-    exportName: 'solve',
-    args: [{ name: 'esmwell', age: 3 }],
-    expected: 'hello, esmwell',
-  },
-])
-// result.console → [{ level: 'log', parts: ['decoded esmwell (age 3)'] }]
-```
-
-The real-browser suite covers this snippet, `effect@beta/Schema`, `Effect.runFork`, scoped `Effect.acquireRelease`, and all 156 published stable, testing, and top-level unstable entrypoints against the published beta tag.
-
-Effect's `Path.layer` consults `globalThis.process.cwd()` for relative paths. esmwell installs the same browser-oriented object behind `globalThis.process`, `process`, and `node:process`: it reports `browser: true`, uses `/` as its fixed working directory, and deliberately leaves `versions.node` absent so dependencies can distinguish it from Node.
-
-### Effect host-capability ledger
-
-The following entrypoints load, but their main operations need host services that a plain browser worker does not provide. They stay outside esmwell's current compatibility layer rather than receiving misleading no-op implementations:
-
-| Capability                                                             | Observed error without a service                 | What support would require                                                    |
-| ---------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------- |
-| `effect/FileSystem`                                                    | `Service not found: effect/platform/FileSystem`  | A virtual filesystem, path/URL semantics, persistence, and lifecycle contract |
-| `effect/Terminal` and interactive CLI prompts                          | `Service not found: effect/platform/Terminal`    | Bidirectional host I/O, cancellation, dimensions, and input-mode handling     |
-| Fetch response `Set-Cookie` values                                     | Browser Fetch exposes an empty cookie collection | A privileged host/proxy that can observe forbidden response headers           |
-| HTTP servers, cluster runners, and sockets without a browser transport | Missing server/socket services                   | A host routing bridge and explicit network/listener lifecycle                 |
-| SQL, persistence, event log, and durable workflows                     | Missing storage/client services                  | A selected browser storage backend plus transaction and durability semantics  |
-
-Fetch-based HTTP clients and global WebSocket constructors remain usable because they build on browser-native APIs. `@effect/platform-*` packages are not part of the compatibility probe or runtime.
-
-## WebAssembly packages
-
-User modules run in a browser worker with the native `WebAssembly` and `fetch` APIs. They can fetch and instantiate a `.wasm` URL directly, or use a package's browser/Web Worker entrypoint when that package provides one.
-
-Runtime-specific package entrypoints are not interchangeable. In particular, `@cf-wasm/og`'s default export resolves to its `workerd` build, which imports `.wasm` files using Cloudflare Workers module rules that browsers do not implement. Use the package's `others` entries and initialize their WebAssembly binaries explicitly:
-
-```js
-import { CustomFont, ImageResponse } from '@cf-wasm/og/others'
-import { t } from '@cf-wasm/og/html-to-react'
-import { initResvg } from '@cf-wasm/resvg/legacy/others'
-import { initSatori } from '@cf-wasm/satori/others'
-
-await Promise.all([
-  initResvg(fetch('https://esm.sh/@cf-wasm/resvg@0.4.0/legacy/resvg.wasm?raw')),
-  initSatori(fetch('https://esm.sh/@cf-wasm/satori@0.4.0/yoga.wasm?raw')),
-])
-
-export const renderImage = async () => {
-  const defaultFont = new CustomFont(
-    'sans serif',
-    fetch('https://cdn.jsdelivr.net/npm/@cf-wasm/og@0.5.0/dist/lib/noto-sans-v27-latin-regular.ttf.bin').then(
-      (response) => response.arrayBuffer(),
-    ),
-  )
-  return ImageResponse.async(t('<div style="display: flex">Hello from WebAssembly</div>'), {
-    width: 320,
-    height: 180,
-    defaultFont,
-  })
-}
-```
-
-Pin all three packages in the session because the submitted module imports each one directly:
-
-```ts
-createEsmwell({
-  deps: {
-    '@cf-wasm/og': '0.5.0',
-    '@cf-wasm/resvg': '0.4.0',
-    '@cf-wasm/satori': '0.4.0',
-  },
-  autoInstall: false,
-})
-```
-
-The browser suite executes this flow through the published worker entry and checks the generated PNG signature. The CDN and asset URLs make that test intentionally network-dependent.
-
-## Error shape
-
-`SerializedError` (on `JudgeCaseResult.error`, `JudgeRunResult.error`, and `ReplResult.error`) always carries `name` and `message`, plus `stack` when the source error had one. `name` is the reliable discriminator; branch on it (`'PolicyViolation'`, `'UserSyntaxError'`, `'SpecifierResolutionError'`, `'TimeoutError'`, …) rather than parsing `message`. When the underlying error was one of this package's own structured error classes, its fields ride along too:
-
-- `PolicyViolation` → `rule` (`PolicyRule`) and `line`
-- `UserSyntaxError` → `line` and `column`
-- `SpecifierResolutionError` → `kind` (`ResolutionFailureKind`) and `specifier`
-
-These extra fields are optional and only present for the matching error kind — check `name` first, then read the fields that go with it.
-
-## Policy
-
-Submitted code is rejected with line numbers for `var` declarations, `eval` references, and `Function` constructor calls before anything executes. Runtime property descriptors protect esmwell-owned globals even when code reaches them through aliases or reflection.
+| Import                           | Contents                                                                                                                            |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `esmwell`                        | The three session factories, `adaptWorker`, the composition primitives, and every public type                                       |
+| `esmwell/typescript`             | `typescriptTransform` and `TypeScriptUnavailableError`                                                                              |
+| `esmwell/utils`                  | `isBareSpecifier`, `formatConsoleArguments`, `serializeValue`, `createWorkerRpc`, and `serveWorkerRpc`. Pulls in none of the runner |
+| `esmwell/worker-entry`           | Coordinator worker entry for judge and REPL sessions                                                                                |
+| `esmwell/execution-worker-entry` | Child worker entry that runs submitted judge and REPL code                                                                          |
+| `esmwell/test-worker-entry`      | Worker entry for test sessions                                                                                                      |
+| `esmwell/module-service-worker`  | Service worker backing the test-session module graph                                                                                |
 
 ## Workers and bundlers
 
-`createEsmwell` loads `worker-entry.mjs` and `execution-worker-entry.mjs` next to the main-thread module by default. Both scripts must be served from the website origin. A Content Security Policy must allow both through `worker-src`.
+`createEsmwell` and `createReplSession` load `worker-entry.mjs` and `execution-worker-entry.mjs` next to the main-thread module by default. Both scripts must be served from the website origin, and a Content Security Policy must allow both through `worker-src`.
 
 Bundlers that relocate assets should emit both workers and pass the execution-worker URL explicitly. For Vite:
 
@@ -372,83 +279,97 @@ import 'esmwell/worker-entry'
 import 'esmwell/execution-worker-entry'
 ```
 
-`workerUrl` is the lighter escape hatch when a URL to the coordinator entry is available. `executionWorkerUrl` identifies the child entry. When copying published assets without a bundler, keep both `.mjs` files together so the default relative URL resolves.
+`workerUrl` is the lighter escape hatch when a URL to the coordinator entry is available. `executionWorkerUrl` identifies the child entry. When copying published assets without a bundler, keep both `.mjs` files together so the default relative URL resolves. Test sessions need `test-worker-entry.mjs` and `module-service-worker.mjs` instead, as described in [Hosting the test assets](#hosting-the-test-assets).
 
-## Advanced: composition primitives
+## Execution model
 
-`createEsmwell` and `createReplSession` cover the supported way to run user code. The package also exports the lower-level pieces they're built from, for hosts that want to compose their own pipeline (for example: lint submitted code without executing it, or list the bare imports a snippet would need before running it — this is how the [playground](https://github.com/jkomyno/esmwell/tree/main/apps/playground) shows a dependency list before a run):
+Judge and REPL sessions use two worker levels:
 
-- `parseUserModule(code)` — parses into an acorn AST, throwing `UserSyntaxError` on invalid syntax.
-- `checkPolicy(ast)` — returns the `PolicyViolation`s in a parsed module (see [Policy](#policy)).
-- `collectBareSpecifiers(ast)` — lists the bare import specifiers a parsed module references.
-- `resolveDependencies` / `resolveImportSpecifier` — resolve bare specifiers to CDN URLs, throwing `SpecifierResolutionError` on failure (see [Dependencies and autoInstall](#dependencies-and-autoinstall)).
-
-A host that only needs to classify a specifier, without resolving it, can import the predicate on its own from the `esmwell/utils` subpath — it pulls in none of the runner:
-
-```ts
-import { isBareSpecifier } from 'esmwell/utils'
-
-isBareSpecifier('zod@4') // true — a package name, possibly versioned, scoped, or with a subpath
-isBareSpecifier('./local.js') // false — relative, absolute, `#imports`, and full URLs are all not bare
+```text
+page → coordinator worker → execution worker
 ```
 
-These compose by chaining return values (`collectBareSpecifiers(parseUserModule(code))`) without ever needing to name the acorn `Node`/`Program` type. If you do want to type an intermediate AST value yourself, add `acorn` as a direct dependency — this package does not re-export its types.
+The coordinator never evaluates submitted code. It owns the deadline and terminates the execution worker on timeout or fatal failure. Every judge run starts in a fresh execution worker. A REPL keeps one worker so declarations persist, then discards it on reset, timeout, or fatal failure.
 
-`esmwell/utils` also carries two pieces every host ends up rebuilding around the runner:
+Test workspaces use one fresh page-owned worker per run. Their virtual module graph is backed by a scoped service worker, and direct ownership keeps that graph portable across Chromium and WebKit.
 
-- `formatConsoleArguments(args)` and `serializeValue(value)` — the exact rendering the runner applies to captured console output, so a host that prints console calls from its own workers (a compiler, a linter) shows them the same way.
-- `createWorkerRpc` / `serveWorkerRpc` — request/response plumbing for a worker the host owns: correlation ids, a pending map, rejection of in-flight requests when the worker fails, lazy start, `restart()` and `destroy()`, and an `AbortSignal` per request. The worker side routes each request body to one handler and posts its value or error back.
+Bindings installed by esmwell, including `globalThis.process`, `globalThis.console`, and test-engine bridges, are non-writable and non-configurable. Submitted code cannot replace or delete them. Their intended contents can still be mutable, so `process.env.KEY = 'value'` remains supported.
 
-```ts
-// page
-import { createWorkerRpc } from 'esmwell/utils'
+### Not a security sandbox
 
-const compiler = createWorkerRpc<{ source: string }>({
-  createWorker: () => new Worker(new URL('./compile-worker.js', import.meta.url), { type: 'module' }),
-})
-const { code } = await compiler.request<{ code: string }>({ source })
+Worker isolation makes execution disposable and lets the host recover from synchronous infinite loops. It does not turn a browser worker into a process, VM, V8 isolate, or workerd security boundary. Submitted code retains browser worker capabilities allowed by the page, including same-origin and network access unless the host restricts them.
 
-// compile-worker.js
-import { serveWorkerRpc } from 'esmwell/utils'
+### Dependencies and `autoInstall`
 
-serveWorkerRpc<{ source: string }>(({ source }) => ({ code: compile(source) }))
-```
+- Bare specifiers in `import`, `export … from`, and literal dynamic `import()` rewrite to `https://esm.sh/{name}@{version}` at runtime. No manifest, no bundler.
+- `deps` pins exact versions. An inline version such as `effect@beta/Option` takes precedence. `autoInstall: true` (the default) resolves everything else to the CDN's latest.
+- `autoInstall: false` makes an unpinned bare import an error: `could not resolve 'x' — check the package name or add it to deps`.
+- Absolute URLs pass through untouched. Relative specifiers error, because user code runs from an in-memory URL.
+- `process` and `node:process` resolve to the worker's browser process object. Other `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` to `globalThis.crypto`, `node:http` to `fetch()`, and so on).
+- Every result surfaces the resolved dependency list (`name`, `version`, `url`) so hosts can display what a run actually used.
 
-## Choosing the right tool
+## Errors and policy
 
-These projects all accept JavaScript-shaped input, but they solve different problems:
+Submitted code is rejected with line numbers for `var` declarations, `eval` references, and `Function` constructor calls before anything executes. Runtime property descriptors protect esmwell-owned globals even when code reaches them through aliases or reflection.
 
-| Tool                                                        | Best for                                                                   | Execution model                                                                                             | Packages and environment                                                                                          |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **esmwell**                                                 | Embedded browser judges, persistent REPLs, and Vitest/Jest workspaces      | Executes real ESM in browser workers with hard timeout recovery; worker isolation is not a security sandbox | Resolves bare imports through esm.sh; browser APIs, no virtual filesystem or general Node.js runtime              |
-| [**callscript**](https://github.com/vercel-labs/callscript) | AI-authored tool workflows that need bounded, inspectable, resumable plans | Parses a constrained JavaScript surface into inert JSON; only host-provided tools execute                   | Mounts tools through plain adapters, the AI SDK, or MCP; it does not execute arbitrary JavaScript or npm packages |
-| [**almostnode**](https://github.com/macaly/almostnode)      | Node-style browser development environments and playgrounds                | Executes code on the main thread, in a worker, or through its separately deployed cross-origin sandbox      | Provides a virtual filesystem, Node.js API shims, npm installation, CLIs, and Vite/Next.js dev servers            |
+`SerializedError` (on `JudgeCaseResult.error`, `JudgeRunResult.error`, `ReplResult.error`, and each `TestCaseResult.errors` entry) always carries `name` and `message`, plus `stack` when the source error had one. `name` is the reliable discriminator. Branch on it rather than parsing `message`:
 
-`callscript` and esmwell both parse JavaScript with Acorn and validate it before work begins, but only esmwell continues on to execute the submitted module. `almostnode` is the closer runtime alternative: choose it when Node.js compatibility is the requirement, and esmwell when ESM-native execution, structured judge results, or a focused test-workspace API is the requirement.
+| `name`                       | Extra fields                                  | Cause                                                   |
+| ---------------------------- | --------------------------------------------- | ------------------------------------------------------- |
+| `PolicyViolation`            | `rule` (`PolicyRule`), `line`                 | `var`, `eval`, or `Function` construction in the source |
+| `UserSyntaxError`            | `line`, `column`                              | The source did not parse as an ES2023 module            |
+| `SpecifierResolutionError`   | `kind` (`ResolutionFailureKind`), `specifier` | A bare or `node:*` import could not be resolved         |
+| `TimeoutError`               |                                               | The run exceeded `timeoutMs`                            |
+| `TypeScriptError`            | `line`, `column`                              | `esmwell/typescript` hit a syntax diagnostic            |
+| `TypeScriptUnavailableError` |                                               | The `load` callback did not yield the compiler          |
+| `NoTestsError`               |                                               | A test workspace registered no tests                    |
+
+Extra fields are present only for the matching error kind. Check `name` first, then read the fields that go with it.
 
 ## Compatibility
 
-`esmwell` executes ES2023 modules inside browser workers. Most ECMAScript support therefore comes straight from the host browser — esmwell adds a policy layer, an ESM resolver, worker lifecycle management, and result normalization on top.
-
-The release gate runs in **Chrome**. The compatibility reference also records a dated manual WebKit probe; WebKit and Firefox are not release gates.
+`esmwell` executes ES2023 modules inside browser workers, so most ECMAScript support comes straight from the host browser. The release gate runs in Chrome. WebKit is probed manually and Firefox is not covered.
 
 Things worth knowing before you ship:
 
-- `eval` references and `Function` construction are rejected by policy before execution (see [Policy](#policy)).
-- `Temporal`, `SuppressedError`, `Float16Array`, and the `Iterator` helper class are Chromium-only in the tested backends. Polyfill them from esm.sh when both matter.
-- `DisposableStack` and `AsyncDisposableStack` are likewise Chromium-only, and the parser does not accept post-ES2023 `using` / `await using` syntax either way.
+- `eval` references and `Function` construction are rejected by policy before execution.
+- `Temporal`, `SuppressedError`, `Float16Array`, `DisposableStack`, `AsyncDisposableStack`, and the `Iterator` helper class are Chromium-only in the tested backends. Polyfill them from esm.sh when both matter. The parser does not accept post-ES2023 `using` syntax either way.
 - `SharedArrayBuffer` and `Atomics` need cross-origin isolation headers from the host page.
-- `node:*` imports fail fast with pointers to browser alternatives; only `node:process` has a partial contract.
+- `node:*` imports fail fast with pointers to browser alternatives. Only `node:process` has a partial contract.
 - Requests and results cross a structured-clone boundary, so functions, symbols, and proxies cannot be passed or returned directly.
 - CommonJS and `require()` are out of scope. Use [almostnode](https://github.com/macaly/almostnode) when Node-style execution is a requirement.
 
 👉 **[COMPATIBILITY.md](https://github.com/jkomyno/esmwell/blob/main/COMPATIBILITY.md)** is the full reference: every entry in MDN's standard built-ins index, the `node:process` contract, the Vitest/Jest workspace boundaries, and an FAQ.
 
-## Contributing
+### Choosing the right tool
 
-See [CONTRIBUTING.md](https://github.com/jkomyno/esmwell/blob/main/CONTRIBUTING.md) for setup, checks, and the release procedure.
+| Tool                                                        | Best for                                                                                | Execution model                                                                                             | Packages and environment                                                                                          |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **esmwell**                                                 | Running unbundled ESM in a page: snippets, persistent REPLs, and Vitest/Jest workspaces | Executes real ESM in browser workers with hard timeout recovery; worker isolation is not a security sandbox | Resolves bare imports through esm.sh; browser APIs, no virtual filesystem or general Node.js runtime              |
+| [**callscript**](https://github.com/vercel-labs/callscript) | AI-authored tool workflows that need bounded, inspectable, resumable plans              | Parses a constrained JavaScript surface into inert JSON; only host-provided tools execute                   | Mounts tools through plain adapters, the AI SDK, or MCP; it does not execute arbitrary JavaScript or npm packages |
+| [**almostnode**](https://github.com/macaly/almostnode)      | Node-style browser development environments and playgrounds                             | Executes code on the main thread, in a worker, or through its separately deployed cross-origin sandbox      | Provides a virtual filesystem, Node.js API shims, npm installation, CLIs, and Vite/Next.js dev servers            |
 
-Every claim above is exercised by the suite. `pnpm test` stays offline and deterministic with data-URL imports only; a real-browser harness ([`scripts/browser-test.ts`](https://github.com/jkomyno/esmwell/blob/main/packages/esmwell/scripts/browser-test.ts), run with `bun`) serves the built package, drives it in a headless browser, and exercises the real workers against esm.sh.
+`callscript` and esmwell both parse JavaScript with Acorn and validate it before work begins, but only esmwell goes on to execute the submitted module. `almostnode` is the closer runtime alternative: choose it when Node.js compatibility is the requirement, and esmwell when ESM-native execution, a persistent REPL, or a focused test-workspace API is the requirement.
+
+## Recipes
+
+Longer, verified examples live in the repository:
+
+- [**Effect v4 beta**](https://github.com/jkomyno/esmwell/blob/main/docs/recipes/effect.md): the program from the demo above, the `beta` tag, `process` expectations, and the ledger of Effect entrypoints that need host services a browser worker cannot provide.
+- [**WebAssembly packages**](https://github.com/jkomyno/esmwell/blob/main/docs/recipes/webassembly.md): rendering a PNG with `@cf-wasm/og`, `resvg`, and `satori` from the browser worker.
+- [**Composition primitives**](https://github.com/jkomyno/esmwell/blob/main/docs/recipes/composition.md): `parseUserModule`, `checkPolicy`, `collectBareSpecifiers`, `resolveDependencies`, and the `esmwell/utils` helpers for hosts that build their own pipeline.
+
+The shortest Effect example, using the `beta` tag because esm.sh's unqualified `latest` is Effect v3:
+
+```ts
+const session = createEsmwell({ autoInstall: false, timeoutMs: 30_000 })
+
+const result = await session.runJudge(
+  `import * as Effect from 'effect@beta/Effect'
+   export const solve = (name) => Effect.runPromise(Effect.succeed(\`hello, \${name}\`))`,
+  [{ name: 'greets', exportName: 'solve', args: ['esmwell'], expected: 'hello, esmwell' }],
+)
+```
 
 ## License
 
