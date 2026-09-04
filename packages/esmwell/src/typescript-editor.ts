@@ -23,6 +23,7 @@ export interface TypeScriptFileReference {
 
 export interface TypeScriptPreprocessedFileInfo {
   readonly importedFiles: readonly TypeScriptFileReference[]
+  readonly referencedFiles?: readonly TypeScriptFileReference[]
   readonly typeReferenceDirectives: readonly TypeScriptFileReference[]
 }
 
@@ -37,45 +38,37 @@ export interface TypeScriptPreprocessor {
 
 /** Editor-neutral import discovery shared by completion and type acquisition. */
 export interface TypeScriptModuleScanner {
+  preprocess(source: string): TypeScriptPreprocessedFileInfo
   moduleSpecifiers(source: string): readonly string[]
   isModuleSpecifierPosition(source: string, position: number): boolean
 }
 
-class CompilerModuleScanner implements TypeScriptModuleScanner {
-  readonly #compiler: TypeScriptPreprocessor
-  #lastPreprocessed: { readonly source: string; readonly info: TypeScriptPreprocessedFileInfo } | undefined
-
-  constructor(compiler: TypeScriptPreprocessor) {
-    this.#compiler = compiler
-  }
-
-  #preprocess(source: string): TypeScriptPreprocessedFileInfo {
-    if (this.#lastPreprocessed?.source === source) {
-      return this.#lastPreprocessed.info
+/** Adapts `typescript.preProcessFile` to the editor-neutral scanner contract. */
+export const createTypeScriptModuleScanner = (compiler: TypeScriptPreprocessor): TypeScriptModuleScanner => {
+  let latest: { readonly source: string; readonly info: TypeScriptPreprocessedFileInfo } | undefined
+  const preprocess = (source: string): TypeScriptPreprocessedFileInfo => {
+    if (latest?.source === source) {
+      return latest.info
     }
-    const info = this.#compiler.preProcessFile(source, true, true)
-    this.#lastPreprocessed = { source, info }
+    const info = compiler.preProcessFile(source, true, true)
+    latest = { source, info }
     return info
   }
-
-  moduleSpecifiers(source: string): readonly string[] {
-    const preprocessed = this.#preprocess(source)
-    return [
-      ...new Set([
-        ...preprocessed.importedFiles.map((file) => file.fileName),
-        ...preprocessed.typeReferenceDirectives.map((file) => file.fileName),
-      ]),
-    ]
-  }
-
-  isModuleSpecifierPosition(source: string, position: number): boolean {
-    return this.#preprocess(source).importedFiles.some((file) => position >= file.pos && position <= file.end)
+  return {
+    preprocess,
+    moduleSpecifiers: (source) => {
+      const result = preprocess(source)
+      return [
+        ...new Set([
+          ...result.importedFiles.map((file) => file.fileName),
+          ...result.typeReferenceDirectives.map((file) => file.fileName),
+        ]),
+      ]
+    },
+    isModuleSpecifierPosition: (source, position) =>
+      preprocess(source).importedFiles.some((file) => position >= file.pos && position <= file.end),
   }
 }
-
-/** Adapts `typescript.preProcessFile` to the editor-neutral scanner contract. */
-export const createTypeScriptModuleScanner = (compiler: TypeScriptPreprocessor): TypeScriptModuleScanner =>
-  new CompilerModuleScanner(compiler)
 
 export interface TypeScriptTypeGraph {
   readonly files: readonly TypeScriptExtraLib[]
@@ -97,6 +90,7 @@ export interface TypeScriptModuleResolution {
 interface PackageRequest {
   readonly reference: PackageReference
   readonly containingFilePrefix?: string
+  readonly required?: boolean
 }
 
 interface PackageReference {
@@ -198,6 +192,17 @@ const packageReference = (specifier: string): PackageReference | null => {
   }
 }
 
+const typeReference = (specifier: string): PackageReference | null => {
+  const reference = packageReference(specifier)
+  if (!reference || reference.subpath || reference.packageName.startsWith('@types/')) {
+    return reference
+  }
+  const packageName = reference.packageName.startsWith('@')
+    ? `@types/${reference.packageName.slice(1).replace('/', '__')}`
+    : `@types/${reference.packageName}`
+  return { ...reference, packageName }
+}
+
 const asRecord = (value: unknown): UnknownRecord | undefined =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as UnknownRecord) : undefined
 
@@ -223,7 +228,7 @@ const metadataFrom = (value: unknown): PackageMetadata | null => {
   } catch {
     return null
   }
-  if (tarballUrl.origin !== NPM_REGISTRY_ORIGIN || tarballUrl.protocol !== 'https:') {
+  if (tarballUrl.origin !== NPM_REGISTRY_ORIGIN) {
     return null
   }
   return {
@@ -436,7 +441,7 @@ export const typeResolutionKey = (specifier: string, containingFilePrefix?: stri
   `${containingFilePrefix ?? ''}\0${specifier}`
 
 const packageRequestKey = (request: PackageRequest): string =>
-  `${request.containingFilePrefix ?? ''}\0${request.reference.packageName}@${request.reference.versionReference}/${request.reference.subpath}`
+  `${request.required ? '!' : ''}${request.containingFilePrefix ?? ''}\0${request.reference.packageName}@${request.reference.versionReference}/${request.reference.subpath}`
 
 export interface TypeScriptTypeAcquirerOptions {
   /** Import scanner, usually created from the host's TypeScript compiler. */
@@ -464,22 +469,26 @@ export class TypeScriptTypeAcquirer {
 
   /** Returns cached graphs by their bare-import set; incomplete graphs are retried. */
   async acquire(source: string): Promise<TypeScriptTypeGraph> {
-    const references = this.#scanner
-      .moduleSpecifiers(source)
-      .map(packageReference)
-      .filter((reference) => reference !== null)
-    if (references.length === 0) {
+    const preprocessed = this.#scanner.preprocess(source)
+    const requests = [
+      ...preprocessed.importedFiles.map((file) => ({ reference: packageReference(file.fileName) })),
+      ...preprocessed.typeReferenceDirectives.map((file) => ({
+        reference: typeReference(file.fileName),
+        required: true as const,
+      })),
+    ].filter((request): request is PackageRequest => request.reference !== null)
+    if (!requests.length) {
       return EMPTY_GRAPH
     }
-    const graphKey = references
-      .map((reference) => reference.original)
+    const graphKey = requests
+      .map((request) => `${request.required ? '!' : ''}${request.reference.original}`)
       .toSorted()
       .join('\0')
     const cached = recent(this.#graphs, graphKey)
     if (cached !== undefined) {
       return cached
     }
-    const pending = this.#acquire(references)
+    const pending = this.#acquire(requests)
     remember(this.#graphs, graphKey, pending, MAX_CACHED_GRAPHS)
     void pending.then(
       (graph) => {
@@ -496,7 +505,7 @@ export class TypeScriptTypeAcquirer {
     return pending
   }
 
-  async #acquire(initialReferences: readonly PackageReference[]): Promise<TypeScriptTypeGraph> {
+  async #acquire(initialRequests: readonly PackageRequest[]): Promise<TypeScriptTypeGraph> {
     const queue: PackageRequest[] = []
     const queuedRequests = new Set<string>()
     const enqueue = (request: PackageRequest): void => {
@@ -506,34 +515,40 @@ export class TypeScriptTypeAcquirer {
         queue.push(request)
       }
     }
-    for (const reference of initialReferences) {
-      enqueue({ reference })
+    for (const request of initialRequests) {
+      enqueue(request)
     }
     const files = new Map<string, TypeScriptExtraLib>()
     const resolutions = new Map<string, TypeScriptModuleResolution>()
     const visitedRoots = new Set<string>()
     const visitedDeclarations = new Set<string>()
     const localArchives = new Map<string, Promise<PackageArchive | null>>()
+    const loadArchive = (reference: PackageReference): Promise<PackageArchive | null> => {
+      const archiveKey = `${reference.packageName}@${reference.versionReference}`
+      const pendingArchive = localArchives.get(archiveKey) ?? this.#archive(reference)
+      localArchives.set(archiveKey, pendingArchive)
+      return pendingArchive
+    }
     let complete = true
     let packages = 0
 
-    while (queue.length > 0 && files.size < MAX_DECLARATION_FILES && packages < MAX_PACKAGES_PER_GRAPH) {
+    while (queue.length && files.size < MAX_DECLARATION_FILES && packages < MAX_PACKAGES_PER_GRAPH) {
       const request = queue.shift()
       if (request === undefined) {
         continue
       }
       const { reference } = request
       packages += 1
-      const archiveKey = `${reference.packageName}@${reference.versionReference}`
-      const pendingArchive = localArchives.get(archiveKey) ?? this.#archive(reference)
-      localArchives.set(archiveKey, pendingArchive)
-      const archive = await pendingArchive
+      const archive = await loadArchive(reference)
       if (archive === null) {
         complete = false
         continue
       }
       const root = rootDeclaration(reference, archive)
       if (root === undefined) {
+        if (request.required) {
+          complete = false
+        }
         continue
       }
       const rootKey = `${archive.metadata.name}@${archive.metadata.version}/${root}`
@@ -548,7 +563,7 @@ export class TypeScriptTypeAcquirer {
       }
       visitedRoots.add(rootKey)
       const declarationQueue = [root]
-      while (declarationQueue.length > 0 && files.size < MAX_DECLARATION_FILES) {
+      while (declarationQueue.length && files.size < MAX_DECLARATION_FILES) {
         const declaration = declarationQueue.shift()
         if (declaration === undefined) {
           continue
@@ -564,15 +579,41 @@ export class TypeScriptTypeAcquirer {
         }
         const fileName = virtualFileName(archive, declaration)
         files.set(fileName, { fileName, content })
-        for (const dependency of this.#scanner.moduleSpecifiers(content)) {
-          if (dependency.startsWith('.')) {
-            const relative = relativeDeclaration(dependency, declaration, archive.declarations)
+        const preprocessed = this.#scanner.preprocess(content)
+        for (const pathReference of preprocessed.referencedFiles ?? []) {
+          const relative = relativeDeclaration(pathReference.fileName, declaration, archive.declarations)
+          if (relative === undefined) {
+            complete = false
+          } else {
+            declarationQueue.push(relative)
+          }
+        }
+        const dependencies: Array<{
+          readonly specifier: string
+          readonly reference: PackageReference | null
+          readonly required?: boolean
+        }> = [
+          ...preprocessed.importedFiles.map((file) => ({
+            specifier: file.fileName,
+            reference: packageReference(file.fileName),
+          })),
+          ...preprocessed.typeReferenceDirectives.map((file) => ({
+            specifier: file.fileName,
+            reference: typeReference(file.fileName),
+            required: true as const,
+          })),
+        ]
+        for (const dependency of dependencies) {
+          if (dependency.specifier.startsWith('.')) {
+            const relative = relativeDeclaration(dependency.specifier, declaration, archive.declarations)
             if (relative !== undefined) {
               declarationQueue.push(relative)
+            } else {
+              complete = false
             }
             continue
           }
-          const dependencyReference = packageReference(dependency)
+          const dependencyReference = dependency.reference
           if (dependencyReference === null || dependencyReference.packageName === 'node') {
             continue
           }
@@ -602,15 +643,16 @@ export class TypeScriptTypeAcquirer {
                   : requestedVersion,
             },
             containingFilePrefix: virtualPackagePrefix(archive),
+            required: dependency.required,
           })
         }
       }
-      if (declarationQueue.length > 0) {
+      if (declarationQueue.length) {
         complete = false
       }
     }
 
-    if (queue.length > 0) {
+    if (queue.length) {
       complete = false
     }
 
@@ -634,22 +676,19 @@ export class TypeScriptTypeAcquirer {
     })
   }
 
-  async #request(input: string | URL): Promise<Response> {
+  #request(input: string | URL): Promise<Response> {
     const controller = new AbortController()
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<never>((_resolve, reject) => {
-      timeoutId = setTimeout(() => {
+    return new Promise<Response>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
         controller.abort()
-        reject(new Error('Type acquisition request timed out'))
+        reject(new Error())
       }, this.#fetchTimeoutMs)
+      void this.#fetch(input, { signal: controller.signal })
+        .then(resolve, reject)
+        .finally(() => {
+          clearTimeout(timeoutId)
+        })
     })
-    try {
-      return await Promise.race([this.#fetch(input, { signal: controller.signal }), timeout])
-    } finally {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId)
-      }
-    }
   }
 
   async #loadMetadata(reference: PackageReference): Promise<PackageMetadata | null> {

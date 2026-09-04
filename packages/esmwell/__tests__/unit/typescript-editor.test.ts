@@ -61,6 +61,7 @@ describe('TypeScriptTypeAcquirer', () => {
     const effectArchive = await gzip(
       tar({
         'package/dist/dts/Schema.d.ts': `
+          /// <reference path="./Referenced.d.ts" />
           import type { LazyArg } from "effect/Function"
           import type { StandardSchemaV1 } from "@standard-schema/spec"
           export declare const Struct: <A>(fields: A) => {
@@ -70,6 +71,7 @@ describe('TypeScriptTypeAcquirer', () => {
           }
         `,
         'package/dist/dts/Function.d.ts': 'export type LazyArg<A> = () => A',
+        'package/dist/dts/Referenced.d.ts': 'export interface Referenced { readonly value: string }',
       }),
     )
     const zodArchive = await gzip(
@@ -145,6 +147,7 @@ describe('TypeScriptTypeAcquirer', () => {
 
     expect(graph.files.map((file) => file.fileName)).toEqual([
       '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Schema.d.ts',
+      '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Referenced.d.ts',
       '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Function.d.ts',
       '/node_modules/.esmwell-types/zod@4.1.5/index.d.ts',
       '/node_modules/.esmwell-types/@standard-schema/spec@1.0.0/index.d.ts',
@@ -172,6 +175,49 @@ describe('TypeScriptTypeAcquirer', () => {
     expect(graph.complete).toBe(true)
     expect(cachedGraph).toBe(graph)
     expect(fetchType).toHaveBeenCalledTimes(9)
+  })
+
+  it('falls back to DefinitelyTyped packages for type-reference directives', async () => {
+    const nodeTypesArchive = await gzip(
+      tar({
+        'package/index.d.ts': 'declare global { var process: { readonly browser: true } }\nexport {}',
+      }),
+    )
+    const responses = new Map<string, () => Response>([
+      [
+        'https://data.jsdelivr.com/v1/package/resolve/npm/@types/node@latest',
+        () => jsonResponse({ version: '24.0.0' }),
+      ],
+      [
+        'https://registry.npmjs.org/%40types%2Fnode/24.0.0',
+        () =>
+          jsonResponse({
+            name: '@types/node',
+            version: '24.0.0',
+            types: './index.d.ts',
+            dist: { tarball: 'https://registry.npmjs.org/@types/node/-/node-24.0.0.tgz' },
+          }),
+      ],
+      ['https://registry.npmjs.org/@types/node/-/node-24.0.0.tgz', () => new Response(nodeTypesArchive)],
+    ])
+    const fetchType = vi.fn<(input: string | URL) => Promise<Response>>(async (input): Promise<Response> => {
+      const response = responses.get(String(input))
+      return response?.() ?? new Response(null, { status: 404 })
+    })
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
+
+    const graph = await acquirer.acquire('/// <reference types="node" />\nexport {}')
+
+    expect(graph).toMatchObject({
+      complete: true,
+      files: [{ fileName: '/node_modules/.esmwell-types/@types/node@24.0.0/index.d.ts' }],
+      resolutions: [
+        {
+          specifier: 'node',
+          fileName: '/node_modules/.esmwell-types/@types/node@24.0.0/index.d.ts',
+        },
+      ],
+    })
   })
 
   it('retries a package graph after a transient metadata failure', async () => {
