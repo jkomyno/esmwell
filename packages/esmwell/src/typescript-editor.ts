@@ -277,11 +277,7 @@ const tarEntries = (bytes: Uint8Array): ReadonlyMap<string, string> => {
     } else if (type === '0' || type === '\0') {
       const path = (nextPath ?? headerPath).replace(/^package\//u, '')
       nextPath = undefined
-      if (
-        !path.startsWith('/') &&
-        !path.split('/').includes('..') &&
-        (/\.d\.[cm]?ts$/iu.test(path) || path === 'package.json')
-      ) {
+      if (!path.startsWith('/') && !path.split('/').includes('..') && /\.d\.[cm]?ts$/iu.test(path)) {
         declarations.set(path, new TextDecoder().decode(body))
       }
     } else {
@@ -425,7 +421,7 @@ const relativeDeclaration = (
   importer: string,
   declarations: ReadonlyMap<string, string>,
 ): string | undefined => {
-  const target = new URL(specifier, `https://types.invalid/${importer}`).pathname.slice(1)
+  const target = new URL(specifier, `https://x/${importer}`).pathname.slice(1)
   return declarationTarget(target).find((candidate) => declarations.has(candidate))
 }
 
@@ -588,34 +584,22 @@ export class TypeScriptTypeAcquirer {
             declarationQueue.push(relative)
           }
         }
-        const dependencies: Array<{
-          readonly specifier: string
-          readonly reference: PackageReference | null
-          readonly required?: boolean
-        }> = [
-          ...preprocessed.importedFiles.map((file) => ({
-            specifier: file.fileName,
-            reference: packageReference(file.fileName),
-          })),
-          ...preprocessed.typeReferenceDirectives.map((file) => ({
-            specifier: file.fileName,
-            reference: typeReference(file.fileName),
-            required: true as const,
-          })),
-        ]
-        for (const dependency of dependencies) {
-          if (dependency.specifier.startsWith('.')) {
-            const relative = relativeDeclaration(dependency.specifier, declaration, archive.declarations)
+        const visitDependency = (
+          specifier: string,
+          dependencyReference: PackageReference | null,
+          required?: boolean,
+        ): void => {
+          if (specifier.startsWith('.')) {
+            const relative = relativeDeclaration(specifier, declaration, archive.declarations)
             if (relative !== undefined) {
               declarationQueue.push(relative)
             } else {
               complete = false
             }
-            continue
+            return
           }
-          const dependencyReference = dependency.reference
           if (dependencyReference === null || dependencyReference.packageName === 'node') {
-            continue
+            return
           }
           if (dependencyReference.packageName === archive.metadata.name) {
             const dependencyRoot = rootDeclaration(dependencyReference, archive)
@@ -631,7 +615,7 @@ export class TypeScriptTypeAcquirer {
               )
               declarationQueue.push(dependencyRoot)
             }
-            continue
+            return
           }
           const requestedVersion = archive.metadata.dependencies[dependencyReference.packageName]
           enqueue({
@@ -643,8 +627,14 @@ export class TypeScriptTypeAcquirer {
                   : requestedVersion,
             },
             containingFilePrefix: virtualPackagePrefix(archive),
-            required: dependency.required,
+            required,
           })
+        }
+        for (const file of preprocessed.importedFiles) {
+          visitDependency(file.fileName, packageReference(file.fileName))
+        }
+        for (const file of preprocessed.typeReferenceDirectives) {
+          visitDependency(file.fileName, typeReference(file.fileName), true)
         }
       }
       if (declarationQueue.length) {
@@ -727,6 +717,7 @@ export class TypeScriptTypeAcquirer {
     try {
       const response = await this.#request(metadata.tarballUrl)
       if (!response.ok || response.body === null || exceedsContentLength(response, MAX_ARCHIVE_BYTES)) {
+        await response.body?.cancel()
         return null
       }
       const compressed = await readBounded(response.body, MAX_ARCHIVE_BYTES)

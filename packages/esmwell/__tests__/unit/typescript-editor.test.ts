@@ -11,7 +11,7 @@ const writeText = (target: Uint8Array, offset: number, value: string): void => {
   target.set(new TextEncoder().encode(value), offset)
 }
 
-const tar = (files: Readonly<Record<string, string>>): Uint8Array => {
+const tar = (files: Readonly<Record<string, string>>): Uint8Array<ArrayBuffer> => {
   const encoder = new TextEncoder()
   const entries = Object.entries(files).map(([name, content]) => ({ name, bytes: encoder.encode(content) }))
   const size = entries.reduce((total, entry) => total + 512 + Math.ceil(entry.bytes.length / 512) * 512, 1_024)
@@ -27,10 +27,8 @@ const tar = (files: Readonly<Record<string, string>>): Uint8Array => {
   return archive
 }
 
-const gzip = async (bytes: Uint8Array): Promise<ArrayBuffer> => {
-  const buffer = new ArrayBuffer(bytes.byteLength)
-  new Uint8Array(buffer).set(bytes)
-  const stream = new Blob([buffer]).stream().pipeThrough(new CompressionStream('gzip'))
+const gzip = async (bytes: Uint8Array<ArrayBuffer>): Promise<ArrayBuffer> => {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
   return new Response(stream).arrayBuffer()
 }
 
@@ -249,6 +247,39 @@ describe('TypeScriptTypeAcquirer', () => {
       files: [{ fileName: '/node_modules/.esmwell-types/example@1.0.0/index.d.ts' }],
     })
     expect(fetchType).toHaveBeenCalledTimes(4)
+  })
+
+  it('cancels archive responses rejected by declared size before returning an incomplete graph', async () => {
+    let bodyCancelled = false
+    const oversizedBody = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        controller.enqueue(new Uint8Array([31, 139]))
+      },
+      cancel: () => {
+        bodyCancelled = true
+      },
+    })
+    const fetchType = vi.fn<(input: string | URL) => Promise<Response>>(async (input): Promise<Response> => {
+      switch (String(input)) {
+        case 'https://data.jsdelivr.com/v1/package/resolve/npm/example@latest':
+          return jsonResponse({ version: '1.0.0' })
+        case 'https://registry.npmjs.org/example/1.0.0':
+          return jsonResponse({
+            name: 'example',
+            version: '1.0.0',
+            types: './index.d.ts',
+            dist: { tarball: 'https://registry.npmjs.org/example/-/example-1.0.0.tgz' },
+          })
+        case 'https://registry.npmjs.org/example/-/example-1.0.0.tgz':
+          return new Response(oversizedBody, { headers: { 'content-length': '24000001' } })
+        default:
+          return new Response(null, { status: 404 })
+      }
+    })
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
+
+    await expect(acquirer.acquire("import 'example'")).resolves.toMatchObject({ complete: false, files: [] })
+    expect(bodyCancelled).toBe(true)
   })
 
   it('aborts a stalled package request at the acquisition deadline', async () => {
