@@ -6,18 +6,12 @@ Only `packages/esmwell` may be published. The root workspace and demo applicatio
 
 `pnpm release:verify` runs lint, typechecking, tests, a clean package build, export validation, the size budget, the packed-consumer build, and the Chrome browser suite. The release workflow runs it in a separate job that holds no publish credentials. The publish job then runs `pnpm release`, which rebuilds the package and calls `changeset publish` and nothing else. No long-lived npm token is required once trusted publishing is configured.
 
-## First release
+## Trusted publishing
 
-The GitHub release workflow is intentionally disabled before the first release. Before publishing, make the repository public, enable GitHub private vulnerability reporting, and confirm GitHub Actions can start jobs.
+npm trusts the GitHub Actions workflow `jkomyno/esmwell/.github/workflows/release.yaml` to publish `esmwell`. The publish job runs on a GitHub-hosted runner with `id-token: write`, so npm exchanges GitHub's short-lived OIDC identity for publish access and records provenance. Do not add an `NPM_TOKEN` secret.
 
-1. Run `pnpm version-packages`, review the generated version and changelog, and commit them as `chore: version packages`.
-2. Verify and publish once without provenance in one command:
+GitHub Actions must retain permission to create pull requests in the repository settings because the Changesets action maintains the version PR.
 
-   ```bash
-   pnpm release:verify && pnpm -C packages/esmwell publish --access public --no-git-checks --provenance=false
-   ```
-
-   This creates the npm package. Later releases use trusted publishing instead.
-
-3. In the npm package settings, add a GitHub Actions trusted publisher for repository `jkomyno/esmwell` and workflow `release.yaml`.
-4. Remove only the `if: false` guard from `.github/workflows/release.yaml`.
+1. Add a Changeset with the implementation and merge it to `main`.
+2. Review and merge the `chore: version packages` pull request created or updated by the release workflow.
+3. Confirm the next release run published the expected version, npm dist-tag, provenance, Git tag, and GitHub release.
