@@ -1,16 +1,16 @@
 import type { Node, Program } from 'acorn'
 import { applyEdits, quoteString } from './edits'
 import type { SourceEdit } from './edits'
+import { moduleGraphCacheName } from './module-graph-cache'
 import { parseUserModule } from './parse'
 import { checkPolicy } from './policy'
-import { resolveImportSpecifier, SpecifierResolutionError } from './resolve'
+import { lookupOwnString, resolveImportSpecifier, SpecifierResolutionError } from './resolve'
 import type { ResolvedDependency, ResolveOptions } from './resolve'
 import { readNodeChild, readNodeString, walkNodes } from './walk'
 
+export { moduleGraphCacheName } from './module-graph-cache'
+
 const GRAPH_DIRECTORY = '__esmwell_graphs__/v1/'
-// Keep the v1 cache key stable while older pages and service workers can still
-// control one another during a rolling deployment.
-const CACHE_PREFIX = 'esmwell:test-graph:v1:'
 const INTERNAL_MODULE_PREFIX = '__esmwell_internal__/'
 const JAVASCRIPT_TYPE = 'text/javascript; charset=utf-8'
 
@@ -35,9 +35,6 @@ export interface MaterializedModuleGraph {
   readonly cacheName: string
   cleanup(): Promise<boolean>
 }
-
-/** Cache name shared with the narrowly scoped module service worker. */
-export const moduleGraphCacheName = (graphId: string): string => `${CACHE_PREFIX}${graphId}`
 
 /**
  * Validates, rewrites, and stores every virtual module before any entry is
@@ -165,11 +162,13 @@ const resolveGraphSpecifier = (
   if (context.moduleIdSet.has(localId)) {
     return { url: context.moduleUrl(localId) }
   }
-  const aliasId = lookupOwnString(context.specifierAliases, specifier)
+  const aliasId =
+    context.specifierAliases === undefined ? undefined : lookupOwnString(context.specifierAliases, specifier)
   if (aliasId !== undefined) {
     return { url: context.moduleUrl(aliasId) }
   }
-  const blockedMessage = lookupOwnString(context.blockedSpecifiers, specifier)
+  const blockedMessage =
+    context.blockedSpecifiers === undefined ? undefined : lookupOwnString(context.blockedSpecifiers, specifier)
   if (blockedMessage !== undefined) {
     throw new SpecifierResolutionError('unsupported', specifier, blockedMessage)
   }
@@ -180,14 +179,6 @@ const resolveGraphSpecifier = (
     throw missingLocalModule(localId, importerId)
   }
   return resolveImportSpecifier(specifier, context)
-}
-
-const lookupOwnString = (record: Readonly<Record<string, string>> | undefined, key: string): string | undefined => {
-  if (record === undefined || !Object.hasOwn(record, key)) {
-    return undefined
-  }
-  const value = record[key]
-  return typeof value === 'string' ? value : undefined
 }
 
 const resolveRelativeModuleId = (importerId: string, specifier: string): string => {

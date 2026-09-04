@@ -1,4 +1,5 @@
 import type { ConsoleChunk, JudgeCase, JudgeRunResult, ReplResult, SerializedError, WorkerResponse } from './types'
+import { moduleGraphCacheName } from './module-graph-cache'
 import type { ModuleProject, ModuleProjectModules, ModuleProjectResult } from './module-project'
 import type { TestModules, TestRun, TestRunResult } from './test-types'
 import type { SourceTransform, SourceTransformContext } from './transform'
@@ -223,12 +224,12 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
       const deadline = startedAt + timeoutMs
       try {
         const modules = await transformGraphModules(options.transform, run.modules, 'test')
-        const outcome = await requestModuleGraphWorker(
+        const outcome = await requestModuleGraphWorker({
           options,
           deadline,
           timeoutMs,
-          'test-worker-entry.mjs',
-          (graphId, serviceWorkerScope) => ({
+          defaultWorkerFile: 'test-worker-entry.mjs',
+          createRequest: (graphId, serviceWorkerScope) => ({
             kind: 'test',
             run: { ...run, modules },
             graphId,
@@ -236,9 +237,9 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
             ...(options.deps === undefined ? {} : { deps: options.deps }),
             ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
           }),
-          'test-result',
+          resultKind: 'test-result',
           handlers,
-        )
+        })
         return asTestResult(outcome, timeoutMs)
       } catch (error) {
         return {
@@ -275,12 +276,12 @@ export function createModuleProjectSession(options: ModuleProjectSessionOptions 
       const deadline = startedAt + timeoutMs
       try {
         const modules = await transformGraphModules(options.transform, project.modules, 'project')
-        const outcome = await requestModuleGraphWorker(
+        const outcome = await requestModuleGraphWorker({
           options,
           deadline,
           timeoutMs,
-          'project-worker-entry.mjs',
-          (graphId, serviceWorkerScope) => ({
+          defaultWorkerFile: 'project-worker-entry.mjs',
+          createRequest: (graphId, serviceWorkerScope) => ({
             kind: 'module-project',
             project: { ...project, modules },
             graphId,
@@ -288,9 +289,9 @@ export function createModuleProjectSession(options: ModuleProjectSessionOptions 
             ...(options.deps === undefined ? {} : { deps: options.deps }),
             ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
           }),
-          'module-project-result',
+          resultKind: 'module-project-result',
           handlers,
-        )
+        })
         return asModuleProjectResult(outcome, timeoutMs)
       } catch (error) {
         return {
@@ -775,15 +776,25 @@ type ModuleGraphSessionOptions = TestSessionOptions | ModuleProjectSessionOption
 
 type ModuleGraphRequestFactory = (graphId: string, serviceWorkerScope: string) => Omit<WorkerRequestShape, 'id'>
 
-const requestModuleGraphWorker = async (
-  options: ModuleGraphSessionOptions,
-  deadline: number,
-  timeoutMs: number,
-  defaultWorkerFile: string,
-  createRequest: ModuleGraphRequestFactory,
-  resultKind: PendingRequest['resultKind'],
-  handlers: ConsoleStreamHandlers | undefined,
-): Promise<TransportOutcome> => {
+interface ModuleGraphWorkerRequestOptions {
+  readonly options: ModuleGraphSessionOptions
+  readonly deadline: number
+  readonly timeoutMs: number
+  readonly defaultWorkerFile: string
+  readonly createRequest: ModuleGraphRequestFactory
+  readonly resultKind: PendingRequest['resultKind']
+  readonly handlers: ConsoleStreamHandlers | undefined
+}
+
+const requestModuleGraphWorker = async ({
+  options,
+  deadline,
+  timeoutMs,
+  defaultWorkerFile,
+  createRequest,
+  resultKind,
+  handlers,
+}: ModuleGraphWorkerRequestOptions): Promise<TransportOutcome> => {
   const graphId = createGraphId()
   let transport: WorkerTransport | undefined
   try {
@@ -921,7 +932,7 @@ const deleteModuleGraphCache = async (graphId: string): Promise<void> => {
   if (typeof caches === 'undefined') {
     return
   }
-  const cacheName = `esmwell:test-graph:v1:${graphId}`
+  const cacheName = moduleGraphCacheName(graphId)
   for (let attempt = 0; attempt < MODULE_GRAPH_CACHE_DELETE_ATTEMPTS; attempt += 1) {
     await caches.delete(cacheName)
     if (!(await caches.has(cacheName))) {

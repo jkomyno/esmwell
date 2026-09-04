@@ -1,5 +1,5 @@
-// Asserts the gzip size of the published minified ESM build outputs stays
-// within the runner's budget; acorn stays external (excluded by design).
+// Asserts the gzip size of the published minified runner-core ESM build outputs
+// stays within budget; acorn stays external (excluded by design).
 import { readdirSync, readFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { dirname, join } from 'node:path'
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const buildDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'build')
 const budgetBytes = 30 * 1024
+const nonRunnerOutputs = new Set(['typescript-editor.mjs'])
 
 const outputs = readdirSync(buildDir).filter((file) => file.endsWith('.mjs'))
 if (outputs.length === 0) {
@@ -17,6 +18,10 @@ if (outputs.length === 0) {
 let totalBytes = 0
 for (const file of outputs) {
   const gzipped = gzipSync(readFileSync(join(buildDir, file))).length
+  if (nonRunnerOutputs.has(file)) {
+    console.log(`  ${file}: ${(gzipped / 1024).toFixed(2)} KB gzipped (excluded: opt-in editor kit)`)
+    continue
+  }
   totalBytes += gzipped
   console.log(`  ${file}: ${(gzipped / 1024).toFixed(2)} KB gzipped`)
 }

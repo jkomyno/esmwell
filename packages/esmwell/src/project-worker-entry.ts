@@ -1,6 +1,6 @@
 import { installBrowserProcess } from './browser-process'
 import { serializeError } from './bootstrap'
-import { protectConsole, serializeValue } from './console'
+import { protectConsole } from './console'
 import { runModuleProjectInRealm } from './module-project'
 import type { ModuleProjectResult } from './module-project'
 import type { ModuleProjectRequest, WorkerResponse } from './types'
@@ -48,32 +48,11 @@ const postResult = (id: number, result: ModuleProjectResult): void => {
   if (tryPost(response)) {
     return
   }
-  const preview = {
-    ...response,
-    result: {
-      ...result,
-      exports: Object.fromEntries(
-        Object.entries(result.exports).map(([name, value]) => [name, cloneableOrPreview(value)]),
-      ),
-    },
-  } satisfies WorkerResponse
-  if (tryPost(preview)) {
-    return
-  }
   tryPost({
     kind: 'module-project-result',
     id,
     result: projectErrorResult(new Error('module-project worker response could not be sent to the main thread')),
   })
-}
-
-const cloneableOrPreview = (value: unknown): unknown => {
-  try {
-    structuredClone(value)
-    return value
-  } catch {
-    return serializeValue(value)
-  }
 }
 
 const tryPost = (response: WorkerResponse): boolean => {

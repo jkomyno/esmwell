@@ -76,6 +76,13 @@
         "default": "./build/typescript.mjs"
       }
     },
+    "./typescript-editor": {
+      "import": {
+        "@jkomyno/source": "./src/typescript-editor.ts",
+        "types": "./build/typescript-editor.d.mts",
+        "default": "./build/typescript-editor.mjs"
+      }
+    },
     "./worker-entry": {
       "import": {
         "@jkomyno/source": "./src/worker-entry.ts",

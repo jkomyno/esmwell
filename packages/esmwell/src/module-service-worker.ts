@@ -1,5 +1,6 @@
+import { moduleGraphCacheName } from './module-graph-cache'
+
 const GRAPH_PATH_MARKER = '/__esmwell_graphs__/v1/'
-const CACHE_PREFIX = 'esmwell:test-graph:v1:'
 
 interface ServiceWorkerScopeLike {
   skipWaiting(): Promise<void>
@@ -34,7 +35,7 @@ scope.addEventListener('fetch', (event): void => {
   }
   event.respondWith(
     caches
-      .match(event.request, { cacheName: `${CACHE_PREFIX}${graphId}` })
+      .match(event.request, { cacheName: moduleGraphCacheName(graphId) })
       .then((response) => response ?? new Response('virtual module not found', { status: 404 })),
   )
 })

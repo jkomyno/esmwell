@@ -239,7 +239,7 @@ const assertValidInlineVersion = (specifier: string, version: string | undefined
 }
 
 /** Own-property lookup that requires a string value and ignores anything found via the prototype chain (e.g. `constructor`, `toString`, `__proto__`). */
-const lookupOwnString = (record: Readonly<Record<string, string>>, key: string): string | undefined => {
+export const lookupOwnString = (record: Readonly<Record<string, string>>, key: string): string | undefined => {
   if (!Object.hasOwn(record, key)) {
     return undefined
   }

@@ -210,15 +210,8 @@ const resolveExecutionWorkerUrl = (request: ExecutableRequest, fallback: string)
   return resolved.href
 }
 
-const finalResponseKind = (request: ExecutableRequest): FinalResponse['kind'] => {
-  if (request.kind === 'judge') {
-    return 'result'
-  }
-  if (request.kind === 'repl-input') {
-    return 'repl-result'
-  }
-  return 'test-result'
-}
+const finalResponseKind = (request: ExecutableRequest): 'result' | 'repl-result' =>
+  request.kind === 'judge' ? 'result' : 'repl-result'
 
 const failureResponse = (
   request: WorkerRequest,

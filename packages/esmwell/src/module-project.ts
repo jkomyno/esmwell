@@ -1,5 +1,5 @@
-import { serializeError } from './bootstrap'
-import { installConsoleCapture } from './console'
+import { elapsedMs, serializeError } from './bootstrap'
+import { installConsoleCapture, serializeValue } from './console'
 import { materializeModuleGraph } from './module-graph'
 import type { ResolveOptions } from './resolve'
 import type { ResolvedDependency } from './resolve'
@@ -69,7 +69,7 @@ export async function runModuleProjectInRealm(
       ok: true,
       // Module namespace objects are exotic and cannot cross postMessage even
       // when every exported value can, so copy the bindings to a plain record.
-      exports: Object.fromEntries(Object.entries(entry)),
+      exports: serializeModuleExports(entry),
       console: consoleChunks,
       dependencies: graph.dependencies,
       durationMs: elapsedMs(startedAt),
@@ -95,4 +95,14 @@ export async function runModuleProjectInRealm(
 const importUrl = async (url: string): Promise<Record<string, unknown>> =>
   (await import(/* @vite-ignore */ url)) as Record<string, unknown>
 
-const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100
+const serializeModuleExports = (module: Record<string, unknown>): Readonly<Record<string, unknown>> =>
+  Object.fromEntries(Object.entries(module).map(([name, value]) => [name, cloneableOrPreview(value)]))
+
+const cloneableOrPreview = (value: unknown): unknown => {
+  try {
+    structuredClone(value)
+    return value
+  } catch {
+    return serializeValue(value)
+  }
+}
