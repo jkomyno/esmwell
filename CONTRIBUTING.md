@@ -27,7 +27,7 @@ Changes to the runner, its built assets, or browser behavior also require:
 
 ```bash
 pnpm -C packages/esmwell run test:browser  # needs Bun and Chrome, reaches esm.sh
-pnpm -C packages/esmwell run check:size    # 30 KB gzip budget; run after pnpm build
+pnpm -C packages/esmwell run check:size    # 30 KB gzip budget over runner-core output; run after pnpm build
 pnpm -C packages/esmwell run test:pack     # installs the tarball in a temporary Vite consumer
 ```
 

@@ -11,6 +11,7 @@ export default defineConfig({
     'src/typescript-editor.ts',
     'src/worker-entry.ts',
     'src/execution-worker-entry.ts',
+    'src/project-worker-entry.ts',
     'src/test-worker-entry.ts',
     'src/module-service-worker.ts',
   ],

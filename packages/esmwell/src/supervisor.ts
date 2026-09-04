@@ -182,6 +182,12 @@ export function createWorkerSupervisor(options: SupervisorOptions): WorkerSuperv
         options.host.send(failureResponse(request, 'test requests use a directly supervised disposable worker'))
         return
       }
+      if (request.kind === 'module-project') {
+        options.host.send(
+          failureResponse(request, 'module-project requests use a directly supervised disposable worker'),
+        )
+        return
+      }
       execute(request)
     },
     close(): void {
@@ -204,15 +210,8 @@ const resolveExecutionWorkerUrl = (request: ExecutableRequest, fallback: string)
   return resolved.href
 }
 
-const finalResponseKind = (request: ExecutableRequest): FinalResponse['kind'] => {
-  if (request.kind === 'judge') {
-    return 'result'
-  }
-  if (request.kind === 'repl-input') {
-    return 'repl-result'
-  }
-  return 'test-result'
-}
+const finalResponseKind = (request: ExecutableRequest): 'result' | 'repl-result' =>
+  request.kind === 'judge' ? 'result' : 'repl-result'
 
 const failureResponse = (
   request: WorkerRequest,
@@ -238,6 +237,21 @@ const failureResponse = (
         status: 'error',
         ok: false,
         tests: [],
+        error,
+        console: consoleChunks,
+        dependencies: [],
+        durationMs: 0,
+      },
+    }
+  }
+  if (request.kind === 'module-project') {
+    return {
+      kind: 'module-project-result',
+      id: request.id,
+      result: {
+        status: 'error',
+        ok: false,
+        exports: {},
         error,
         console: consoleChunks,
         dependencies: [],

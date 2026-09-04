@@ -23,10 +23,12 @@
   "sideEffects": [
     "./src/worker-entry.ts",
     "./src/execution-worker-entry.ts",
+    "./src/project-worker-entry.ts",
     "./src/module-service-worker.ts",
     "./src/test-worker-entry.ts",
     "./build/worker-entry.mjs",
     "./build/execution-worker-entry.mjs",
+    "./build/project-worker-entry.mjs",
     "./build/module-service-worker.mjs",
     "./build/test-worker-entry.mjs"
   ],
@@ -91,6 +93,12 @@
       "import": {
         "@jkomyno/source": "./src/execution-worker-entry.ts",
         "default": "./build/execution-worker-entry.mjs"
+      }
+    },
+    "./project-worker-entry": {
+      "import": {
+        "@jkomyno/source": "./src/project-worker-entry.ts",
+        "default": "./build/project-worker-entry.mjs"
       }
     },
     "./module-service-worker": {

@@ -9,6 +9,8 @@ export type SourceTransformContext =
   | { readonly kind: 'repl' }
   /** One module of a test workspace, keyed by its canonical id. */
   | { readonly kind: 'test'; readonly id: string }
+  /** One module of a module project, keyed by its canonical id. */
+  | { readonly kind: 'project'; readonly id: string }
 
 /**
  * Rewrites submitted source on the main thread before it is posted to the

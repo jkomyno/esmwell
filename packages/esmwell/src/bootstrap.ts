@@ -202,7 +202,7 @@ const importSubmittedModule = async (
   }
 }
 
-const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100
+export const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100
 
 /**
  * The scope object every REPL module in a session shares: a transparent
