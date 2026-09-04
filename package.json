@@ -27,7 +27,7 @@
     "bench:watch": "turbo run bench:watch",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install",
-    "release:verify": "pnpm lint:ci && pnpm typecheck && pnpm test && pnpm -C packages/esmwell run verify:package && pnpm -C packages/esmwell run verify:browser",
+    "release:verify": "pnpm lint:ci && pnpm typecheck && pnpm build && pnpm test && pnpm -C packages/esmwell run verify:package && pnpm -C packages/esmwell run verify:browser",
     "release": "pnpm -C packages/esmwell run build:release && changeset publish"
   },
   "devDependencies": {
