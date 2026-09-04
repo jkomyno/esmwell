@@ -48,7 +48,7 @@ The GitHub release workflow is intentionally disabled before the first release. 
 
 For the first release:
 
-1. Run `pnpm version-packages`, review the generated `0.1.0` version and changelog, and commit them as `chore: version packages`.
+1. Run `pnpm version-packages`, review the generated version and changelog, and commit them as `chore: version packages`.
 2. Verify and publish once without provenance in one command: `pnpm release:verify && pnpm -C packages/esmwell publish --access public --no-git-checks --provenance=false`. This creates the npm package; later releases use trusted publishing instead.
 3. In the npm package settings, add a GitHub Actions trusted publisher for repository `jkomyno/esmwell` and workflow `release.yaml`.
 4. Remove only the `if: false` guard from `.github/workflows/release.yaml`.

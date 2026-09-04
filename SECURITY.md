@@ -6,6 +6,6 @@ Before the first npm release, security fixes land on `main`. After release, only
 
 ## Reporting a vulnerability
 
-Do not open a public issue. Use [GitHub private vulnerability reporting](https://github.com/jkomyno/runesm/security/advisories/new). If that form is unavailable, email the maintainer address listed in `packages/esmwell/package.json`.
+Do not open a public issue. Use [GitHub private vulnerability reporting](https://github.com/jkomyno/esmwell/security/advisories/new). If that form is unavailable, email the maintainer address listed in `packages/esmwell/package.json`.
 
 Include affected versions, reproduction steps, impact, and any suggested mitigation. Avoid including secrets or unrelated personal data.

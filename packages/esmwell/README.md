@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/esmwell?color=blue)](https://npmjs.com/package/esmwell)
 [![npm downloads](https://img.shields.io/npm/dm/esmwell?color=blue)](https://npm.chart.dev/esmwell)
 [![install size](https://badgen.net/packagephobia/install/esmwell?color=blue)](https://packagephobia.com/result?p=esmwell)
-[![license](https://img.shields.io/npm/l/esmwell?color=blue)](https://github.com/jkomyno/runesm/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/esmwell?color=blue)](https://github.com/jkomyno/esmwell/blob/main/LICENSE)
 
 Run unbundled ESM in the browser with hard timeouts, dependency resolution, and normalized results.
 
@@ -16,7 +16,7 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 - ✅ **Real Vitest and Jest engines**, loaded lazily so judge and REPL users never pay for them
 - ✅ **Small** — one runtime dependency ([acorn](https://github.com/acornjs/acorn)), 23 KB gzipped under a CI-enforced 30 KB budget, gated in Chrome
 
-👉 [Compatibility reference](https://github.com/jkomyno/runesm/blob/main/COMPATIBILITY.md) · [Contributing](https://github.com/jkomyno/runesm/blob/main/CONTRIBUTING.md)
+👉 [Compatibility reference](https://github.com/jkomyno/esmwell/blob/main/COMPATIBILITY.md) · [Contributing](https://github.com/jkomyno/esmwell/blob/main/CONTRIBUTING.md)
 
 ## Install
 
@@ -376,7 +376,7 @@ import 'esmwell/execution-worker-entry'
 
 ## Advanced: composition primitives
 
-`createEsmwell` and `createReplSession` cover the supported way to run user code. The package also exports the lower-level pieces they're built from, for hosts that want to compose their own pipeline (for example: lint submitted code without executing it, or list the bare imports a snippet would need before running it — this is how the [playground](https://github.com/jkomyno/runesm/tree/main/apps/playground) shows a dependency list before a run):
+`createEsmwell` and `createReplSession` cover the supported way to run user code. The package also exports the lower-level pieces they're built from, for hosts that want to compose their own pipeline (for example: lint submitted code without executing it, or list the bare imports a snippet would need before running it — this is how the [playground](https://github.com/jkomyno/esmwell/tree/main/apps/playground) shows a dependency list before a run):
 
 - `parseUserModule(code)` — parses into an acorn AST, throwing `UserSyntaxError` on invalid syntax.
 - `checkPolicy(ast)` — returns the `PolicyViolation`s in a parsed module (see [Policy](#policy)).
@@ -442,14 +442,14 @@ Things worth knowing before you ship:
 - Requests and results cross a structured-clone boundary, so functions, symbols, and proxies cannot be passed or returned directly.
 - CommonJS and `require()` are out of scope. Use [almostnode](https://github.com/macaly/almostnode) when Node-style execution is a requirement.
 
-👉 **[COMPATIBILITY.md](https://github.com/jkomyno/runesm/blob/main/COMPATIBILITY.md)** is the full reference: every entry in MDN's standard built-ins index, the `node:process` contract, the Vitest/Jest workspace boundaries, and an FAQ.
+👉 **[COMPATIBILITY.md](https://github.com/jkomyno/esmwell/blob/main/COMPATIBILITY.md)** is the full reference: every entry in MDN's standard built-ins index, the `node:process` contract, the Vitest/Jest workspace boundaries, and an FAQ.
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/jkomyno/runesm/blob/main/CONTRIBUTING.md) for setup, checks, and the release procedure.
+See [CONTRIBUTING.md](https://github.com/jkomyno/esmwell/blob/main/CONTRIBUTING.md) for setup, checks, and the release procedure.
 
-Every claim above is exercised by the suite. `pnpm test` stays offline and deterministic with data-URL imports only; a real-browser harness ([`scripts/browser-test.ts`](https://github.com/jkomyno/runesm/blob/main/packages/esmwell/scripts/browser-test.ts), run with `bun`) serves the built package, drives it in a headless browser, and exercises the real workers against esm.sh.
+Every claim above is exercised by the suite. `pnpm test` stays offline and deterministic with data-URL imports only; a real-browser harness ([`scripts/browser-test.ts`](https://github.com/jkomyno/esmwell/blob/main/packages/esmwell/scripts/browser-test.ts), run with `bun`) serves the built package, drives it in a headless browser, and exercises the real workers against esm.sh.
 
 ## License
 
-[MIT](https://github.com/jkomyno/runesm/blob/main/LICENSE) © [Alberto Schiabel](https://github.com/jkomyno)
+[MIT](https://github.com/jkomyno/esmwell/blob/main/LICENSE) © [Alberto Schiabel](https://github.com/jkomyno)

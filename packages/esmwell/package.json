@@ -32,12 +32,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jkomyno/runesm.git",
+    "url": "git+https://github.com/jkomyno/esmwell.git",
     "directory": "packages/esmwell"
   },
-  "homepage": "https://github.com/jkomyno/runesm#readme",
+  "homepage": "https://github.com/jkomyno/esmwell#readme",
   "bugs": {
-    "url": "https://github.com/jkomyno/runesm/issues"
+    "url": "https://github.com/jkomyno/esmwell/issues"
   },
   "author": {
     "name": "Alberto Schiabel",

@@ -3,7 +3,7 @@
   "type": "module",
   "name": "esmwell-workspace",
   "description": "Run unbundled ESM in the browser with hard timeouts and normalized results",
-  "repository": "https://github.com/jkomyno/runesm.git",
+  "repository": "https://github.com/jkomyno/esmwell.git",
   "author": {
     "name": "Alberto Schiabel",
     "email": "alberto.schiabel@gmail.com"
