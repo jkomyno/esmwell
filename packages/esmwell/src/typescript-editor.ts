@@ -1,5 +1,4 @@
-import * as ts from 'typescript-legacy'
-import { isBareSpecifier } from 'esmwell/utils'
+import { isBareSpecifier } from './resolve'
 
 const NPM_REGISTRY_ORIGIN = 'https://registry.npmjs.org'
 const NPM_VERSION_RESOLVER_ORIGIN = 'https://data.jsdelivr.com/v1/package/resolve/npm'
@@ -12,8 +11,71 @@ const MAX_CACHED_GRAPHS = 8
 const MAX_CACHED_METADATA = 16
 const TYPE_FETCH_TIMEOUT_MS = 15_000
 
-type FetchType = (input: string | URL, init?: RequestInit) => Promise<Response>
 type UnknownRecord = Record<string, unknown>
+
+export type TypeScriptTypeFetch = (input: string | URL, init?: RequestInit) => Promise<Response>
+
+export interface TypeScriptFileReference {
+  readonly fileName: string
+  readonly pos: number
+  readonly end: number
+}
+
+export interface TypeScriptPreprocessedFileInfo {
+  readonly importedFiles: readonly TypeScriptFileReference[]
+  readonly typeReferenceDirectives: readonly TypeScriptFileReference[]
+}
+
+/** The compiler capability used to discover imports without depending on TypeScript. */
+export interface TypeScriptPreprocessor {
+  preProcessFile(
+    sourceText: string,
+    readImportFiles?: boolean,
+    detectJavaScriptImports?: boolean,
+  ): TypeScriptPreprocessedFileInfo
+}
+
+/** Editor-neutral import discovery shared by completion and type acquisition. */
+export interface TypeScriptModuleScanner {
+  moduleSpecifiers(source: string): readonly string[]
+  isModuleSpecifierPosition(source: string, position: number): boolean
+}
+
+class CompilerModuleScanner implements TypeScriptModuleScanner {
+  readonly #compiler: TypeScriptPreprocessor
+  #lastPreprocessed: { readonly source: string; readonly info: TypeScriptPreprocessedFileInfo } | undefined
+
+  constructor(compiler: TypeScriptPreprocessor) {
+    this.#compiler = compiler
+  }
+
+  #preprocess(source: string): TypeScriptPreprocessedFileInfo {
+    if (this.#lastPreprocessed?.source === source) {
+      return this.#lastPreprocessed.info
+    }
+    const info = this.#compiler.preProcessFile(source, true, true)
+    this.#lastPreprocessed = { source, info }
+    return info
+  }
+
+  moduleSpecifiers(source: string): readonly string[] {
+    const preprocessed = this.#preprocess(source)
+    return [
+      ...new Set([
+        ...preprocessed.importedFiles.map((file) => file.fileName),
+        ...preprocessed.typeReferenceDirectives.map((file) => file.fileName),
+      ]),
+    ]
+  }
+
+  isModuleSpecifierPosition(source: string, position: number): boolean {
+    return this.#preprocess(source).importedFiles.some((file) => position >= file.pos && position <= file.end)
+  }
+}
+
+/** Adapts `typescript.preProcessFile` to the editor-neutral scanner contract. */
+export const createTypeScriptModuleScanner = (compiler: TypeScriptPreprocessor): TypeScriptModuleScanner =>
+  new CompilerModuleScanner(compiler)
 
 export interface TypeScriptTypeGraph {
   readonly files: readonly TypeScriptExtraLib[]
@@ -21,12 +83,12 @@ export interface TypeScriptTypeGraph {
   readonly complete: boolean
 }
 
-interface TypeScriptExtraLib {
+export interface TypeScriptExtraLib {
   readonly fileName: string
   readonly content: string
 }
 
-interface TypeScriptModuleResolution {
+export interface TypeScriptModuleResolution {
   readonly specifier: string
   readonly fileName: string
   readonly containingFilePrefix?: string
@@ -97,34 +159,6 @@ const rememberRetryable = <Key, Value>(
   })
   return pending
 }
-
-/**
- * One editor request scans the same source twice — once to place the caret, once
- * to collect its imports — so the latest scan is kept.
- */
-let lastPreprocessed: { readonly source: string; readonly info: ts.PreProcessedFileInfo } | undefined
-
-const preprocess = (source: string): ts.PreProcessedFileInfo => {
-  if (lastPreprocessed?.source === source) {
-    return lastPreprocessed.info
-  }
-  const info = ts.preProcessFile(source, true, true)
-  lastPreprocessed = { source, info }
-  return info
-}
-
-export const moduleSpecifiers = (source: string): readonly string[] => {
-  const preprocessed = preprocess(source)
-  return [
-    ...new Set([
-      ...preprocessed.importedFiles.map((file) => file.fileName),
-      ...preprocessed.typeReferenceDirectives.map((file) => file.fileName),
-    ]),
-  ]
-}
-
-export const isModuleSpecifierPosition = (source: string, position: number): boolean =>
-  preprocess(source).importedFiles.some((file) => position >= file.pos && position <= file.end)
 
 const packageReference = (specifier: string): PackageReference | null => {
   if (!isBareSpecifier(specifier)) {
@@ -404,20 +438,34 @@ export const typeResolutionKey = (specifier: string, containingFilePrefix?: stri
 const packageRequestKey = (request: PackageRequest): string =>
   `${request.containingFilePrefix ?? ''}\0${request.reference.packageName}@${request.reference.versionReference}/${request.reference.subpath}`
 
+export interface TypeScriptTypeAcquirerOptions {
+  /** Import scanner, usually created from the host's TypeScript compiler. */
+  readonly scanner: TypeScriptModuleScanner
+  /** Network implementation (default `globalThis.fetch`). */
+  readonly fetch?: TypeScriptTypeFetch
+  /** Deadline for each resolver, metadata, or archive request (default 15 seconds). */
+  readonly fetchTimeoutMs?: number
+}
+
+/** Acquires bounded, exact-version declaration graphs for bare imports in browser-authored source. */
 export class TypeScriptTypeAcquirer {
-  readonly #fetch: FetchType
+  readonly #scanner: TypeScriptModuleScanner
+  readonly #fetch: TypeScriptTypeFetch
   readonly #fetchTimeoutMs: number
   readonly #metadata = new Map<string, Promise<PackageMetadata | null>>()
   readonly #archives = new Map<string, Promise<PackageArchive | null>>()
   readonly #graphs = new Map<string, Promise<TypeScriptTypeGraph>>()
 
-  constructor(fetchType: FetchType = globalThis.fetch.bind(globalThis), fetchTimeoutMs = TYPE_FETCH_TIMEOUT_MS) {
-    this.#fetch = fetchType
-    this.#fetchTimeoutMs = fetchTimeoutMs
+  constructor(options: TypeScriptTypeAcquirerOptions) {
+    this.#scanner = options.scanner
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis)
+    this.#fetchTimeoutMs = options.fetchTimeoutMs ?? TYPE_FETCH_TIMEOUT_MS
   }
 
+  /** Returns cached graphs by their bare-import set; incomplete graphs are retried. */
   async acquire(source: string): Promise<TypeScriptTypeGraph> {
-    const references = moduleSpecifiers(source)
+    const references = this.#scanner
+      .moduleSpecifiers(source)
       .map(packageReference)
       .filter((reference) => reference !== null)
     if (references.length === 0) {
@@ -516,7 +564,7 @@ export class TypeScriptTypeAcquirer {
         }
         const fileName = virtualFileName(archive, declaration)
         files.set(fileName, { fileName, content })
-        for (const dependency of moduleSpecifiers(content)) {
+        for (const dependency of this.#scanner.moduleSpecifiers(content)) {
           if (dependency.startsWith('.')) {
             const relative = relativeDeclaration(dependency, declaration, archive.declarations)
             if (relative !== undefined) {

@@ -1,9 +1,8 @@
+import * as ts from 'typescript-legacy'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  isModuleSpecifierPosition,
-  moduleSpecifiers,
-  TypeScriptTypeAcquirer,
-} from '../../src/typescript-type-acquisition'
+import { createTypeScriptModuleScanner, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
+
+const scanner = createTypeScriptModuleScanner(ts)
 
 const jsonResponse = (value: unknown): Response =>
   new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } })
@@ -46,14 +45,14 @@ describe('moduleSpecifiers', () => {
       const zod = import('zod@4')
     `
 
-    expect(moduleSpecifiers(source)).toEqual(['effect@beta/Schema', 'zod@4', 'node'])
+    expect(scanner.moduleSpecifiers(source)).toEqual(['effect@beta/Schema', 'zod@4', 'node'])
   })
 
   it('identifies completion positions inside module specifiers', () => {
     const source = "import { z } from 'zod@4'\nz.object({})"
 
-    expect(isModuleSpecifierPosition(source, source.indexOf('zod@4') + 3)).toBe(true)
-    expect(isModuleSpecifierPosition(source, source.lastIndexOf('object') + 3)).toBe(false)
+    expect(scanner.isModuleSpecifierPosition(source, source.indexOf('zod@4') + 3)).toBe(true)
+    expect(scanner.isModuleSpecifierPosition(source, source.lastIndexOf('object') + 3)).toBe(false)
   })
 })
 
@@ -135,7 +134,7 @@ describe('TypeScriptTypeAcquirer', () => {
       const response = responses.get(String(input))
       return response?.() ?? new Response(null, { status: 404 })
     })
-    const acquirer = new TypeScriptTypeAcquirer(fetchType)
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
     const source = `
       import * as Schema from 'effect@beta/Schema'
       import { z } from 'zod@4'
@@ -196,7 +195,7 @@ describe('TypeScriptTypeAcquirer', () => {
           return new Response(null, { status: 404 })
       }
     })
-    const acquirer = new TypeScriptTypeAcquirer(fetchType)
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
 
     expect(await acquirer.acquire("import 'example'")).toMatchObject({ complete: false, files: [] })
     expect(await acquirer.acquire("import 'example'")).toMatchObject({
@@ -217,7 +216,9 @@ describe('TypeScriptTypeAcquirer', () => {
             requestSignal?.addEventListener('abort', () => reject(new Error('aborted')))
           }),
       )
-      const pending = new TypeScriptTypeAcquirer(fetchType, 10).acquire("import 'stalled'")
+      const pending = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType, fetchTimeoutMs: 10 }).acquire(
+        "import 'stalled'",
+      )
 
       await vi.advanceTimersByTimeAsync(10)
 

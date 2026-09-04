@@ -1,6 +1,13 @@
 /// <reference lib="webworker" />
 
 import { serveWorkerRpc } from 'esmwell/utils'
+import {
+  createTypeScriptModuleScanner,
+  ESMWELL_TYPES_ROOT,
+  typeResolutionKey,
+  TypeScriptTypeAcquirer,
+  type TypeScriptTypeGraph,
+} from 'esmwell/typescript-editor'
 import * as ts from 'typescript-legacy'
 import type {
   SourceLanguage,
@@ -11,13 +18,6 @@ import type {
   TypeScriptWorkerRequest,
 } from './typescript-protocol'
 import { serializeQuickInfo } from './typescript-quick-info'
-import {
-  isModuleSpecifierPosition,
-  ESMWELL_TYPES_ROOT,
-  typeResolutionKey,
-  TypeScriptTypeAcquirer,
-  type TypeScriptTypeGraph,
-} from './typescript-type-acquisition'
 
 const LIB_FILES = import.meta.glob<string>('../node_modules/typescript-legacy/lib/lib*.d.ts', {
   eager: true,
@@ -29,7 +29,8 @@ const libraries = new Map(
   Object.entries(LIB_FILES).map(([path, source]) => [`/${path.split('/').at(-1) ?? path}`, source]),
 )
 const moduleResolutions = new Map<string, string>()
-const typeAcquirer = new TypeScriptTypeAcquirer()
+const moduleScanner = createTypeScriptModuleScanner(ts)
+const typeAcquirer = new TypeScriptTypeAcquirer({ scanner: moduleScanner })
 
 const sourceFileNames: Readonly<Record<SourceLanguage, string>> = {
   ts: '/playground.ts',
@@ -281,7 +282,7 @@ const transpile = (source: string): { code: string; diagnostics: readonly TypeSc
 serveWorkerRpc<TypeScriptWorkerRequest>((request) => {
   switch (request.type) {
     case 'completions':
-      return isModuleSpecifierPosition(request.source, request.position)
+      return moduleScanner.isModuleSpecifierPosition(request.source, request.position)
         ? completions(request.source, request.language, request.position)
         : withTypeGraph(request.source, () => completions(request.source, request.language, request.position))
     case 'diagnostics':
