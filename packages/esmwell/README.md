@@ -26,6 +26,7 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 - [Quick start](#quick-start)
 - [REPL mode](#repl-mode)
 - [TypeScript input](#typescript-input)
+- [TypeScript editor kit](#typescript-editor-kit)
 - [Vitest and Jest workspaces](#vitest-and-jest-workspaces)
 - [API](#api)
 - [Workers and bundlers](#workers-and-bundlers)
@@ -127,6 +128,34 @@ await session.runJudge(`export const solve = (value: number): number => value * 
 `transpileModule` strips types and compiles syntax one file at a time with `module: ESNext`, `target: ES2023`, and `verbatimModuleSyntax`. Pass `compilerOptions` to override. It never type-checks, so type errors run, while syntax errors come back as a `TypeScriptError` result with the diagnostic's line and column. If `load` rejects or resolves to something that is not the compiler, the run reports a `TypeScriptUnavailableError` and the next run retries the load.
 
 The same hook takes any other compiler with the shape `(source, context) => string | Promise<string>`. `context.kind` is `'judge'`, `'repl'`, or `'test'` (with the module `id`).
+
+## TypeScript editor kit
+
+`esmwell/typescript-editor` is an opt-in declaration-acquisition kit for CodeMirror, Monaco, or a custom browser editor. It discovers bare imports in submitted source, resolves their exact npm versions, downloads bounded declaration archives from the npm registry, and follows package exports plus relative and transitive declaration imports. Source packages are acquired automatically; users do not run an install command or maintain a package manifest.
+
+Like `esmwell/typescript`, this entrypoint does not import or bundle the compiler. Pass the structural `preProcessFile` capability from the TypeScript version already used by the editor:
+
+```ts
+import * as ts from 'typescript'
+import { createTypeScriptModuleScanner, typeResolutionKey, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
+
+const scanner = createTypeScriptModuleScanner(ts)
+const acquirer = new TypeScriptTypeAcquirer({ scanner })
+const graph = await acquirer.acquire(`import { z } from 'zod@4'`)
+
+const extraLibs = new Map(graph.files.map((file) => [file.fileName, file.content]))
+
+const resolutions = new Map(
+  graph.resolutions.map((resolution) => [
+    typeResolutionKey(resolution.specifier, resolution.containingFilePrefix),
+    resolution.fileName,
+  ]),
+)
+```
+
+`files` are virtual declaration files under `ESMWELL_TYPES_ROOT`. `resolutions` maps each source or declaration import to its exact virtual file; `containingFilePrefix` distinguishes imports made by transitive packages. `complete` is `false` when a request fails or a safety limit truncates the graph. Incomplete results and failed metadata/archive requests are retried, while successful metadata, archives, and graphs use bounded in-memory caches.
+
+`createTypeScriptModuleScanner` also exposes `moduleSpecifiers(source)` and `isModuleSpecifierPosition(source, position)` for editor completion routing. `TypeScriptTypeAcquirer` accepts optional `fetch` and `fetchTimeoutMs` overrides for hosts that need a custom network boundary.
 
 ## Vitest and Jest workspaces
 
@@ -246,6 +275,7 @@ Every result carries `status`, `console` (the collected `ConsoleChunk`s), `depen
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `esmwell`                        | The three session factories, `adaptWorker`, the composition primitives, and every public type                                       |
 | `esmwell/typescript`             | `typescriptTransform` and `TypeScriptUnavailableError`                                                                              |
+| `esmwell/typescript-editor`      | Editor-neutral import scanning and automatic exact-version npm declaration acquisition                                              |
 | `esmwell/utils`                  | `isBareSpecifier`, `formatConsoleArguments`, `serializeValue`, `createWorkerRpc`, and `serveWorkerRpc`. Pulls in none of the runner |
 | `esmwell/worker-entry`           | Coordinator worker entry for judge and REPL sessions                                                                                |
 | `esmwell/execution-worker-entry` | Child worker entry that runs submitted judge and REPL code                                                                          |

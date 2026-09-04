@@ -8,6 +8,7 @@ export default defineConfig({
     'src/index.ts',
     'src/utils.ts',
     'src/typescript.ts',
+    'src/typescript-editor.ts',
     'src/worker-entry.ts',
     'src/execution-worker-entry.ts',
     'src/test-worker-entry.ts',

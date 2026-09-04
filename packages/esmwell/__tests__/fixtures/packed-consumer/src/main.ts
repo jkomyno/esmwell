@@ -1,5 +1,6 @@
 import { adaptWorker, createEsmwell, createTestSession } from 'esmwell'
 import { typescriptTransform } from 'esmwell/typescript'
+import { createTypeScriptModuleScanner, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
 import { isBareSpecifier } from 'esmwell/utils'
 import ExecutionWorkerUrl from './execution-worker?worker&url'
 import ModuleServiceWorkerUrl from './module-service-worker?worker&url'
@@ -19,6 +20,14 @@ const tests = createTestSession({
 })
 
 if (!isBareSpecifier('effect')) throw new Error('esmwell/utils was not bundled')
+
+const scanner = createTypeScriptModuleScanner({
+  preProcessFile: () => ({ importedFiles: [], typeReferenceDirectives: [] }),
+})
+const typeAcquirer = new TypeScriptTypeAcquirer({ scanner })
+if (scanner.moduleSpecifiers('').length !== 0 || !(typeAcquirer instanceof TypeScriptTypeAcquirer)) {
+  throw new Error('esmwell/typescript-editor was not bundled')
+}
 
 session.close()
 tests.close()

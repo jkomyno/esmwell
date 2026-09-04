@@ -1,9 +1,8 @@
+import * as ts from 'typescript-legacy'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  isModuleSpecifierPosition,
-  moduleSpecifiers,
-  TypeScriptTypeAcquirer,
-} from '../../src/typescript-type-acquisition'
+import { createTypeScriptModuleScanner, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
+
+const scanner = createTypeScriptModuleScanner(ts)
 
 const jsonResponse = (value: unknown): Response =>
   new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } })
@@ -12,7 +11,7 @@ const writeText = (target: Uint8Array, offset: number, value: string): void => {
   target.set(new TextEncoder().encode(value), offset)
 }
 
-const tar = (files: Readonly<Record<string, string>>): Uint8Array => {
+const tar = (files: Readonly<Record<string, string>>): Uint8Array<ArrayBuffer> => {
   const encoder = new TextEncoder()
   const entries = Object.entries(files).map(([name, content]) => ({ name, bytes: encoder.encode(content) }))
   const size = entries.reduce((total, entry) => total + 512 + Math.ceil(entry.bytes.length / 512) * 512, 1_024)
@@ -28,10 +27,8 @@ const tar = (files: Readonly<Record<string, string>>): Uint8Array => {
   return archive
 }
 
-const gzip = async (bytes: Uint8Array): Promise<ArrayBuffer> => {
-  const buffer = new ArrayBuffer(bytes.byteLength)
-  new Uint8Array(buffer).set(bytes)
-  const stream = new Blob([buffer]).stream().pipeThrough(new CompressionStream('gzip'))
+const gzip = async (bytes: Uint8Array<ArrayBuffer>): Promise<ArrayBuffer> => {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
   return new Response(stream).arrayBuffer()
 }
 
@@ -46,14 +43,14 @@ describe('moduleSpecifiers', () => {
       const zod = import('zod@4')
     `
 
-    expect(moduleSpecifiers(source)).toEqual(['effect@beta/Schema', 'zod@4', 'node'])
+    expect(scanner.moduleSpecifiers(source)).toEqual(['effect@beta/Schema', 'zod@4', 'node'])
   })
 
   it('identifies completion positions inside module specifiers', () => {
     const source = "import { z } from 'zod@4'\nz.object({})"
 
-    expect(isModuleSpecifierPosition(source, source.indexOf('zod@4') + 3)).toBe(true)
-    expect(isModuleSpecifierPosition(source, source.lastIndexOf('object') + 3)).toBe(false)
+    expect(scanner.isModuleSpecifierPosition(source, source.indexOf('zod@4') + 3)).toBe(true)
+    expect(scanner.isModuleSpecifierPosition(source, source.lastIndexOf('object') + 3)).toBe(false)
   })
 })
 
@@ -62,6 +59,7 @@ describe('TypeScriptTypeAcquirer', () => {
     const effectArchive = await gzip(
       tar({
         'package/dist/dts/Schema.d.ts': `
+          /// <reference path="./Referenced.d.ts" />
           import type { LazyArg } from "effect/Function"
           import type { StandardSchemaV1 } from "@standard-schema/spec"
           export declare const Struct: <A>(fields: A) => {
@@ -71,6 +69,7 @@ describe('TypeScriptTypeAcquirer', () => {
           }
         `,
         'package/dist/dts/Function.d.ts': 'export type LazyArg<A> = () => A',
+        'package/dist/dts/Referenced.d.ts': 'export interface Referenced { readonly value: string }',
       }),
     )
     const zodArchive = await gzip(
@@ -135,7 +134,7 @@ describe('TypeScriptTypeAcquirer', () => {
       const response = responses.get(String(input))
       return response?.() ?? new Response(null, { status: 404 })
     })
-    const acquirer = new TypeScriptTypeAcquirer(fetchType)
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
     const source = `
       import * as Schema from 'effect@beta/Schema'
       import { z } from 'zod@4'
@@ -146,6 +145,7 @@ describe('TypeScriptTypeAcquirer', () => {
 
     expect(graph.files.map((file) => file.fileName)).toEqual([
       '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Schema.d.ts',
+      '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Referenced.d.ts',
       '/node_modules/.esmwell-types/effect@4.0.0-beta.20/dist/dts/Function.d.ts',
       '/node_modules/.esmwell-types/zod@4.1.5/index.d.ts',
       '/node_modules/.esmwell-types/@standard-schema/spec@1.0.0/index.d.ts',
@@ -175,6 +175,49 @@ describe('TypeScriptTypeAcquirer', () => {
     expect(fetchType).toHaveBeenCalledTimes(9)
   })
 
+  it('falls back to DefinitelyTyped packages for type-reference directives', async () => {
+    const nodeTypesArchive = await gzip(
+      tar({
+        'package/index.d.ts': 'declare global { var process: { readonly browser: true } }\nexport {}',
+      }),
+    )
+    const responses = new Map<string, () => Response>([
+      [
+        'https://data.jsdelivr.com/v1/package/resolve/npm/@types/node@latest',
+        () => jsonResponse({ version: '24.0.0' }),
+      ],
+      [
+        'https://registry.npmjs.org/%40types%2Fnode/24.0.0',
+        () =>
+          jsonResponse({
+            name: '@types/node',
+            version: '24.0.0',
+            types: './index.d.ts',
+            dist: { tarball: 'https://registry.npmjs.org/@types/node/-/node-24.0.0.tgz' },
+          }),
+      ],
+      ['https://registry.npmjs.org/@types/node/-/node-24.0.0.tgz', () => new Response(nodeTypesArchive)],
+    ])
+    const fetchType = vi.fn<(input: string | URL) => Promise<Response>>(async (input): Promise<Response> => {
+      const response = responses.get(String(input))
+      return response?.() ?? new Response(null, { status: 404 })
+    })
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
+
+    const graph = await acquirer.acquire('/// <reference types="node" />\nexport {}')
+
+    expect(graph).toMatchObject({
+      complete: true,
+      files: [{ fileName: '/node_modules/.esmwell-types/@types/node@24.0.0/index.d.ts' }],
+      resolutions: [
+        {
+          specifier: 'node',
+          fileName: '/node_modules/.esmwell-types/@types/node@24.0.0/index.d.ts',
+        },
+      ],
+    })
+  })
+
   it('retries a package graph after a transient metadata failure', async () => {
     const archive = await gzip(tar({ 'package/index.d.ts': 'export declare const answer: 42' }))
     let resolverAttempts = 0
@@ -196,7 +239,7 @@ describe('TypeScriptTypeAcquirer', () => {
           return new Response(null, { status: 404 })
       }
     })
-    const acquirer = new TypeScriptTypeAcquirer(fetchType)
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
 
     expect(await acquirer.acquire("import 'example'")).toMatchObject({ complete: false, files: [] })
     expect(await acquirer.acquire("import 'example'")).toMatchObject({
@@ -204,6 +247,39 @@ describe('TypeScriptTypeAcquirer', () => {
       files: [{ fileName: '/node_modules/.esmwell-types/example@1.0.0/index.d.ts' }],
     })
     expect(fetchType).toHaveBeenCalledTimes(4)
+  })
+
+  it('cancels archive responses rejected by declared size before returning an incomplete graph', async () => {
+    let bodyCancelled = false
+    const oversizedBody = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        controller.enqueue(new Uint8Array([31, 139]))
+      },
+      cancel: () => {
+        bodyCancelled = true
+      },
+    })
+    const fetchType = vi.fn<(input: string | URL) => Promise<Response>>(async (input): Promise<Response> => {
+      switch (String(input)) {
+        case 'https://data.jsdelivr.com/v1/package/resolve/npm/example@latest':
+          return jsonResponse({ version: '1.0.0' })
+        case 'https://registry.npmjs.org/example/1.0.0':
+          return jsonResponse({
+            name: 'example',
+            version: '1.0.0',
+            types: './index.d.ts',
+            dist: { tarball: 'https://registry.npmjs.org/example/-/example-1.0.0.tgz' },
+          })
+        case 'https://registry.npmjs.org/example/-/example-1.0.0.tgz':
+          return new Response(oversizedBody, { headers: { 'content-length': '24000001' } })
+        default:
+          return new Response(null, { status: 404 })
+      }
+    })
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
+
+    await expect(acquirer.acquire("import 'example'")).resolves.toMatchObject({ complete: false, files: [] })
+    expect(bodyCancelled).toBe(true)
   })
 
   it('aborts a stalled package request at the acquisition deadline', async () => {
@@ -217,7 +293,9 @@ describe('TypeScriptTypeAcquirer', () => {
             requestSignal?.addEventListener('abort', () => reject(new Error('aborted')))
           }),
       )
-      const pending = new TypeScriptTypeAcquirer(fetchType, 10).acquire("import 'stalled'")
+      const pending = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType, fetchTimeoutMs: 10 }).acquire(
+        "import 'stalled'",
+      )
 
       await vi.advanceTimersByTimeAsync(10)
 
