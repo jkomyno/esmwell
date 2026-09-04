@@ -5,18 +5,21 @@ export type { PolicyRule } from './policy'
 export { resolveDependencies, resolveImportSpecifier, SpecifierResolutionError } from './resolve'
 export type { ResolutionFailureKind, ResolvedDependency, ResolvedSpecifier, ResolveOptions } from './resolve'
 export { collectBareSpecifiers } from './deps'
-export { createEsmwell, createTestSession, adaptWorker } from './main'
+export { createEsmwell, createModuleProjectSession, createTestSession, adaptWorker } from './main'
 export type {
   ConsoleStreamHandlers,
   ReplSession,
   EsmwellOptions,
   EsmwellSession,
+  ModuleProjectSession,
+  ModuleProjectSessionOptions,
   TestSession,
   TestSessionOptions,
   WorkerFactory,
   WorkerLike,
 } from './main'
 export { createReplSession } from './main'
+export type { ModuleProject, ModuleProjectModules, ModuleProjectResult, ModuleProjectStatus } from './module-project'
 export type { SourceTransform, SourceTransformContext } from './transform'
 export type {
   ConsoleChunk,
@@ -27,6 +30,7 @@ export type {
   JudgeRequest,
   JudgeRunResult,
   JudgeRunStatus,
+  ModuleProjectRequest,
   ReplInputRequest,
   ReplResetRequest,
   ReplResult,

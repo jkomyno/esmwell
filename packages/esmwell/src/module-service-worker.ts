@@ -1,5 +1,5 @@
 const GRAPH_PATH_MARKER = '/__esmwell_graphs__/v1/'
-const CACHE_PREFIX = 'esmwell:test-graph:v1:'
+const CACHE_PREFIX = 'esmwell:module-graph:v1:'
 
 interface ServiceWorkerScopeLike {
   skipWaiting(): Promise<void>

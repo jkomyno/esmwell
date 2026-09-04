@@ -1,8 +1,9 @@
-import { adaptWorker, createEsmwell, createTestSession } from 'esmwell'
+import { adaptWorker, createEsmwell, createModuleProjectSession, createTestSession } from 'esmwell'
 import { typescriptTransform } from 'esmwell/typescript'
 import { isBareSpecifier } from 'esmwell/utils'
 import ExecutionWorkerUrl from './execution-worker?worker&url'
 import ModuleServiceWorkerUrl from './module-service-worker?worker&url'
+import ProjectWorkerUrl from './project-worker?worker&url'
 import TestWorkerUrl from './test-worker?worker&url'
 import EsmwellWorker from './worker?worker'
 
@@ -17,8 +18,13 @@ const tests = createTestSession({
   workerUrl: TestWorkerUrl,
   serviceWorkerUrl: ModuleServiceWorkerUrl,
 })
+const projects = createModuleProjectSession({
+  workerUrl: ProjectWorkerUrl,
+  serviceWorkerUrl: ModuleServiceWorkerUrl,
+})
 
 if (!isBareSpecifier('effect')) throw new Error('esmwell/utils was not bundled')
 
 session.close()
 tests.close()
+projects.close()

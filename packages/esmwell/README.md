@@ -10,7 +10,7 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 
 ![esmwell playground running an Effect v4 program](https://raw.githubusercontent.com/jkomyno/esmwell/main/docs/media/playground.gif)
 
-- ✅ **Judge, REPL, and test-workspace modes** from one small ESM-only package
+- ✅ **Judge, REPL, module-project, and test-workspace modes** from one small ESM-only package
 - ✅ **Bare imports just work.** `import { z } from 'zod'` resolves through [esm.sh](https://esm.sh) at runtime, with no bundler and no install step
 - ✅ **Infinite loops become results, not frozen tabs.** A hard timeout terminates the worker and returns a typed `TimeoutError`
 - ✅ **Console output streams** while the submitted code is still running
@@ -26,6 +26,7 @@ Run unbundled ESM in the browser with hard timeouts, dependency resolution, and 
 - [Quick start](#quick-start)
 - [REPL mode](#repl-mode)
 - [TypeScript input](#typescript-input)
+- [Module projects](#module-projects)
 - [Vitest and Jest workspaces](#vitest-and-jest-workspaces)
 - [API](#api)
 - [Workers and bundlers](#workers-and-bundlers)
@@ -41,7 +42,7 @@ npm install esmwell
 # pnpm add esmwell · yarn add esmwell · bun add esmwell
 ```
 
-The package ships ESM only (`.mjs`) and targets browsers. It loads two worker scripts next to the main module by default. If your bundler relocates assets, read [Workers and bundlers](#workers-and-bundlers) before the first run.
+The package ships ESM only (`.mjs`) and targets browsers. It loads mode-specific worker scripts next to the main module by default. If your bundler relocates assets, read [Workers and bundlers](#workers-and-bundlers) before the first run.
 
 ## Quick start
 
@@ -107,7 +108,7 @@ The persistent scope is an internal object, so its declaration semantics deliber
 
 ## TypeScript input
 
-Every session accepts a `transform` that rewrites submitted source on the main thread before it is posted to the worker: the judge module, each REPL input, and each test-workspace module. The worker only ever sees the returned text, so a transform changes what gets isolated, never how. Transforms run in submission order. A thrown error becomes an error result whose `error` keeps the thrown `name`, `message`, and `line`/`column` when the error exposes them.
+Every session accepts a `transform` that rewrites submitted source on the main thread before it is posted to the worker: the judge module, each REPL input, and each module in a module project or test workspace. The worker only ever sees the returned text, so a transform changes what gets isolated, never how. Transforms run in submission order. A thrown error becomes an error result whose `error` keeps the thrown `name`, `message`, and `line`/`column` when the error exposes them.
 
 `esmwell/typescript` ships a transform built on `ts.transpileModule` without depending on the compiler. You hand over the import, so the `.ts` path exists only where `typescript` is installed, and a bundler without it still builds:
 
@@ -126,7 +127,41 @@ await session.runJudge(`export const solve = (value: number): number => value * 
 
 `transpileModule` strips types and compiles syntax one file at a time with `module: ESNext`, `target: ES2023`, and `verbatimModuleSyntax`. Pass `compilerOptions` to override. It never type-checks, so type errors run, while syntax errors come back as a `TypeScriptError` result with the diagnostic's line and column. If `load` rejects or resolves to something that is not the compiler, the run reports a `TypeScriptUnavailableError` and the next run retries the load.
 
-The same hook takes any other compiler with the shape `(source, context) => string | Promise<string>`. `context.kind` is `'judge'`, `'repl'`, or `'test'` (with the module `id`).
+The same hook takes any other compiler with the shape `(source, context) => string | Promise<string>`. `context.kind` is `'judge'`, `'repl'`, `'project'`, or `'test'` (the latter two include the module `id`).
+
+## Module projects
+
+Run a named ESM module graph once, without a filesystem, bundler, or install command. Exact canonical ids take precedence over packages; relative imports resolve from the importing module:
+
+```ts
+import { createModuleProjectSession } from 'esmwell'
+
+const projects = createModuleProjectSession({
+  workerUrl: '/assets/esmwell/project-worker-entry.mjs',
+  serviceWorkerUrl: '/assets/esmwell/module-service-worker.mjs',
+  deps: { zod: '4' },
+})
+
+const result = await projects.run({
+  modules: {
+    'src/double': `export const double = (value) => value * 2`,
+    'src/main': `
+      import { z } from 'zod'
+      import { double } from './double'
+      export const answer = double(z.number().parse(21))
+    `,
+  },
+  entry: 'src/main',
+})
+
+// result.status === 'pass'
+// result.exports.answer === 42
+projects.close()
+```
+
+The graph uses the browser's native ESM linker, so relative imports, cycles, live bindings, re-exports, top-level await, and literal dynamic imports keep native semantics. Entry exports cross the worker boundary as structured-cloneable values; if an export such as a function cannot be cloned, its value becomes a display preview.
+
+Each run owns a fresh worker and a fresh versioned graph. A timeout terminates that worker and removes its graph cache before the result settles. See [Hosting module-graph assets](#hosting-module-graph-assets) for deployment requirements.
 
 ## Vitest and Jest workspaces
 
@@ -175,9 +210,9 @@ For Jest, import the same globals from `@jest/globals`. `jest.fn` and `jest.spyO
 
 The virtual graph uses native browser ESM, including cycles, live bindings, relative imports, re-exports, and literal dynamic imports. Exact canonical ids under `src/` and `tests/` are treated as local. Missing ids produce an actionable workspace error instead of resolving an npm package with the same name.
 
-### Hosting the test assets
+### Hosting module-graph assets
 
-Test mode needs the published `test-worker-entry.mjs` and `module-service-worker.mjs` files served from the website's origin and from the same directory. That directory becomes the service-worker scope. HTTPS is required outside localhost. Pass explicit URLs when a bundler relocates the files. A blob-built execution worker cannot participate in this mode. The service worker only answers esmwell's versioned virtual-module path beneath its scope and leaves other requests untouched.
+Module-project mode needs `project-worker-entry.mjs`; test mode needs `test-worker-entry.mjs`. Each mode also needs `module-service-worker.mjs`. Serve the selected worker and service worker from the website's origin and from the same directory. That directory becomes the service-worker scope. HTTPS is required outside localhost. Pass explicit URLs when a bundler relocates the files. A blob-built execution worker cannot participate in these modes. The service worker only answers esmwell's versioned virtual-module path beneath its scope and leaves other requests untouched.
 
 Serve these assets from a dedicated directory so the registration can safely own its scope and update across deployments.
 
@@ -213,9 +248,16 @@ Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node env
 | `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`) in a fresh worker. |
 | `close()`             | `void`                   | Prevents future runs. An in-flight run still settles.                  |
 
+### `createModuleProjectSession(options?)` → `ModuleProjectSession`
+
+| Method                    | Returns                        | Description                                                                  |
+| ------------------------- | ------------------------------ | ---------------------------------------------------------------------------- |
+| `run(project, handlers?)` | `Promise<ModuleProjectResult>` | Imports a `ModuleProject` (`modules`, `entry`) once in a fresh owned worker. |
+| `close()`                 | `void`                         | Prevents future runs. An in-flight run still settles and cleans up normally. |
+
 ### Options
 
-`EsmwellOptions` is shared by all three factories. `TestSessionOptions` extends it.
+`EsmwellOptions` is shared by all four factories. `ModuleProjectSessionOptions` and `TestSessionOptions` add `serviceWorkerUrl`.
 
 | Option               | Type                          | Default                               | Description                                                                                                              |
 | -------------------- | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -223,10 +265,10 @@ Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node env
 | `autoInstall`        | `boolean`                     | `true`                                | Resolve unpinned bare imports to the CDN's latest. When `false`, an unpinned bare import is an error.                    |
 | `timeoutMs`          | `number`                      | `5000` (`60000` for test sessions)    | Hard timeout per run. Exceeding it terminates the execution worker and returns a `TimeoutError` result.                  |
 | `transform`          | `SourceTransform`             | none                                  | Rewrites submitted source on the main thread before it reaches the worker. See [TypeScript input](#typescript-input).    |
-| `workerUrl`          | `string \| URL`               | `worker-entry.mjs` beside the module  | URL of the coordinator entry (or `test-worker-entry.mjs` for test sessions).                                             |
+| `workerUrl`          | `string \| URL`               | mode-specific entry beside the module | URL of the coordinator, project-worker, or test-worker entry.                                                            |
 | `executionWorkerUrl` | `string \| URL`               | `execution-worker-entry.mjs`          | Same-origin child worker that owns submitted judge and REPL code.                                                        |
 | `workerFactory`      | `(url: string) => WorkerLike` | `new Worker(url, { type: 'module' })` | Builds the workers. Wrap a bundler-emitted worker with `adaptWorker`. See [Workers and bundlers](#workers-and-bundlers). |
-| `serviceWorkerUrl`   | `string \| URL`               | `module-service-worker.mjs`           | Test sessions only. Same-origin service worker backing the virtual module graph.                                         |
+| `serviceWorkerUrl`   | `string \| URL`               | `module-service-worker.mjs`           | Module-project and test sessions. Same-origin service worker backing the virtual module graph.                           |
 
 `handlers` on every run method is `{ onConsoleChunk?: (chunk: ConsoleChunk) => void }`. Chunks stream as the code runs and are also collected on the result.
 
@@ -234,23 +276,25 @@ Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node env
 
 Every result carries `status`, `console` (the collected `ConsoleChunk`s), `dependencies` (`{ specifier, name, version, url }[]`), `durationMs`, and an optional `error` of type `SerializedError`.
 
-| Result           | Extra fields                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| `JudgeRunResult` | `cases: JudgeCaseResult[]`, each with `status`, `actual`, `expected`, and `error`                          |
-| `ReplResult`     | `value`, the completion value of the input                                                                 |
-| `TestRunResult`  | `engine: { name, version, packages }` and `tests: TestCaseResult[]` with `pass`, `fail`, `skip`, or `todo` |
+| Result                | Extra fields                                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `JudgeRunResult`      | `cases: JudgeCaseResult[]`, each with `status`, `actual`, `expected`, and `error`                          |
+| `ReplResult`          | `value`, the completion value of the input                                                                 |
+| `ModuleProjectResult` | `exports`, the entry module's cloneable exports or display previews                                        |
+| `TestRunResult`       | `engine: { name, version, packages }` and `tests: TestCaseResult[]` with `pass`, `fail`, `skip`, or `todo` |
 
 ### Subpath exports
 
 | Import                           | Contents                                                                                                                            |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `esmwell`                        | The three session factories, `adaptWorker`, the composition primitives, and every public type                                       |
+| `esmwell`                        | The four session factories, `adaptWorker`, the composition primitives, and every public type                                        |
 | `esmwell/typescript`             | `typescriptTransform` and `TypeScriptUnavailableError`                                                                              |
 | `esmwell/utils`                  | `isBareSpecifier`, `formatConsoleArguments`, `serializeValue`, `createWorkerRpc`, and `serveWorkerRpc`. Pulls in none of the runner |
 | `esmwell/worker-entry`           | Coordinator worker entry for judge and REPL sessions                                                                                |
 | `esmwell/execution-worker-entry` | Child worker entry that runs submitted judge and REPL code                                                                          |
+| `esmwell/project-worker-entry`   | Fresh page-owned worker entry for module-project sessions                                                                           |
 | `esmwell/test-worker-entry`      | Worker entry for test sessions                                                                                                      |
-| `esmwell/module-service-worker`  | Service worker backing the test-session module graph                                                                                |
+| `esmwell/module-service-worker`  | Service worker backing module-project and test-session graphs                                                                       |
 
 ## Workers and bundlers
 
@@ -279,7 +323,7 @@ import 'esmwell/worker-entry'
 import 'esmwell/execution-worker-entry'
 ```
 
-`workerUrl` is the lighter escape hatch when a URL to the coordinator entry is available. `executionWorkerUrl` identifies the child entry. When copying published assets without a bundler, keep both `.mjs` files together so the default relative URL resolves. Test sessions need `test-worker-entry.mjs` and `module-service-worker.mjs` instead, as described in [Hosting the test assets](#hosting-the-test-assets).
+`workerUrl` is the lighter escape hatch when a URL to the coordinator entry is available. `executionWorkerUrl` identifies the child entry. When copying published assets without a bundler, keep both `.mjs` files together so the default relative URL resolves. Module projects and test sessions use their direct worker entries with `module-service-worker.mjs`, as described in [Hosting module-graph assets](#hosting-module-graph-assets).
 
 ## Execution model
 
@@ -291,7 +335,7 @@ page → coordinator worker → execution worker
 
 The coordinator never evaluates submitted code. It owns the deadline and terminates the execution worker on timeout or fatal failure. Every judge run starts in a fresh execution worker. A REPL keeps one worker so declarations persist, then discards it on reset, timeout, or fatal failure.
 
-Test workspaces use one fresh page-owned worker per run. Their virtual module graph is backed by a scoped service worker, and direct ownership keeps that graph portable across Chromium and WebKit.
+Module projects and test workspaces use one fresh page-owned worker per run. Their virtual module graph is backed by a scoped service worker, and direct ownership keeps that graph portable across Chromium and WebKit.
 
 Bindings installed by esmwell, including `globalThis.process`, `globalThis.console`, and test-engine bridges, are non-writable and non-configurable. Submitted code cannot replace or delete them. Their intended contents can still be mutable, so `process.env.KEY = 'value'` remains supported.
 
@@ -304,7 +348,7 @@ Worker isolation makes execution disposable and lets the host recover from synch
 - Bare specifiers in `import`, `export … from`, and literal dynamic `import()` rewrite to `https://esm.sh/{name}@{version}` at runtime. No manifest, no bundler.
 - `deps` pins exact versions. An inline version such as `effect@beta/Option` takes precedence. `autoInstall: true` (the default) resolves everything else to the CDN's latest.
 - `autoInstall: false` makes an unpinned bare import an error: `could not resolve 'x' — check the package name or add it to deps`.
-- Absolute URLs pass through untouched. Relative specifiers error, because user code runs from an in-memory URL.
+- Absolute URLs pass through untouched. Module projects and test workspaces resolve relative specifiers inside their submitted graph; judge and REPL inputs reject them because those modes run from an in-memory URL.
 - `process` and `node:process` resolve to the worker's browser process object. Other `node:*` imports fail fast with module-specific pointers to browser alternatives (`node:crypto` to `globalThis.crypto`, `node:http` to `fetch()`, and so on).
 - Every result surfaces the resolved dependency list (`name`, `version`, `url`) so hosts can display what a run actually used.
 
@@ -312,7 +356,7 @@ Worker isolation makes execution disposable and lets the host recover from synch
 
 Submitted code is rejected with line numbers for `var` declarations, `eval` references, and `Function` constructor calls before anything executes. Runtime property descriptors protect esmwell-owned globals even when code reaches them through aliases or reflection.
 
-`SerializedError` (on `JudgeCaseResult.error`, `JudgeRunResult.error`, `ReplResult.error`, and each `TestCaseResult.errors` entry) always carries `name` and `message`, plus `stack` when the source error had one. `name` is the reliable discriminator. Branch on it rather than parsing `message`:
+`SerializedError` (on `JudgeCaseResult.error`, `JudgeRunResult.error`, `ReplResult.error`, `ModuleProjectResult.error`, and each `TestCaseResult.errors` entry) always carries `name` and `message`, plus `stack` when the source error had one. `name` is the reliable discriminator. Branch on it rather than parsing `message`:
 
 | `name`                       | Extra fields                                  | Cause                                                   |
 | ---------------------------- | --------------------------------------------- | ------------------------------------------------------- |
@@ -343,13 +387,13 @@ Things worth knowing before you ship:
 
 ### Choosing the right tool
 
-| Tool                                                        | Best for                                                                                | Execution model                                                                                             | Packages and environment                                                                                          |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **esmwell**                                                 | Running unbundled ESM in a page: snippets, persistent REPLs, and Vitest/Jest workspaces | Executes real ESM in browser workers with hard timeout recovery; worker isolation is not a security sandbox | Resolves bare imports through esm.sh; browser APIs, no virtual filesystem or general Node.js runtime              |
-| [**callscript**](https://github.com/vercel-labs/callscript) | AI-authored tool workflows that need bounded, inspectable, resumable plans              | Parses a constrained JavaScript surface into inert JSON; only host-provided tools execute                   | Mounts tools through plain adapters, the AI SDK, or MCP; it does not execute arbitrary JavaScript or npm packages |
-| [**almostnode**](https://github.com/macaly/almostnode)      | Node-style browser development environments and playgrounds                             | Executes code on the main thread, in a worker, or through its separately deployed cross-origin sandbox      | Provides a virtual filesystem, Node.js API shims, npm installation, CLIs, and Vite/Next.js dev servers            |
+| Tool                                                        | Best for                                                                                                 | Execution model                                                                                             | Packages and environment                                                                                          |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **esmwell**                                                 | Running unbundled ESM in a page: snippets, module projects, persistent REPLs, and Vitest/Jest workspaces | Executes real ESM in browser workers with hard timeout recovery; worker isolation is not a security sandbox | Resolves bare imports through esm.sh; browser APIs, no virtual filesystem or general Node.js runtime              |
+| [**callscript**](https://github.com/vercel-labs/callscript) | AI-authored tool workflows that need bounded, inspectable, resumable plans                               | Parses a constrained JavaScript surface into inert JSON; only host-provided tools execute                   | Mounts tools through plain adapters, the AI SDK, or MCP; it does not execute arbitrary JavaScript or npm packages |
+| [**almostnode**](https://github.com/macaly/almostnode)      | Node-style browser development environments and playgrounds                                              | Executes code on the main thread, in a worker, or through its separately deployed cross-origin sandbox      | Provides a virtual filesystem, Node.js API shims, npm installation, CLIs, and Vite/Next.js dev servers            |
 
-`callscript` and esmwell both parse JavaScript with Acorn and validate it before work begins, but only esmwell goes on to execute the submitted module. `almostnode` is the closer runtime alternative: choose it when Node.js compatibility is the requirement, and esmwell when ESM-native execution, a persistent REPL, or a focused test-workspace API is the requirement.
+`callscript` and esmwell both parse JavaScript with Acorn and validate it before work begins, but only esmwell goes on to execute the submitted module. `almostnode` is the closer runtime alternative: choose it when Node.js compatibility is the requirement, and esmwell when ESM-native module-project execution, a persistent REPL, or a focused test-workspace API is the requirement.
 
 ## Recipes
 

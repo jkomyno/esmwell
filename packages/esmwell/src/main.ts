@@ -1,4 +1,5 @@
 import type { ConsoleChunk, JudgeCase, JudgeRunResult, ReplResult, SerializedError, WorkerResponse } from './types'
+import type { ModuleProject, ModuleProjectModules, ModuleProjectResult } from './module-project'
 import type { TestModules, TestRun, TestRunResult } from './test-types'
 import type { SourceTransform, SourceTransformContext } from './transform'
 import { adaptWorker, type WorkerLike } from './worker-like'
@@ -84,6 +85,23 @@ export interface TestSessionOptions extends EsmwellOptions {
 export interface TestSession {
   /** Runs canonical ESM modules with the selected official upstream engine. */
   run(run: TestRun, handlers?: ConsoleStreamHandlers): Promise<TestRunResult>
+  /** Prevents future runs. An in-flight run still settles normally. */
+  close(): void
+}
+
+/** Options for one-shot virtual ESM module-project runs. */
+export interface ModuleProjectSessionOptions extends EsmwellOptions {
+  /**
+   * Same-origin module service worker. Defaults to
+   * `module-service-worker.mjs` next to the main esmwell module.
+   */
+  readonly serviceWorkerUrl?: string | URL
+}
+
+/** A module-project session; each run receives a fresh execution worker. */
+export interface ModuleProjectSession {
+  /** Imports one canonical entry from a virtual ESM project. */
+  run(project: ModuleProject, handlers?: ConsoleStreamHandlers): Promise<ModuleProjectResult>
   /** Prevents future runs. An in-flight run still settles normally. */
   close(): void
 }
@@ -199,30 +217,24 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
       if (closed) {
         throw new Error('esmwell test session is closed')
       }
-      const graphId = createGraphId()
       const startedAt = performance.now()
       const timeoutMs = options.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS
       const deadline = startedAt + timeoutMs
-      let transport: WorkerTransport | undefined
       try {
-        const modules = await transformTestModules(options.transform, run.modules)
-        const serviceWorkerScope = await prepareModuleServiceWorker(options, deadline, timeoutMs)
-        const testWorkerUrl = resolveTestWorkerUrl(options)
-        assertWorkerWithinScope(testWorkerUrl, serviceWorkerScope)
-        transport = new WorkerTransport({
-          ...options,
-          timeoutMs: remainingTimeoutMs(deadline, timeoutMs),
-          workerUrl: testWorkerUrl,
-        })
-        const outcome = await transport.request(
-          {
+        const modules = await transformGraphModules(options.transform, run.modules, 'test')
+        const outcome = await requestModuleGraphWorker(
+          options,
+          deadline,
+          timeoutMs,
+          'test-worker-entry.mjs',
+          (graphId, serviceWorkerScope) => ({
             kind: 'test',
             run: { ...run, modules },
             graphId,
             serviceWorkerScope,
             ...(options.deps === undefined ? {} : { deps: options.deps }),
             ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
-          },
+          }),
           'test-result',
           handlers,
         )
@@ -237,9 +249,58 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
           error: serializedMainError(error),
           durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
         }
-      } finally {
-        transport?.close()
-        await deleteTestGraphCache(graphId)
+      }
+    },
+    close(): void {
+      closed = true
+    },
+  }
+}
+
+/**
+ * Creates a one-shot virtual ESM project session. Every call uses a fresh
+ * page-owned worker so timeouts and fatal failures discard the entire realm.
+ */
+export function createModuleProjectSession(options: ModuleProjectSessionOptions = {}): ModuleProjectSession {
+  let closed = false
+
+  return {
+    async run(project, handlers): Promise<ModuleProjectResult> {
+      if (closed) {
+        throw new Error('esmwell module-project session is closed')
+      }
+      const startedAt = performance.now()
+      const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+      const deadline = startedAt + timeoutMs
+      try {
+        const modules = await transformGraphModules(options.transform, project.modules, 'project')
+        const outcome = await requestModuleGraphWorker(
+          options,
+          deadline,
+          timeoutMs,
+          'project-worker-entry.mjs',
+          (graphId, serviceWorkerScope) => ({
+            kind: 'module-project',
+            project: { ...project, modules },
+            graphId,
+            serviceWorkerScope,
+            ...(options.deps === undefined ? {} : { deps: options.deps }),
+            ...(options.autoInstall === undefined ? {} : { autoInstall: options.autoInstall }),
+          }),
+          'module-project-result',
+          handlers,
+        )
+        return asModuleProjectResult(outcome, timeoutMs)
+      } catch (error) {
+        return {
+          status: 'error',
+          ok: false,
+          exports: {},
+          console: [],
+          dependencies: [],
+          error: serializedMainError(error),
+          durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        }
       }
     },
     close(): void {
@@ -275,10 +336,11 @@ const applyTransform = async (
   return transformed
 }
 
-const transformTestModules = async (
+const transformGraphModules = async (
   transform: SourceTransform | undefined,
-  modules: TestModules,
-): Promise<TestModules> => {
+  modules: TestModules | ModuleProjectModules,
+  kind: 'test' | 'project',
+): Promise<Readonly<Record<string, string>>> => {
   if (transform === undefined) {
     return modules
   }
@@ -286,7 +348,7 @@ const transformTestModules = async (
   // submission order only sequences separate runs.
   const transformed = await Promise.all(
     Object.entries(modules).map(
-      async ([id, source]) => [id, await applyTransform(transform, source, { kind: 'test', id })] as const,
+      async ([id, source]) => [id, await applyTransform(transform, source, { kind, id })] as const,
     ),
   )
   return Object.fromEntries(transformed)
@@ -294,7 +356,7 @@ const transformTestModules = async (
 
 interface PendingRequest {
   settle: (outcome: TransportOutcome) => void
-  resultKind: 'result' | 'repl-result' | 'repl-ack' | 'test-result'
+  resultKind: 'result' | 'repl-result' | 'repl-ack' | 'test-result' | 'module-project-result'
   handlers: ConsoleStreamHandlers | undefined
   pendingChunks: ConsoleChunk[]
   settled: boolean
@@ -430,7 +492,10 @@ class WorkerTransport {
         }
         if (response.kind === resultKind) {
           const payload =
-            response.kind === 'result' || response.kind === 'repl-result' || response.kind === 'test-result'
+            response.kind === 'result' ||
+            response.kind === 'repl-result' ||
+            response.kind === 'test-result' ||
+            response.kind === 'module-project-result'
               ? response.result
               : undefined
           pending.finish({ kind: 'delivered', payload, console: pending.pendingChunks })
@@ -642,6 +707,36 @@ const asTestResult = (outcome: TransportOutcome, timeoutMs: number): TestRunResu
   }
 }
 
+const asModuleProjectResult = (outcome: TransportOutcome, timeoutMs: number): ModuleProjectResult => {
+  if (outcome.kind === 'delivered') {
+    return outcome.payload as ModuleProjectResult
+  }
+  if (outcome.kind === 'execution-timeout') {
+    return {
+      status: 'error',
+      ok: false,
+      exports: {},
+      console: outcome.console,
+      dependencies: [],
+      error: timeoutError(timeoutMs),
+      durationMs: timeoutMs,
+    }
+  }
+  const error =
+    outcome.kind === 'transform-error'
+      ? serializedMainError(outcome.error)
+      : workerError(outcome.kind === 'supervisor-timeout' ? supervisorTimeoutMessage(timeoutMs) : outcome.message)
+  return {
+    status: 'error',
+    ok: false,
+    exports: {},
+    console: outcome.kind === 'transform-error' ? [] : outcome.console,
+    dependencies: [],
+    error,
+    durationMs: 0,
+  }
+}
+
 const workerErrorResult = (message: string, console: ConsoleChunk[]): JudgeRunResult => ({
   status: 'error',
   ok: false,
@@ -675,23 +770,54 @@ const workerError = (message: string): SerializedError => ({
 const supervisorTimeoutMessage = (timeoutMs: number): string =>
   `the execution supervisor did not settle the request within ${timeoutMs}ms plus its watchdog grace period and was terminated`
 
+type ModuleGraphSessionOptions = TestSessionOptions | ModuleProjectSessionOptions
+
+type ModuleGraphRequestFactory = (graphId: string, serviceWorkerScope: string) => Omit<WorkerRequestShape, 'id'>
+
+const requestModuleGraphWorker = async (
+  options: ModuleGraphSessionOptions,
+  deadline: number,
+  timeoutMs: number,
+  defaultWorkerFile: string,
+  createRequest: ModuleGraphRequestFactory,
+  resultKind: PendingRequest['resultKind'],
+  handlers: ConsoleStreamHandlers | undefined,
+): Promise<TransportOutcome> => {
+  const graphId = createGraphId()
+  let transport: WorkerTransport | undefined
+  try {
+    const serviceWorkerScope = await prepareModuleServiceWorker(options, deadline, timeoutMs)
+    const workerUrl = resolveModuleWorkerUrl(options, defaultWorkerFile)
+    assertModuleWorkerWithinScope(workerUrl, serviceWorkerScope)
+    transport = new WorkerTransport({
+      ...options,
+      timeoutMs: remainingTimeoutMs(deadline, timeoutMs),
+      workerUrl,
+    })
+    return await transport.request(createRequest(graphId, serviceWorkerScope), resultKind, handlers)
+  } finally {
+    transport?.close()
+    await deleteModuleGraphCache(graphId)
+  }
+}
+
 const prepareModuleServiceWorker = async (
-  options: TestSessionOptions,
+  options: ModuleGraphSessionOptions,
   deadline: number,
   timeoutMs: number,
 ): Promise<string> => {
   if (typeof navigator === 'undefined' || navigator.serviceWorker === undefined) {
-    throw new Error('test workspaces require Service Worker support in a secure browser context')
+    throw new Error('virtual module graphs require Service Worker support in a secure browser context')
   }
   const serviceWorkerUrl =
     options.serviceWorkerUrl === undefined
       ? new URL(/* @vite-ignore */ 'module-service-worker.mjs', import.meta.url)
       : new URL(String(options.serviceWorkerUrl), globalThis.location?.href)
   if (serviceWorkerUrl.origin !== globalThis.location?.origin) {
-    throw new Error('the test-workspace module service worker must be served from the website origin')
+    throw new Error('the module service worker must be served from the website origin')
   }
   const scope = new URL('./', serviceWorkerUrl).href
-  const registration = await withinTestDeadline(
+  const registration = await withinModuleGraphDeadline(
     navigator.serviceWorker.register(serviceWorkerUrl, { type: 'module', scope }),
     deadline,
     timeoutMs,
@@ -710,7 +836,7 @@ const waitForActiveWorker = async (
   }
   const worker = registration.installing ?? registration.waiting
   if (worker === null) {
-    throw new Error('the test-workspace module service worker did not start installing')
+    throw new Error('the module service worker did not start installing')
   }
   let onStateChange: (() => void) | undefined
   const activation = new Promise<void>((resolve, reject) => {
@@ -718,14 +844,14 @@ const waitForActiveWorker = async (
       if (worker.state === 'activated') {
         resolve()
       } else if (worker.state === 'redundant') {
-        reject(new Error('the test-workspace module service worker became redundant during installation'))
+        reject(new Error('the module service worker became redundant during installation'))
       }
     }
     worker.addEventListener('statechange', onStateChange)
     onStateChange()
   })
   try {
-    await withinTestDeadline(activation, deadline, timeoutMs)
+    await withinModuleGraphDeadline(activation, deadline, timeoutMs)
   } finally {
     if (onStateChange !== undefined) {
       worker.removeEventListener('statechange', onStateChange)
@@ -733,24 +859,24 @@ const waitForActiveWorker = async (
   }
 }
 
-class TestRunDeadlineError extends Error {
+class ModuleGraphRunDeadlineError extends Error {
   override readonly name = 'TimeoutError'
 
   constructor(timeoutMs: number) {
-    super(`test workspace run timed out after ${timeoutMs}ms during service-worker setup or execution`)
+    super(`module graph run timed out after ${timeoutMs}ms during service-worker setup or execution`)
   }
 }
 
-const withinTestDeadline = async <T>(promise: Promise<T>, deadline: number, timeoutMs: number): Promise<T> => {
+const withinModuleGraphDeadline = async <T>(promise: Promise<T>, deadline: number, timeoutMs: number): Promise<T> => {
   const remaining = deadline - performance.now()
-  if (remaining <= 0) throw new TestRunDeadlineError(timeoutMs)
+  if (remaining <= 0) throw new ModuleGraphRunDeadlineError(timeoutMs)
 
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new TestRunDeadlineError(timeoutMs)), remaining)
+        timer = setTimeout(() => reject(new ModuleGraphRunDeadlineError(timeoutMs)), remaining)
       }),
     ])
   } finally {
@@ -760,13 +886,13 @@ const withinTestDeadline = async <T>(promise: Promise<T>, deadline: number, time
 
 const remainingTimeoutMs = (deadline: number, timeoutMs: number): number => {
   const remaining = Math.ceil(deadline - performance.now())
-  if (remaining <= 0) throw new TestRunDeadlineError(timeoutMs)
+  if (remaining <= 0) throw new ModuleGraphRunDeadlineError(timeoutMs)
   return remaining
 }
 
-const resolveTestWorkerUrl = (options: TestSessionOptions): URL =>
+const resolveModuleWorkerUrl = (options: ModuleGraphSessionOptions, defaultFile: string): URL =>
   options.workerUrl === undefined
-    ? new URL(/* @vite-ignore */ 'test-worker-entry.mjs', import.meta.url)
+    ? new URL(/* @vite-ignore */ defaultFile, import.meta.url)
     : new URL(String(options.workerUrl), globalThis.location?.href)
 
 const resolveExecutionWorkerUrl = (value: string | URL | undefined, defaultFile: string): string =>
@@ -774,10 +900,10 @@ const resolveExecutionWorkerUrl = (value: string | URL | undefined, defaultFile:
     ? new URL(defaultFile, import.meta.url).href
     : new URL(String(value), globalThis.location?.href ?? import.meta.url).href
 
-const assertWorkerWithinScope = (workerUrl: URL, scope: string): void => {
+const assertModuleWorkerWithinScope = (workerUrl: URL, scope: string): void => {
   if (!workerUrl.href.startsWith(scope)) {
     throw new Error(
-      `the test execution worker must be served under the module service-worker scope '${scope}', but resolved to '${workerUrl.href}'`,
+      `the module execution worker must be served under the module service-worker scope '${scope}', but resolved to '${workerUrl.href}'`,
     )
   }
 }
@@ -790,9 +916,9 @@ const createGraphId = (): string => {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-const deleteTestGraphCache = async (graphId: string): Promise<void> => {
+const deleteModuleGraphCache = async (graphId: string): Promise<void> => {
   if (typeof caches !== 'undefined') {
-    await caches.delete(`esmwell:test-graph:v1:${graphId}`)
+    await caches.delete(`esmwell:module-graph:v1:${graphId}`)
   }
 }
 

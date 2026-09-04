@@ -123,7 +123,7 @@ test('reports missing canonical modules before loading a test engine and cleans 
     )
     const cacheNames = await caches.keys()
     assert(
-      cacheNames.every((name) => !name.startsWith('esmwell:test-graph:')),
+      cacheNames.every((name) => !name.startsWith('esmwell:module-graph:')),
       `test graph caches should be removed after failure: ${cacheNames.join(', ')}`,
     )
   } finally {
@@ -152,7 +152,7 @@ test('terminates a synchronous test loop and cleans its virtual graph', async ()
     assert(result.error?.name === 'TimeoutError', `hung test should time out: ${JSON.stringify(result)}`)
     const cacheNames = await caches.keys()
     assert(
-      cacheNames.every((name) => !name.startsWith('esmwell:test-graph:')),
+      cacheNames.every((name) => !name.startsWith('esmwell:module-graph:')),
       `test graph caches should be removed after timeout: ${cacheNames.join(', ')}`,
     )
   } finally {

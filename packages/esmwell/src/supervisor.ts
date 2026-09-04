@@ -182,6 +182,12 @@ export function createWorkerSupervisor(options: SupervisorOptions): WorkerSuperv
         options.host.send(failureResponse(request, 'test requests use a directly supervised disposable worker'))
         return
       }
+      if (request.kind === 'module-project') {
+        options.host.send(
+          failureResponse(request, 'module-project requests use a directly supervised disposable worker'),
+        )
+        return
+      }
       execute(request)
     },
     close(): void {
@@ -238,6 +244,21 @@ const failureResponse = (
         status: 'error',
         ok: false,
         tests: [],
+        error,
+        console: consoleChunks,
+        dependencies: [],
+        durationMs: 0,
+      },
+    }
+  }
+  if (request.kind === 'module-project') {
+    return {
+      kind: 'module-project-result',
+      id: request.id,
+      result: {
+        status: 'error',
+        ok: false,
+        exports: {},
         error,
         console: consoleChunks,
         dependencies: [],

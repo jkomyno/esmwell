@@ -1,4 +1,4 @@
-import { assertCanonicalModuleId, testGraphCacheName } from 'src/test-workspace'
+import { assertCanonicalModuleId, moduleGraphCacheName } from 'src/module-graph'
 
 describe('test workspace identifiers', () => {
   it.each(['src/impl', 'tests/impl.test', '@scope/local'])('accepts canonical module id %s', (id) => {
@@ -10,6 +10,6 @@ describe('test workspace identifiers', () => {
   })
 
   it('derives the service-worker cache name from a graph id', () => {
-    expect(testGraphCacheName('abc-123')).toBe('esmwell:test-graph:v1:abc-123')
+    expect(moduleGraphCacheName('abc-123')).toBe('esmwell:module-graph:v1:abc-123')
   })
 })
