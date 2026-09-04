@@ -34,8 +34,7 @@ scope.addEventListener('fetch', (event): void => {
   }
   event.respondWith(
     caches
-      .open(`${CACHE_PREFIX}${graphId}`)
-      .then((cache) => cache.match(event.request))
+      .match(event.request, { cacheName: `${CACHE_PREFIX}${graphId}` })
       .then((response) => response ?? new Response('virtual module not found', { status: 404 })),
   )
 })
