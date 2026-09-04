@@ -339,7 +339,10 @@ describe('test-session transport timeout', () => {
         ),
       },
     })
-    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+    vi.stubGlobal('caches', {
+      delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)),
+      has: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
+    })
 
     try {
       const worker = new FakeWorker()
@@ -390,7 +393,10 @@ describe('test-session transport timeout', () => {
         register: vi.fn<() => Promise<ServiceWorkerRegistration>>(() => new Promise(() => {})),
       },
     })
-    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+    vi.stubGlobal('caches', {
+      delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)),
+      has: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
+    })
 
     try {
       const workerFactory = vi.fn<WorkerFactory>()
@@ -441,7 +447,10 @@ describe('test-session transport timeout', () => {
         ),
       },
     })
-    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+    vi.stubGlobal('caches', {
+      delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)),
+      has: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
+    })
 
     try {
       const worker = new FakeWorker()
@@ -824,7 +833,10 @@ describe('session transport: transform', () => {
         ),
       },
     })
-    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+    vi.stubGlobal('caches', {
+      delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)),
+      has: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
+    })
 
     try {
       const worker = new FakeWorker()

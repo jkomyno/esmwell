@@ -108,6 +108,7 @@ export interface ModuleProjectSession {
 
 const DEFAULT_TIMEOUT_MS = 5000
 const SUPERVISOR_WATCHDOG_GRACE_MS = 1000
+const MODULE_GRAPH_CACHE_DELETE_ATTEMPTS = 8
 
 /**
  * Test runs download the engine from esm.sh inside the same timed request as
@@ -917,9 +918,17 @@ const createGraphId = (): string => {
 }
 
 const deleteModuleGraphCache = async (graphId: string): Promise<void> => {
-  if (typeof caches !== 'undefined') {
-    await caches.delete(`esmwell:test-graph:v1:${graphId}`)
+  if (typeof caches === 'undefined') {
+    return
   }
+  const cacheName = `esmwell:test-graph:v1:${graphId}`
+  for (let attempt = 0; attempt < MODULE_GRAPH_CACHE_DELETE_ATTEMPTS; attempt += 1) {
+    await caches.delete(cacheName)
+    if (!(await caches.has(cacheName))) {
+      return
+    }
+  }
+  await caches.delete(cacheName)
 }
 
 const serializedMainError = (error: unknown): SerializedError => {
