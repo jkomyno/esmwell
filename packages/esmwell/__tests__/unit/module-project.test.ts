@@ -66,7 +66,7 @@ describe('module-project session transport', () => {
   })
 
   it('transforms and forwards a project, then terminates its fresh worker and deletes its graph', async () => {
-    const workers = [new FakeWorker(), new FakeWorker()]
+    const workers = [new FakeWorker(), new FakeWorker()] as const
     const workerFactory: WorkerFactory = () => {
       const worker = workers.find((candidate) => candidate.sent.length === 0 && !candidate.terminated)
       if (worker === undefined) throw new Error('no fake worker available')
@@ -95,7 +95,7 @@ describe('module-project session transport', () => {
       { kind: 'project', id: 'src/main' },
       { kind: 'project', id: 'src/value' },
     ])
-    expect(workers[0]!.sent[0]).toMatchObject({
+    expect(workers[0].sent[0]).toMatchObject({
       kind: 'module-project',
       project: {
         entry: 'src/main',
@@ -108,16 +108,16 @@ describe('module-project session transport', () => {
       autoInstall: false,
     })
 
-    workers[0]!.emitMessage({ kind: 'module-project-result', id: 1, result: okProjectResult })
+    workers[0].emitMessage({ kind: 'module-project-result', id: 1, result: okProjectResult })
     await expect(first).resolves.toEqual(okProjectResult)
-    expect(workers[0]!.terminated).toBe(true)
+    expect(workers[0].terminated).toBe(true)
     expect(caches.delete).toHaveBeenCalledWith(expect.stringMatching(/^esmwell:test-graph:v1:/))
 
     const second = session.run({ modules: { main: `export const answer = 42` }, entry: 'main' })
     await flushMicrotasks()
-    expect(workers[1]!.sent).toHaveLength(1)
-    workers[1]!.emitMessage({ kind: 'module-project-result', id: 1, result: okProjectResult })
+    expect(workers[1].sent).toHaveLength(1)
+    workers[1].emitMessage({ kind: 'module-project-result', id: 1, result: okProjectResult })
     await expect(second).resolves.toEqual(okProjectResult)
-    expect(workers[1]!.terminated).toBe(true)
+    expect(workers[1].terminated).toBe(true)
   })
 })
