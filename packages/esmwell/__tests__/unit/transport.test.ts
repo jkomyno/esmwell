@@ -814,4 +814,66 @@ describe('session transport: transform', () => {
       message: 'transform must return a string, received number',
     })
   })
+
+  it('transforms every module of a test run at once and posts them by id', async () => {
+    vi.stubGlobal('location', new URL('https://example.test/assets/'))
+    vi.stubGlobal('navigator', {
+      serviceWorker: {
+        register: vi.fn<() => Promise<ServiceWorkerRegistration>>(() =>
+          Promise.resolve({ active: {}, scope: 'https://example.test/assets/' } as ServiceWorkerRegistration),
+        ),
+      },
+    })
+    vi.stubGlobal('caches', { delete: vi.fn<() => Promise<boolean>>(() => Promise.resolve(true)) })
+
+    try {
+      const worker = new FakeWorker()
+      const gates = new Map<string, () => void>()
+      const contexts: unknown[] = []
+      const transform: SourceTransform = (source, context) =>
+        new Promise<string>((resolve) => {
+          contexts.push(context)
+          gates.set(source, () => resolve(`${source} /* compiled */`))
+        })
+      const session = createTestSession({
+        serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs',
+        workerUrl: 'https://example.test/assets/test-worker-entry.mjs',
+        workerFactory: () => worker,
+        transform,
+      })
+
+      const pending = session.run({
+        engine: 'vitest',
+        modules: { 'src/add': 'export const add = 1', 'tests/add.test': 'import "../src/add"' },
+        testFiles: ['tests/add.test'],
+      })
+      await flushMicrotasks()
+
+      // Neither module waits for the other: both transforms are in flight before any settles.
+      expect([...gates.keys()]).toEqual(['export const add = 1', 'import "../src/add"'])
+      expect(contexts).toEqual([
+        { kind: 'test', id: 'src/add' },
+        { kind: 'test', id: 'tests/add.test' },
+      ])
+      expect(worker.sent).toHaveLength(0)
+
+      for (const release of [...gates.values()].toReversed()) release()
+      await flushMicrotasks(32)
+      expect(worker.sent[0]).toMatchObject({
+        kind: 'test',
+        run: {
+          modules: {
+            'src/add': 'export const add = 1 /* compiled */',
+            'tests/add.test': 'import "../src/add" /* compiled */',
+          },
+        },
+      })
+      const okTestResult = { status: 'passed', ok: true, tests: [], console: [], dependencies: [], durationMs: 1 }
+      worker.emitMessage({ kind: 'test-result', id: 1, result: okTestResult } as WorkerResponse)
+      await expect(pending).resolves.toMatchObject({ ok: true })
+      session.close()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })

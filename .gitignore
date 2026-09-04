@@ -286,11 +286,13 @@ build/
 *.tsbuildinfo
 
 ### esmwell demo recording ###
-# Recording intermediates from `pnpm --filter playground demo`. Only the
-# rendered GIF is committed; apps/playground/demo.video.ts is its source, and
-# a re-render needs the browser frames re-recorded anyway.
+# Recording intermediates from `pnpm --filter playground demo`. Only the cuts
+# that `demo:social` derives from the 2x master are committed;
+# apps/playground/demo.video.ts is their source, and a re-render needs the
+# browser frames re-recorded anyway.
 docs/media/*.cast
 docs/media/*.browser/
+docs/media/playground-2x.gif
 
 ### impeccable session state ###
 # Per-machine design-session logs and snapshots written by the impeccable

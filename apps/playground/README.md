@@ -59,14 +59,15 @@ pnpm --filter playground preview   # serves the built app
 [tcut](https://github.com/AmanVarshney01/tcut):
 
 ```bash
-pnpm --filter playground demo         # re-records and re-renders the GIF
-pnpm --filter playground demo:social  # derives playground.mp4 and playground-x.gif (needs ffmpeg)
+pnpm --filter playground demo         # re-records the 2x master (ignored by git)
+pnpm --filter playground demo:social  # derives playground.gif and playground.mp4 from it (needs ffmpeg)
 ```
 
-The README GIF is rendered at 2x (2560×1600, 50 fps), which is sharper than X
-accepts for a GIF. `demo:social` writes two postable cuts next to it:
-`docs/media/playground.mp4` (1280×800, 30 fps) and `docs/media/playground-x.gif`
-(1280×800, 15 fps, under X's 350-frame limit). Run it after every `demo`.
+tcut renders the master at 2x (2560×1600, 50 fps) to `docs/media/playground-2x.gif`,
+which is too large to commit and sharper than X accepts for a GIF. `demo:social`
+writes the two files that ship: `docs/media/playground.gif` (1280×800, 15 fps,
+under X's 350-frame limit; the README embeds it) and `docs/media/playground.mp4`
+(1280×800, 30 fps). Run it after every `demo`.
 
 [`demo.video.ts`](./demo.video.ts) is the source of that recording. It builds
 and previews the app rather than using `vite dev`, because the dev client is

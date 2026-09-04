@@ -49,7 +49,9 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
     )
   }
 
-  window.__demoHoverCodeMirrorText = (selector, text, line) => {
+  // Finds the text in the editor (or in one 1-based line of it) and returns
+  // the element that holds it plus the centre of its on-screen bounds.
+  const locateCodeMirrorText = (selector, text, line) => {
     const content = cmContent(selector)
     const root = line === undefined ? content : content.querySelectorAll('.cm-line')[line - 1]
     if (!(root instanceof HTMLElement)) throw new Error('CodeMirror line is missing: ' + line)
@@ -62,18 +64,22 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
         range.setStart(node, offset)
         range.setEnd(node, offset + text.length)
         const bounds = range.getBoundingClientRect()
-        const init = {
-          bubbles: true,
-          clientX: bounds.left + bounds.width / 2,
-          clientY: bounds.top + bounds.height / 2,
+        return {
+          target: node.parentElement,
+          x: bounds.left + bounds.width / 2,
+          y: bounds.top + bounds.height / 2,
         }
-        node.parentElement.dispatchEvent(new MouseEvent('mouseover', init))
-        node.parentElement.dispatchEvent(new MouseEvent('mousemove', init))
-        return
       }
       node = walker.nextNode()
     }
     throw new Error('CodeMirror text is missing: ' + text + (line === undefined ? '' : ' on line ' + line))
+  }
+
+  window.__demoHoverCodeMirrorText = (selector, text, line) => {
+    const { target, x, y } = locateCodeMirrorText(selector, text, line)
+    const init = { bubbles: true, clientX: x, clientY: y }
+    target.dispatchEvent(new MouseEvent('mouseover', init))
+    target.dispatchEvent(new MouseEvent('mousemove', init))
   }
 
   // The recorder has no pointer of its own, so the visible timeline draws one:
@@ -151,28 +157,10 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
   }
 
   window.__demoHoverWithPointer = async (selector, text, line) => {
-    const content = cmContent(selector)
-    const root = line === undefined ? content : content.querySelectorAll('.cm-line')[line - 1]
-    if (!(root instanceof HTMLElement)) throw new Error('CodeMirror line is missing: ' + line)
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    let node = walker.nextNode()
-    while (node) {
-      const offset = node.textContent?.indexOf(text) ?? -1
-      if (offset >= 0 && node.parentElement) {
-        const range = document.createRange()
-        range.setStart(node, offset)
-        range.setEnd(node, offset + text.length)
-        const bounds = range.getBoundingClientRect()
-        const x = bounds.left + bounds.width / 2
-        const y = bounds.top + bounds.height / 2
-        await window.__demoMovePointer(x, y)
-        node.parentElement.dispatchEvent(new MouseEvent('mouseover', mouseInit(x, y)))
-        node.parentElement.dispatchEvent(new MouseEvent('mousemove', mouseInit(x, y)))
-        return
-      }
-      node = walker.nextNode()
-    }
-    throw new Error('CodeMirror text is missing: ' + text + (line === undefined ? '' : ' on line ' + line))
+    const { target, x, y } = locateCodeMirrorText(selector, text, line)
+    await window.__demoMovePointer(x, y)
+    target.dispatchEvent(new MouseEvent('mouseover', mouseInit(x, y)))
+    target.dispatchEvent(new MouseEvent('mousemove', mouseInit(x, y)))
   }
 
   window.__demoWaitFor = async (predicate, message, attempts = 60) => {
@@ -195,7 +183,9 @@ const INSTALL_CODEMIRROR_HELPERS = `(() => {
  */
 export default defineVideo(
   {
-    output: ['../../docs/media/playground.gif'],
+    // The 2x master is an ignored intermediate; `demo:social` derives the
+    // committed playground.gif and playground.mp4 from it.
+    output: ['../../docs/media/playground-2x.gif'],
     cols: 60,
     rows: 14,
     browser: { position: 'overlay', width: 1280, height: 800, offset: { x: 0, y: 0 } },
