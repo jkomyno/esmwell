@@ -108,6 +108,70 @@ export const ESMWELL_RUNTIME_TYPES: TypeScriptExtraLib = {
 `,
 }
 
+/** Structural compiler capability; TypeScript stays supplied by the host. */
+export interface TypeScriptTypeGraphAdapterOptions<Extension> {
+  readonly compiler: {
+    readonly Extension: { readonly Dts: Extension; readonly Dmts: Extension; readonly Dcts: Extension }
+  }
+  /** The host's virtual files, also used by its readFile and getScriptSnapshot. */
+  readonly files: Map<string, string>
+}
+
+export interface TypeScriptTypeGraphAdapter<Extension> {
+  /** Replaces acquired declarations; returns true when the host must invalidate project and declaration versions. */
+  apply(graph: TypeScriptTypeGraph): boolean
+  /** Returns undefined for imports that should fall back to the host's normal TypeScript resolver. */
+  resolveModule(
+    specifier: string,
+    containingFile: string,
+  ):
+    | {
+        readonly resolvedFileName: string
+        readonly extension: Extension
+        readonly isExternalLibraryImport: true
+      }
+    | undefined
+}
+
+/** Binds acquired declarations to a language-service host without owning its compiler or VFS. */
+export const createTypeScriptTypeGraphAdapter = <Extension>({
+  compiler,
+  files,
+}: TypeScriptTypeGraphAdapterOptions<Extension>): TypeScriptTypeGraphAdapter<Extension> => {
+  let applied: TypeScriptTypeGraph | undefined
+  const resolutions = new Map<string, string>()
+  return {
+    apply(graph) {
+      if (graph === applied) return false
+      for (const file of applied?.files ?? []) files.delete(file.fileName)
+      resolutions.clear()
+      for (const file of graph.files) files.set(file.fileName, file.content)
+      for (const resolution of graph.resolutions) {
+        resolutions.set(typeResolutionKey(resolution.specifier, resolution.containingFilePrefix), resolution.fileName)
+      }
+      applied = graph
+      return true
+    },
+    resolveModule(specifier, containingFile) {
+      const resolvedFileName = resolutions.get(typeResolutionKey(specifier, containingPackagePrefix(containingFile)))
+      if (resolvedFileName === undefined) return undefined
+      const extension = resolvedFileName.endsWith('.d.mts')
+        ? compiler.Extension.Dmts
+        : resolvedFileName.endsWith('.d.cts')
+          ? compiler.Extension.Dcts
+          : compiler.Extension.Dts
+      return { resolvedFileName, extension, isExternalLibraryImport: true }
+    },
+  }
+}
+
+const containingPackagePrefix = (fileName: string): string | undefined => {
+  if (!fileName.startsWith(ESMWELL_TYPES_ROOT)) return undefined
+  const segments = fileName.slice(ESMWELL_TYPES_ROOT.length).split('/')
+  const packageSegments = segments[0]?.startsWith('@') ? segments.slice(0, 2) : segments.slice(0, 1)
+  return `${ESMWELL_TYPES_ROOT}${packageSegments.join('/')}/`
+}
+
 interface PackageRequest {
   readonly reference: PackageReference
   readonly containingFilePrefix?: string

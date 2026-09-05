@@ -4,10 +4,8 @@ import { serveWorkerRpc } from 'esmwell/utils'
 import {
   createTypeScriptModuleScanner,
   ESMWELL_RUNTIME_TYPES,
-  ESMWELL_TYPES_ROOT,
-  typeResolutionKey,
+  createTypeScriptTypeGraphAdapter,
   TypeScriptTypeAcquirer,
-  type TypeScriptTypeGraph,
 } from 'esmwell/typescript-editor'
 import * as ts from 'typescript-legacy'
 import type {
@@ -33,7 +31,7 @@ const libraries = new Map(
 // acquisition supplies it. A root file rather than a lib, so the interface
 // merges even though nothing imports it.
 libraries.set(ESMWELL_RUNTIME_TYPES.fileName, ESMWELL_RUNTIME_TYPES.content)
-const moduleResolutions = new Map<string, string>()
+const typeGraph = createTypeScriptTypeGraphAdapter({ compiler: ts, files: libraries })
 const moduleScanner = createTypeScriptModuleScanner(ts)
 const typeAcquirer = new TypeScriptTypeAcquirer({ scanner: moduleScanner })
 
@@ -45,6 +43,7 @@ const sourceFileNames: Readonly<Record<SourceLanguage, string>> = {
 let currentLanguage: SourceLanguage = 'ts'
 let currentSource = ''
 let sourceVersion = 0
+let declarationVersion = 0
 
 const compilerOptions = (language: SourceLanguage): ts.CompilerOptions => ({
   allowJs: language === 'mjs',
@@ -71,25 +70,6 @@ const sourceFor = (fileName: string): string | undefined => {
   return libraries.get(absolute)
 }
 
-const declarationExtension = (fileName: string): ts.Extension => {
-  if (fileName.endsWith('.d.mts')) {
-    return ts.Extension.Dmts
-  }
-  if (fileName.endsWith('.d.cts')) {
-    return ts.Extension.Dcts
-  }
-  return ts.Extension.Dts
-}
-
-const containingPackagePrefix = (fileName: string): string | undefined => {
-  if (!fileName.startsWith(ESMWELL_TYPES_ROOT)) {
-    return undefined
-  }
-  const segments = fileName.slice(ESMWELL_TYPES_ROOT.length).split('/')
-  const packageSegments = segments[0]?.startsWith('@') ? segments.slice(0, 2) : segments.slice(0, 1)
-  return packageSegments.length === 0 ? undefined : `${ESMWELL_TYPES_ROOT}${packageSegments.join('/')}/`
-}
-
 const host: ts.LanguageServiceHost = {
   fileExists: (fileName) => sourceFor(fileName) !== undefined,
   getCompilationSettings: () => compilerOptions(currentLanguage),
@@ -103,28 +83,18 @@ const host: ts.LanguageServiceHost = {
     const source = sourceFor(fileName)
     return source === undefined ? undefined : ts.ScriptSnapshot.fromString(source)
   },
-  getScriptVersion: (fileName) => (fileName === activeFileName() ? String(sourceVersion) : '1'),
+  getScriptVersion: (fileName) => (fileName === activeFileName() ? String(sourceVersion) : String(declarationVersion)),
   readFile: sourceFor,
   resolveModuleNameLiterals: (moduleLiterals, containingFile, _redirectedReference, options) =>
     moduleLiterals.map((moduleLiteral) => {
-      const packagePrefix = containingPackagePrefix(containingFile)
-      const resolvedFileName = moduleResolutions.get(typeResolutionKey(moduleLiteral.text, packagePrefix))
-      if (resolvedFileName !== undefined) {
-        return {
-          resolvedModule: {
-            resolvedFileName,
-            extension: declarationExtension(resolvedFileName),
-            isExternalLibraryImport: true,
-          },
-        }
-      }
+      const resolvedModule = typeGraph.resolveModule(moduleLiteral.text, containingFile)
+      if (resolvedModule !== undefined) return { resolvedModule }
       return ts.resolveModuleName(moduleLiteral.text, containingFile, options, host)
     }),
   useCaseSensitiveFileNames: () => true,
 }
 
 const languageService = ts.createLanguageService(host, ts.createDocumentRegistry())
-let appliedTypeGraph: TypeScriptTypeGraph | undefined
 
 const setSource = (source: string, language: SourceLanguage): void => {
   if (source === currentSource && language === currentLanguage) {
@@ -135,26 +105,11 @@ const setSource = (source: string, language: SourceLanguage): void => {
   sourceVersion += 1
 }
 
-const applyTypeGraph = (graph: TypeScriptTypeGraph): void => {
-  if (graph === appliedTypeGraph) {
-    return
-  }
-  for (const file of appliedTypeGraph?.files ?? []) {
-    libraries.delete(file.fileName)
-  }
-  moduleResolutions.clear()
-  for (const file of graph.files) {
-    libraries.set(file.fileName, file.content)
-  }
-  for (const resolution of graph.resolutions) {
-    moduleResolutions.set(typeResolutionKey(resolution.specifier, resolution.containingFilePrefix), resolution.fileName)
-  }
-  appliedTypeGraph = graph
-  sourceVersion += 1
-}
-
 const withTypeGraph = async <Result>(source: string, operation: () => Result): Promise<Result> => {
-  applyTypeGraph(await typeAcquirer.acquire(source))
+  if (typeGraph.apply(await typeAcquirer.acquire(source))) {
+    declarationVersion += 1
+    sourceVersion += 1
+  }
   return operation()
 }
 

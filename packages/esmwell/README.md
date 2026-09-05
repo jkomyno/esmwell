@@ -190,23 +190,31 @@ Like `esmwell/typescript`, this entrypoint does not import or bundle the compile
 
 ```ts
 import * as ts from 'typescript'
-import { createTypeScriptModuleScanner, typeResolutionKey, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
+import {
+  createTypeScriptModuleScanner,
+  createTypeScriptTypeGraphAdapter,
+  TypeScriptTypeAcquirer,
+} from 'esmwell/typescript-editor'
 
 const scanner = createTypeScriptModuleScanner(ts)
 const acquirer = new TypeScriptTypeAcquirer({ scanner })
 const graph = await acquirer.acquire(`import { z } from 'zod@4'`)
 
-const extraLibs = new Map(graph.files.map((file) => [file.fileName, file.content]))
-
-const resolutions = new Map(
-  graph.resolutions.map((resolution) => [
-    typeResolutionKey(resolution.specifier, resolution.containingFilePrefix),
-    resolution.fileName,
-  ]),
-)
+const extraLibs = new Map<string, string>()
+const adapter = createTypeScriptTypeGraphAdapter({ compiler: ts, files: extraLibs })
+adapter.apply(graph)
 ```
 
 `files` are virtual declaration files under `ESMWELL_TYPES_ROOT`. `resolutions` maps each source or declaration import to its exact virtual file; `containingFilePrefix` distinguishes imports made by transitive packages. `complete` is `false` when a request fails or a safety limit truncates the graph. Incomplete results and failed metadata/archive requests are retried, while successful metadata, archives, and graphs use bounded in-memory caches.
+
+`createTypeScriptTypeGraphAdapter` integrates the graph with a TypeScript language-service host:
+
+| Method                                     | Behavior                                                                                                                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apply(graph)`                             | Replaces acquired files in the supplied map and clears stale resolutions. Returns `false` when the same graph object is already applied.                                       |
+| `resolveModule(specifier, containingFile)` | Returns a TypeScript-compatible resolved declaration, including `.d.ts`/`.d.mts`/`.d.cts` and package-specific dependency versions, or `undefined` for normal host resolution. |
+
+Use that map in the host's `readFile`, `fileExists`, and `getScriptSnapshot`. When `apply` returns `true`, update the host's project and declaration script versions (or rebuild its language service). In `resolveModuleNameLiterals`, wrap an adapter result as `{ resolvedModule }`; when it returns `undefined`, fall back to `ts.resolveModuleName`. The host still owns its compiler options, source files, default libraries, and service disposal. Treat graph objects as immutable, and keep application files outside the acquired `ESMWELL_TYPES_ROOT` namespace. `typeResolutionKey` remains available for custom integrations.
 
 `import.meta.main` comes from the runner rather than from a package, so no acquisition can supply its declaration. Seed `ESMWELL_RUNTIME_TYPES` beside an acquired graph's `files`:
 
