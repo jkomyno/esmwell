@@ -160,6 +160,22 @@ const result = await projects.run({
 projects.close()
 ```
 
+For editor file paths, `esmwell/utils` exports `canonicalModuleId(path)` and `createProjectModules(files)`:
+
+```ts
+import { canonicalModuleId, createProjectModules } from 'esmwell/utils'
+
+await projects.run({
+  modules: createProjectModules([
+    ['/src/main.ts', `import { value } from './value.js'; export { value }`],
+    ['/src/value.ts', 'export const value = 42'],
+  ]),
+  entry: canonicalModuleId('/src/main.ts'),
+})
+```
+
+The helpers strip leading slashes and script extensions, validate ids, and reject duplicate ids or alias collisions. Script paths also register a `.js` alias (`.mjs` for `.mts`/`.mjs`, `.cjs` for `.cts`/`.cjs`). Other paths keep their extension and receive no alias. Sources are copied unchanged: transpile TypeScript/JSX first; these helpers do not enable CommonJS or non-JavaScript execution. Use the same helpers for a test workspace's `modules` and `testFiles`. The runner sets `import.meta.main` itself.
+
 The graph uses the browser's native ESM linker, so relative imports, cycles, live bindings, re-exports, top-level await, and literal dynamic imports keep native semantics. Entry exports cross the worker boundary as structured-cloneable values; if an export such as a function cannot be cloned, its value becomes a display preview.
 
 Each run owns a fresh worker and a fresh versioned graph. A timeout terminates that worker and removes its graph cache before the result settles. See [Hosting module-graph assets](#hosting-module-graph-assets) for deployment requirements.

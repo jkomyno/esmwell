@@ -1,3 +1,5 @@
+import { assertCanonicalModuleId } from './module-ids'
+export { assertCanonicalModuleId } from './module-ids'
 import type { Node, Program } from 'acorn'
 import { applyEdits, quoteString } from './edits'
 import type { SourceEdit } from './edits'
@@ -12,7 +14,6 @@ import { readNodeChild, readNodeString, walkNodes } from './walk'
 export { moduleGraphCacheName } from './module-graph-cache'
 
 const GRAPH_DIRECTORY = '__esmwell_graphs__/v1/'
-const INTERNAL_MODULE_PREFIX = '__esmwell_internal__/'
 const JAVASCRIPT_TYPE = 'text/javascript; charset=utf-8'
 
 /** Options for materializing one same-origin virtual ESM graph. */
@@ -248,23 +249,6 @@ const ownModuleIds = (modules: Readonly<Record<string, string>>): string[] => {
     assertCanonicalModuleId(id)
   }
   return ids
-}
-
-/** Validates a canonical virtual module id such as `src/impl`. */
-export const assertCanonicalModuleId = (id: string): void => {
-  const hasForbiddenCharacter = [...id].some(
-    (character) => character === '\\' || character === '?' || character === '#' || character.charCodeAt(0) <= 31,
-  )
-  if (id === '' || id.startsWith('/') || id.endsWith('/') || hasForbiddenCharacter) {
-    throw new TypeError(`invalid virtual module id '${id}' — use canonical ids such as 'src/impl'`)
-  }
-  const segments = id.split('/')
-  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-    throw new TypeError(`invalid virtual module id '${id}' — '.', '..', and empty path segments are not allowed`)
-  }
-  if (id.startsWith(INTERNAL_MODULE_PREFIX)) {
-    throw new TypeError(`virtual module id '${id}' is reserved by esmwell`)
-  }
 }
 
 const assertGraphId = (graphId: string): void => {

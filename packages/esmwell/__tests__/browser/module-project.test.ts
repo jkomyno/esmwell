@@ -267,3 +267,22 @@ test('rewriting import.meta keeps stack-trace positions where the author wrote t
     session.close()
   }
 })
+
+test('runs editor paths and extension aliases with native entry flags', async () => {
+  const { canonicalModuleId, createProjectModules } = await import('/esmwell/utils.mjs')
+  const session = createModuleProjectSession(projectOptions)
+  try {
+    const result = await session.run({
+      modules: createProjectModules([
+        ['/src/main.ts', `import { value } from './value.mjs'; export { value }; export const main = import.meta.main`],
+        ['/src/value.mts', 'export const value = 42'],
+      ]),
+      entry: canonicalModuleId('/src/main.ts'),
+    })
+    assert(result.status === 'pass', `editor graph should run: ${JSON.stringify(result)}`)
+    assertEqual(result.exports.value, 42, 'extension alias export')
+    assertEqual(result.exports.main, true, 'editor entry flag')
+  } finally {
+    session.close()
+  }
+})

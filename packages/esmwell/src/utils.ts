@@ -17,3 +17,5 @@ export type {
   WorkerRpcRequestOptions,
   WorkerRpcScope,
 } from './worker-rpc'
+
+export { canonicalModuleId, createProjectModules } from './module-ids'
