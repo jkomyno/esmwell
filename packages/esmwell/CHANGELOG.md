@@ -1,5 +1,25 @@
 # esmwell
 
+## 0.3.0
+
+### Minor Changes
+
+- 1710854: Export `canonicalModuleId` and `createProjectModules` from `esmwell/utils` so project and test embedders share editor-path conversion, script extension aliases, and collision errors. Sources remain unchanged.
+
+  Generated `.cjs` entry aliases also share the canonical entry’s `import.meta.main` flag. Their sources still execute as ESM.
+
+- ec31a99: Add `import.meta.main`, the entry signal Node.js, Deno, and Bun expose.
+
+  In a module project it is `true` in the module named by `entry` and `false` in every other module, including a `.js`/`.mjs` twin of a non-entry id; a twin of the entry registered with the same source reports `true` like the entry. Judge modules see `true`, each test file of a workspace sees `true`, and REPL inputs see `false`. `import.meta.url` and `import.meta.resolve` are unchanged. The property is added by rewriting each `import.meta` in place, so line numbers in stack traces and error reports stay where the author wrote them.
+
+  `esmwell/typescript-editor` also exports `ESMWELL_RUNTIME_TYPES`, the ambient declaration of the flag, so an editor host seeds it beside an acquired declaration graph instead of writing its own.
+
+- bba859b: Export `createTypeScriptTypeGraphAdapter` from `esmwell/typescript-editor` for shared declaration-graph replacement and package-aware TypeScript resolution. The compiler and language-service host remain supplied by the embedder. Use the adapter in the playground language worker and invalidate declaration snapshots when its graph changes.
+
+### Patch Changes
+
+- ee9af88: Make project and test session `close()` terminate active workers and settle pending runs as errors. Closure also cancels waiting for source transforms and service-worker setup, prevents late worker creation, and cleans up each run's graph cache.
+
 ## 0.2.0
 
 ### Minor Changes
