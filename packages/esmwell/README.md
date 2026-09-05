@@ -160,9 +160,27 @@ const result = await projects.run({
 projects.close()
 ```
 
+For editor file paths, `esmwell/utils` exports `canonicalModuleId(path)` and `createProjectModules(files)`:
+
+```ts
+import { canonicalModuleId, createProjectModules } from 'esmwell/utils'
+
+await projects.run({
+  modules: createProjectModules([
+    ['/src/main.ts', `import { value } from './value.js'; export { value }`],
+    ['/src/value.ts', 'export const value = 42'],
+  ]),
+  entry: canonicalModuleId('/src/main.ts'),
+})
+```
+
+The helpers strip leading slashes and script extensions, validate ids, and reject duplicate ids or alias collisions. Script paths also register a `.js` alias (`.mjs` for `.mts`/`.mjs`, `.cjs` for `.cts`/`.cjs`). Other paths keep their extension and receive no alias. Sources are copied unchanged: transpile TypeScript/JSX first; these helpers do not enable CommonJS or non-JavaScript execution. Use the same helpers for a test workspace's `modules` and `testFiles`. The runner sets `import.meta.main` itself.
+
 The graph uses the browser's native ESM linker, so relative imports, cycles, live bindings, re-exports, top-level await, and literal dynamic imports keep native semantics. Entry exports cross the worker boundary as structured-cloneable values; if an export such as a function cannot be cloned, its value becomes a display preview.
 
 Each run owns a fresh worker and a fresh versioned graph. A timeout terminates that worker and removes its graph cache before the result settles. See [Hosting module-graph assets](#hosting-module-graph-assets) for deployment requirements.
+
+`import.meta.main` is `true` in the module named by `entry` and `false` in every other module of the project, the same signal Node.js, Deno, and Bun give the module a process started from. A `.js`, `.mjs`, or `.cjs` twin of the entry registered with the same source reports the same value as the entry. Judge modules see `true`, REPL inputs see `false`, and each test file of a workspace sees `true`. The property is set by rewriting each `import.meta` in place, so line numbers in stack traces stay the author's.
 
 ## TypeScript editor kit
 
@@ -172,23 +190,41 @@ Like `esmwell/typescript`, this entrypoint does not import or bundle the compile
 
 ```ts
 import * as ts from 'typescript'
-import { createTypeScriptModuleScanner, typeResolutionKey, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
+import {
+  createTypeScriptModuleScanner,
+  createTypeScriptTypeGraphAdapter,
+  TypeScriptTypeAcquirer,
+} from 'esmwell/typescript-editor'
 
 const scanner = createTypeScriptModuleScanner(ts)
 const acquirer = new TypeScriptTypeAcquirer({ scanner })
 const graph = await acquirer.acquire(`import { z } from 'zod@4'`)
 
-const extraLibs = new Map(graph.files.map((file) => [file.fileName, file.content]))
-
-const resolutions = new Map(
-  graph.resolutions.map((resolution) => [
-    typeResolutionKey(resolution.specifier, resolution.containingFilePrefix),
-    resolution.fileName,
-  ]),
-)
+const extraLibs = new Map<string, string>()
+const adapter = createTypeScriptTypeGraphAdapter({ compiler: ts, files: extraLibs })
+adapter.apply(graph)
 ```
 
 `files` are virtual declaration files under `ESMWELL_TYPES_ROOT`. `resolutions` maps each source or declaration import to its exact virtual file; `containingFilePrefix` distinguishes imports made by transitive packages. `complete` is `false` when a request fails or a safety limit truncates the graph. Incomplete results and failed metadata/archive requests are retried, while successful metadata, archives, and graphs use bounded in-memory caches.
+
+`createTypeScriptTypeGraphAdapter` integrates the graph with a TypeScript language-service host:
+
+| Method                                     | Behavior                                                                                                                                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apply(graph)`                             | Replaces acquired files in the supplied map and clears stale resolutions. Returns `false` when the same graph object is already applied.                                       |
+| `resolveModule(specifier, containingFile)` | Returns a TypeScript-compatible resolved declaration, including `.d.ts`/`.d.mts`/`.d.cts` and package-specific dependency versions, or `undefined` for normal host resolution. |
+
+Use that map in the host's `readFile`, `fileExists`, and `getScriptSnapshot`. When `apply` returns `true`, update the host's project and declaration script versions (or rebuild its language service). In `resolveModuleNameLiterals`, wrap an adapter result as `{ resolvedModule }`; when it returns `undefined`, fall back to `ts.resolveModuleName`. The host still owns its compiler options, source files, default libraries, and service disposal. Treat graph objects as immutable, and keep application files outside the acquired `ESMWELL_TYPES_ROOT` namespace. `typeResolutionKey` remains available for custom integrations.
+
+`import.meta.main` comes from the runner rather than from a package, so no acquisition can supply its declaration. Seed `ESMWELL_RUNTIME_TYPES` beside an acquired graph's `files`:
+
+```ts
+import { ESMWELL_RUNTIME_TYPES } from 'esmwell/typescript-editor'
+
+extraLibs.set(ESMWELL_RUNTIME_TYPES.fileName, ESMWELL_RUNTIME_TYPES.content)
+```
+
+Its content is a script rather than a module, so the interface merges into the global `ImportMeta`, and it declares `main` exactly as `@types/node` does, so an editor loading both keeps one declaration of the flag.
 
 `createTypeScriptModuleScanner` also exposes `moduleSpecifiers(source)` and `isModuleSpecifierPosition(source, position)` for editor completion routing. `TypeScriptTypeAcquirer` accepts optional `fetch` and `fetchTimeoutMs` overrides for hosts that need a custom network boundary.
 
@@ -272,17 +308,17 @@ Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node env
 
 ### `createTestSession(options?)` → `TestSession`
 
-| Method                | Returns                  | Description                                                            |
-| --------------------- | ------------------------ | ---------------------------------------------------------------------- |
-| `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`) in a fresh worker. |
-| `close()`             | `void`                   | Prevents future runs. An in-flight run still settles.                  |
+| Method                | Returns                  | Description                                                                          |
+| --------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`) in a fresh worker.               |
+| `close()`             | `void`                   | Terminates active workers, settles pending runs as errors, and prevents future runs. |
 
 ### `createModuleProjectSession(options?)` → `ModuleProjectSession`
 
-| Method                    | Returns                        | Description                                                                  |
-| ------------------------- | ------------------------------ | ---------------------------------------------------------------------------- |
-| `run(project, handlers?)` | `Promise<ModuleProjectResult>` | Imports a `ModuleProject` (`modules`, `entry`) once in a fresh owned worker. |
-| `close()`                 | `void`                         | Prevents future runs. An in-flight run still settles and cleans up normally. |
+| Method                    | Returns                        | Description                                                                          |
+| ------------------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
+| `run(project, handlers?)` | `Promise<ModuleProjectResult>` | Imports a `ModuleProject` (`modules`, `entry`) once in a fresh owned worker.         |
+| `close()`                 | `void`                         | Terminates active workers, settles pending runs as errors, and prevents future runs. |
 
 ### Options
 

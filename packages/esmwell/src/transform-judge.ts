@@ -1,6 +1,7 @@
 import type { Node, Program } from 'acorn'
 import { applyEdits, quoteString } from './edits'
 import type { SourceEdit } from './edits'
+import { importMetaMainEdits } from './import-meta'
 import { resolveImportSpecifier } from './resolve'
 import type { ResolvedDependency, ResolveOptions } from './resolve'
 import { readNodeChild, readNodeString, walkNodes } from './walk'
@@ -16,7 +17,8 @@ export interface JudgeTransform {
  * `import … from`, `export … from`, `export * from`, and literal dynamic
  * `import('…')` specifiers. Non-literal dynamic imports pass through
  * untouched. Throws {@link SpecifierResolutionError} when any specifier
- * cannot be resolved.
+ * cannot be resolved. The submitted module is the program a judge run
+ * starts from, so its `import.meta.main` is `true`.
  */
 export function transformJudgeModule(code: string, ast: Program, options: ResolveOptions): JudgeTransform {
   const edits: SourceEdit[] = []
@@ -44,6 +46,7 @@ export function transformJudgeModule(code: string, ast: Program, options: Resolv
       dependencies.push(resolved.dependency)
     }
   })
+  edits.push(...importMetaMainEdits(code, ast, true))
 
   return { code: applyEdits(code, edits), dependencies }
 }

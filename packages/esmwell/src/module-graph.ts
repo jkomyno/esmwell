@@ -1,6 +1,9 @@
+import { assertCanonicalModuleId } from './module-ids'
+export { assertCanonicalModuleId } from './module-ids'
 import type { Node, Program } from 'acorn'
 import { applyEdits, quoteString } from './edits'
 import type { SourceEdit } from './edits'
+import { importMetaMainEdits } from './import-meta'
 import { moduleGraphCacheName } from './module-graph-cache'
 import { parseUserModule } from './parse'
 import { checkPolicy } from './policy'
@@ -11,7 +14,6 @@ import { readNodeChild, readNodeString, walkNodes } from './walk'
 export { moduleGraphCacheName } from './module-graph-cache'
 
 const GRAPH_DIRECTORY = '__esmwell_graphs__/v1/'
-const INTERNAL_MODULE_PREFIX = '__esmwell_internal__/'
 const JAVASCRIPT_TYPE = 'text/javascript; charset=utf-8'
 
 /** Options for materializing one same-origin virtual ESM graph. */
@@ -45,6 +47,7 @@ export async function materializeModuleGraph(options: ModuleGraphOptions): Promi
   assertGraphId(options.graphId)
   const moduleIds = ownModuleIds(options.modules)
   const moduleIdSet = new Set(moduleIds)
+  const mainModuleIds = mainModuleIdsOf(options.modules, options.entries)
   const graphBaseUrl = new URL(`${GRAPH_DIRECTORY}${options.graphId}/`, ensureTrailingSlash(options.serviceWorkerScope))
   const moduleUrl = (id: string): string => new URL(encodeModuleId(id), graphBaseUrl).href
   const dependencies: ResolvedDependency[] = []
@@ -66,6 +69,7 @@ export async function materializeModuleGraph(options: ModuleGraphOptions): Promi
       const transformed = transformModuleGraphSource(source, ast, id, {
         ...options,
         moduleIdSet,
+        mainModuleIds,
         moduleUrl,
       })
       for (const dependency of transformed.dependencies) {
@@ -111,6 +115,8 @@ export async function materializeModuleGraph(options: ModuleGraphOptions): Promi
 
 interface TransformContext extends ResolveOptions {
   readonly moduleIdSet: ReadonlySet<string>
+  /** Modules whose `import.meta.main` is `true`: the entries and their extension aliases. */
+  readonly mainModuleIds: ReadonlySet<string>
   readonly moduleUrl: (id: string) => string
   readonly specifierAliases?: Readonly<Record<string, string>>
   readonly blockedSpecifiers?: Readonly<Record<string, string>>
@@ -147,7 +153,35 @@ export const transformModuleGraphSource = (
     }
   })
 
+  edits.push(...importMetaMainEdits(code, ast, context.mainModuleIds.has(importerId)))
+
   return { code: applyEdits(code, edits), dependencies }
+}
+
+const SCRIPT_EXTENSION = /\.[cm]?js$/
+
+/**
+ * The entries plus every alias of an entry. A project may register one
+ * source under a canonical id and under its `.js`, `.mjs`, or `.cjs` twin so that
+ * extension-suffixed relative imports resolve. The twin is a separate module
+ * instance to the ESM linker, and it reports the same `import.meta.main` as
+ * the id it aliases rather than a second, different main.
+ */
+const mainModuleIdsOf = (
+  modules: Readonly<Record<string, string>>,
+  entries: readonly string[],
+): ReadonlySet<string> => {
+  const mainIds = new Set<string>()
+  for (const entry of entries) {
+    const entryStem = entry.replace(SCRIPT_EXTENSION, '')
+    for (const id of Object.keys(modules)) {
+      const aliasesEntry = id.replace(SCRIPT_EXTENSION, '') === entryStem && modules[id] === modules[entry]
+      if (id === entry || aliasesEntry) {
+        mainIds.add(id)
+      }
+    }
+  }
+  return mainIds
 }
 
 const resolveGraphSpecifier = (
@@ -215,23 +249,6 @@ const ownModuleIds = (modules: Readonly<Record<string, string>>): string[] => {
     assertCanonicalModuleId(id)
   }
   return ids
-}
-
-/** Validates a canonical virtual module id such as `src/impl`. */
-export const assertCanonicalModuleId = (id: string): void => {
-  const hasForbiddenCharacter = [...id].some(
-    (character) => character === '\\' || character === '?' || character === '#' || character.charCodeAt(0) <= 31,
-  )
-  if (id === '' || id.startsWith('/') || id.endsWith('/') || hasForbiddenCharacter) {
-    throw new TypeError(`invalid virtual module id '${id}' — use canonical ids such as 'src/impl'`)
-  }
-  const segments = id.split('/')
-  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
-    throw new TypeError(`invalid virtual module id '${id}' — '.', '..', and empty path segments are not allowed`)
-  }
-  if (id.startsWith(INTERNAL_MODULE_PREFIX)) {
-    throw new TypeError(`virtual module id '${id}' is reserved by esmwell`)
-  }
 }
 
 const assertGraphId = (graphId: string): void => {

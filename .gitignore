@@ -298,3 +298,6 @@ docs/media/playground-2x.gif
 # Per-machine design-session logs and snapshots written by the impeccable
 # tooling. .impeccable/design.json is real project state and stays tracked.
 .impeccable/live/
+
+# Agent worktrees
+.worktrees/
