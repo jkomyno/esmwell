@@ -269,3 +269,16 @@ describe('REPL rejections and capture', () => {
     expect(result.value).toBe(2)
   })
 })
+
+describe('REPL import.meta.main', () => {
+  it('is false, not undefined, because no input is the program a run starts from', async () => {
+    const session = createReplSessionInRealm({})
+    const completion = await evaluate(session, 'import.meta.main')
+    const negated = await evaluate(session, 'const notMain = !import.meta.main\nnotMain')
+    const inFunction = await evaluate(session, 'const read = () => import.meta.main\nread() === false')
+
+    expect(completion).toMatchObject({ ok: true, value: false })
+    expect(negated).toMatchObject({ ok: true, value: true })
+    expect(inFunction).toMatchObject({ ok: true, value: true })
+  })
+})

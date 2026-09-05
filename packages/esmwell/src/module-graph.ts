@@ -1,6 +1,7 @@
 import type { Node, Program } from 'acorn'
 import { applyEdits, quoteString } from './edits'
 import type { SourceEdit } from './edits'
+import { importMetaMainEdits } from './import-meta'
 import { moduleGraphCacheName } from './module-graph-cache'
 import { parseUserModule } from './parse'
 import { checkPolicy } from './policy'
@@ -45,6 +46,7 @@ export async function materializeModuleGraph(options: ModuleGraphOptions): Promi
   assertGraphId(options.graphId)
   const moduleIds = ownModuleIds(options.modules)
   const moduleIdSet = new Set(moduleIds)
+  const mainModuleIds = mainModuleIdsOf(options.modules, options.entries)
   const graphBaseUrl = new URL(`${GRAPH_DIRECTORY}${options.graphId}/`, ensureTrailingSlash(options.serviceWorkerScope))
   const moduleUrl = (id: string): string => new URL(encodeModuleId(id), graphBaseUrl).href
   const dependencies: ResolvedDependency[] = []
@@ -66,6 +68,7 @@ export async function materializeModuleGraph(options: ModuleGraphOptions): Promi
       const transformed = transformModuleGraphSource(source, ast, id, {
         ...options,
         moduleIdSet,
+        mainModuleIds,
         moduleUrl,
       })
       for (const dependency of transformed.dependencies) {
@@ -111,6 +114,8 @@ export async function materializeModuleGraph(options: ModuleGraphOptions): Promi
 
 interface TransformContext extends ResolveOptions {
   readonly moduleIdSet: ReadonlySet<string>
+  /** Modules whose `import.meta.main` is `true`: the entries and their extension aliases. */
+  readonly mainModuleIds: ReadonlySet<string>
   readonly moduleUrl: (id: string) => string
   readonly specifierAliases?: Readonly<Record<string, string>>
   readonly blockedSpecifiers?: Readonly<Record<string, string>>
@@ -147,7 +152,35 @@ export const transformModuleGraphSource = (
     }
   })
 
+  edits.push(...importMetaMainEdits(code, ast, context.mainModuleIds.has(importerId)))
+
   return { code: applyEdits(code, edits), dependencies }
+}
+
+const SCRIPT_EXTENSION = /\.m?js$/
+
+/**
+ * The entries plus every alias of an entry. A project may register one
+ * source under a canonical id and under its `.js` or `.mjs` twin so that
+ * extension-suffixed relative imports resolve. The twin is a separate module
+ * instance to the ESM linker, and it reports the same `import.meta.main` as
+ * the id it aliases rather than a second, different main.
+ */
+const mainModuleIdsOf = (
+  modules: Readonly<Record<string, string>>,
+  entries: readonly string[],
+): ReadonlySet<string> => {
+  const mainIds = new Set<string>()
+  for (const entry of entries) {
+    const entryStem = entry.replace(SCRIPT_EXTENSION, '')
+    for (const id of Object.keys(modules)) {
+      const aliasesEntry = id.replace(SCRIPT_EXTENSION, '') === entryStem && modules[id] === modules[entry]
+      if (id === entry || aliasesEntry) {
+        mainIds.add(id)
+      }
+    }
+  }
+  return mainIds
 }
 
 const resolveGraphSpecifier = (

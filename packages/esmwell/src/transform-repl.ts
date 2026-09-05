@@ -1,6 +1,7 @@
 import type { Node, Program } from 'acorn'
 import { applyEdits, quoteString } from './edits'
 import type { SourceEdit } from './edits'
+import { importMetaMainEdits } from './import-meta'
 import { analyzeScope } from './scope-analysis'
 import { resolveImportSpecifier } from './resolve'
 import type { ResolvedDependency, ResolveOptions } from './resolve'
@@ -58,6 +59,8 @@ interface HoistedFunction {
  * declarations are intentionally left in place since class bindings are in
  * the temporal dead zone until evaluated. Named ESM declarations are treated
  * like ordinary REPL declarations, so a module can seed the persistent scope.
+ * No REPL input is the program a run starts from, so `import.meta.main` is
+ * `false`.
  */
 export function transformReplInput(
   input: string,
@@ -65,7 +68,11 @@ export function transformReplInput(
   options: ResolveOptions & { scopeModuleUrl: string },
 ): ReplTransform {
   const analysis = analyzeScope(ast)
-  const edits: SourceEdit[] = []
+  // These go first: the completion-value `return ` insertion can share an
+  // offset with an `import.meta` replacement, and applyEdits renders
+  // same-offset edits in push order, so the replacement has to land before
+  // the insertion widens the text it slices.
+  const edits: SourceEdit[] = importMetaMainEdits(input, ast, false)
   const dependencies: ResolvedDependency[] = []
   const seenDependencies = new Set<string>()
   const hoistedFunctions: HoistedFunction[] = []

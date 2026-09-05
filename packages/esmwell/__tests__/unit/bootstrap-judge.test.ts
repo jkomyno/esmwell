@@ -211,3 +211,17 @@ describe('runJudgeInRealm: dependency surfacing', () => {
     expect(result.dependencies).toEqual([])
   })
 })
+
+describe('runJudgeInRealm: import.meta.main', () => {
+  it('is true in the submitted module, the program a judge run starts from', async () => {
+    const result = await runJudge(
+      `export const main = () => import.meta.main\nexport const keys = () => Object.keys(import.meta).includes('main')`,
+      [
+        { name: 'main', exportName: 'main', expected: true },
+        { name: 'enumerable', exportName: 'keys', expected: true },
+      ],
+    )
+
+    expect(result.cases.map((caseResult) => caseResult.status)).toEqual(['pass', 'pass'])
+  })
+})
