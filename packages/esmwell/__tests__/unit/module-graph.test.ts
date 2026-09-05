@@ -36,6 +36,7 @@ describe('materializeModuleGraph: import.meta.main', () => {
       modules: {
         'src/main': entrySource,
         'src/main.js': entrySource,
+        'src/main.cjs': entrySource,
         'src/main.mjs': `export const main = import.meta.main // a different program that shares the stem`,
         'src/util': utilSource,
         'src/util.js': utilSource,
@@ -47,6 +48,7 @@ describe('materializeModuleGraph: import.meta.main', () => {
 
     expect(moduleBody(stored, 'src/main')).toBe(`export const main = (import.meta.main = true, import.meta).main`)
     expect(moduleBody(stored, 'src/main.js')).toBe(`export const main = (import.meta.main = true, import.meta).main`)
+    expect(moduleBody(stored, 'src/main.cjs')).toContain('import.meta.main = true')
     expect(moduleBody(stored, 'src/main.mjs')).toContain(`(import.meta.main = false, import.meta).main`)
     expect(moduleBody(stored, 'src/util')).toBe(`export const utilMain = (import.meta.main = false, import.meta).main`)
     expect(moduleBody(stored, 'src/util.js')).toBe(

@@ -158,11 +158,11 @@ export const transformModuleGraphSource = (
   return { code: applyEdits(code, edits), dependencies }
 }
 
-const SCRIPT_EXTENSION = /\.m?js$/
+const SCRIPT_EXTENSION = /\.[cm]?js$/
 
 /**
  * The entries plus every alias of an entry. A project may register one
- * source under a canonical id and under its `.js` or `.mjs` twin so that
+ * source under a canonical id and under its `.js`, `.mjs`, or `.cjs` twin so that
  * extension-suffixed relative imports resolve. The twin is a separate module
  * instance to the ESM linker, and it reports the same `import.meta.main` as
  * the id it aliases rather than a second, different main.
