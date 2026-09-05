@@ -1,8 +1,47 @@
 import * as ts from 'typescript-legacy'
 import { describe, expect, it, vi } from 'vitest'
-import { createTypeScriptModuleScanner, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
+import { ESMWELL_RUNTIME_TYPES, createTypeScriptModuleScanner, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
 
 const scanner = createTypeScriptModuleScanner(ts)
+
+/**
+ * Typechecks `source` as a module, with the runtime declaration seeded like an editor
+ * would. The default type roots put `@types/node` in the program too, so these cases
+ * also cover merging with Node's own `ImportMeta`.
+ */
+const typecheck = (source: string): readonly string[] => {
+  const virtual = new Map([
+    ['/main.ts', source],
+    [ESMWELL_RUNTIME_TYPES.fileName, ESMWELL_RUNTIME_TYPES.content],
+  ])
+  const options: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2023,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    strict: true,
+    noEmit: true,
+  }
+  const host = ts.createCompilerHost(options, true)
+  const readFile = host.readFile.bind(host)
+  const getSourceFile = host.getSourceFile.bind(host)
+  const fileExists = host.fileExists.bind(host)
+  host.readFile = (fileName) => virtual.get(fileName) ?? readFile(fileName)
+  host.fileExists = (fileName) => virtual.has(fileName) || fileExists(fileName)
+  const parsed = new Map<string, ts.SourceFile>()
+  host.getSourceFile = (fileName, languageVersion, ...rest) => {
+    const content = virtual.get(fileName)
+    if (content === undefined) {
+      return getSourceFile(fileName, languageVersion, ...rest)
+    }
+    const cached = parsed.get(fileName) ?? ts.createSourceFile(fileName, content, languageVersion, true)
+    parsed.set(fileName, cached)
+    return cached
+  }
+  const program = ts.createProgram([...virtual.keys()], options, host)
+  return program
+    .getSemanticDiagnostics()
+    .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '))
+}
 
 const jsonResponse = (value: unknown): Response =>
   new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } })
@@ -51,6 +90,24 @@ describe('moduleSpecifiers', () => {
 
     expect(scanner.isModuleSpecifierPosition(source, source.indexOf('zod@4') + 3)).toBe(true)
     expect(scanner.isModuleSpecifierPosition(source, source.lastIndexOf('object') + 3)).toBe(false)
+  })
+})
+
+describe('ESMWELL_RUNTIME_TYPES', () => {
+  it('types the runtime-owned `import.meta.main` without disturbing the native members', () => {
+    const source = [
+      'export const started: boolean = import.meta.main',
+      'export const here: string = import.meta.url',
+      'export const absent = import.meta.absent',
+    ].join('\n')
+
+    expect(typecheck(source)).toEqual(["Property 'absent' does not exist on type 'ImportMeta'."])
+  })
+
+  it('rejects a non-boolean read, so a host never has to declare the flag itself', () => {
+    expect(typecheck('export const started: string = import.meta.main')).toEqual([
+      "Type 'boolean' is not assignable to type 'string'.",
+    ])
   })
 })
 

@@ -87,6 +87,27 @@ export interface TypeScriptModuleResolution {
   readonly containingFilePrefix?: string
 }
 
+/**
+ * Declares the members the runtime adds to `import.meta`, which come from
+ * esmwell rather than from a package, so no acquisition can supply them.
+ * Seed it beside an acquired graph's `files`.
+ *
+ * The content is a script rather than a module, so the interface merges into
+ * the global `ImportMeta` instead of declaring a local one. `main` is declared
+ * exactly as `@types/node` declares it, mutable rather than `readonly`, so an
+ * editor that also loads Node's types merges the two instead of reporting
+ * conflicting modifiers. A write is still overwritten by the next
+ * `import.meta` read at runtime.
+ */
+export const ESMWELL_RUNTIME_TYPES: TypeScriptExtraLib = {
+  fileName: '/esmwell-runtime.d.ts',
+  content: `interface ImportMeta {
+  /** \`true\` in the module a run started from: a project entry, a judge module, or a test file. */
+  main: boolean
+}
+`,
+}
+
 interface PackageRequest {
   readonly reference: PackageReference
   readonly containingFilePrefix?: string

@@ -3,6 +3,7 @@
 import { serveWorkerRpc } from 'esmwell/utils'
 import {
   createTypeScriptModuleScanner,
+  ESMWELL_RUNTIME_TYPES,
   ESMWELL_TYPES_ROOT,
   typeResolutionKey,
   TypeScriptTypeAcquirer,
@@ -28,6 +29,10 @@ const LIB_FILES = import.meta.glob<string>('../node_modules/typescript-legacy/li
 const libraries = new Map(
   Object.entries(LIB_FILES).map(([path, source]) => [`/${path.split('/').at(-1) ?? path}`, source]),
 )
+// `import.meta.main` comes from the runner rather than from a package, so no
+// acquisition supplies it. A root file rather than a lib, so the interface
+// merges even though nothing imports it.
+libraries.set(ESMWELL_RUNTIME_TYPES.fileName, ESMWELL_RUNTIME_TYPES.content)
 const moduleResolutions = new Map<string, string>()
 const moduleScanner = createTypeScriptModuleScanner(ts)
 const typeAcquirer = new TypeScriptTypeAcquirer({ scanner: moduleScanner })
@@ -92,7 +97,7 @@ const host: ts.LanguageServiceHost = {
   getDefaultLibFileName: (options) => `/${ts.getDefaultLibFileName(options)}`,
   getNewLine: () => '\n',
   getProjectVersion: () => String(sourceVersion),
-  getScriptFileNames: () => [activeFileName()],
+  getScriptFileNames: () => [ESMWELL_RUNTIME_TYPES.fileName, activeFileName()],
   getScriptKind: (fileName) => (fileName.endsWith('.mjs') ? ts.ScriptKind.JS : ts.ScriptKind.TS),
   getScriptSnapshot: (fileName) => {
     const source = sourceFor(fileName)

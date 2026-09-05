@@ -192,6 +192,16 @@ const resolutions = new Map(
 
 `files` are virtual declaration files under `ESMWELL_TYPES_ROOT`. `resolutions` maps each source or declaration import to its exact virtual file; `containingFilePrefix` distinguishes imports made by transitive packages. `complete` is `false` when a request fails or a safety limit truncates the graph. Incomplete results and failed metadata/archive requests are retried, while successful metadata, archives, and graphs use bounded in-memory caches.
 
+`import.meta.main` comes from the runner rather than from a package, so no acquisition can supply its declaration. Seed `ESMWELL_RUNTIME_TYPES` beside an acquired graph's `files`:
+
+```ts
+import { ESMWELL_RUNTIME_TYPES } from 'esmwell/typescript-editor'
+
+extraLibs.set(ESMWELL_RUNTIME_TYPES.fileName, ESMWELL_RUNTIME_TYPES.content)
+```
+
+Its content is a script rather than a module, so the interface merges into the global `ImportMeta`, and it declares `main` exactly as `@types/node` does, so an editor loading both keeps one declaration of the flag.
+
 `createTypeScriptModuleScanner` also exposes `moduleSpecifiers(source)` and `isModuleSpecifierPosition(source, position)` for editor completion routing. `TypeScriptTypeAcquirer` accepts optional `fetch` and `fetchTimeoutMs` overrides for hosts that need a custom network boundary.
 
 ## Vitest and Jest workspaces
