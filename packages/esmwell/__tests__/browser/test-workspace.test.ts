@@ -6,6 +6,7 @@ const modulesFor = (engine: 'vitest' | 'jest') => ({
 
     const User = z.object({ name: z.string().min(3) })
     export const parseName = (input) => User.parse(input).name.toUpperCase()
+    export const implMain = import.meta.main
   `,
   'src/cycle-a': `
     import { readB } from 'src/cycle-b'
@@ -18,7 +19,7 @@ const modulesFor = (engine: 'vitest' | 'jest') => ({
   `,
   'tests/impl.test': `
     import { describe, expect, it } from ${JSON.stringify(engine === 'vitest' ? 'vitest' : '@jest/globals')}
-    import { parseName } from 'src/impl'
+    import { implMain, parseName } from 'src/impl'
     import { readCycle } from 'src/cycle-a'
 
     describe('Zod 4 workspace', () => {
@@ -36,6 +37,11 @@ const modulesFor = (engine: 'vitest' | 'jest') => ({
 
       it('uses native ESM cycles and live bindings', () => {
         expect(readCycle()).toBe('BA')
+      })
+
+      it('is the module the run starts from, unlike the implementation it imports', () => {
+        expect(import.meta.main).toBe(true)
+        expect(implMain).toBe(false)
       })
 
       it('protects the esmwell test API binding', () => {
@@ -83,7 +89,7 @@ test('runs current Vitest and Jest engines over local ESM modules with Zod 4', a
       )
       assertEqual(
         result.tests.map((testResult) => testResult.status),
-        ['pass', 'pass', 'fail', 'pass', 'pass'],
+        ['pass', 'pass', 'fail', 'pass', 'pass', 'pass'],
         `${engine} normalized test statuses`,
       )
       assert(

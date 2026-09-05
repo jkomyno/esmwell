@@ -126,3 +126,144 @@ test('terminates a synchronous project loop and removes its virtual graph', asyn
     session.close()
   }
 })
+
+test('import.meta.main is true in the entry and false in every imported module', async () => {
+  const session = createModuleProjectSession({ ...projectOptions, autoInstall: false })
+  try {
+    const result = await session.run({
+      modules: {
+        'src/sibling': `
+          export const siblingMain = import.meta.main
+          export const siblingHasMain = 'main' in import.meta
+          export const siblingUrl = import.meta.url
+        `,
+        'src/main': `
+          import { siblingHasMain, siblingMain, siblingUrl } from './sibling'
+          export const main = import.meta.main
+          export const negated = !import.meta.main
+          export const keys = Object.keys(import.meta)
+          export const urls = [import.meta.url, siblingUrl]
+          export { siblingHasMain, siblingMain }
+        `,
+      },
+      entry: 'src/main',
+    })
+
+    assert(result.status === 'pass', `project should pass: ${JSON.stringify(result)}`)
+    assert(result.exports.main === true, 'the entry should see import.meta.main === true')
+    assert(result.exports.negated === false, 'the entry should read as main under negation')
+    assert(result.exports.siblingMain === false, 'an imported module should see import.meta.main === false')
+    assert(result.exports.siblingHasMain === true, 'a non-entry module still owns the main property')
+    assert((result.exports.keys as string[]).includes('main'), 'main should be an enumerable import.meta key')
+    const [entryUrl, siblingUrl] = result.exports.urls as [string, string]
+    assert(
+      entryUrl.endsWith('/src/main.mjs') && siblingUrl.endsWith('/src/sibling.mjs'),
+      'import.meta.url stays native',
+    )
+  } finally {
+    session.close()
+  }
+})
+
+test('import.meta.main follows the entry of each run over a shared module graph', async () => {
+  const session = createModuleProjectSession({ ...projectOptions, autoInstall: false })
+  const modules = {
+    'src/shared': `export const sharedMain = import.meta.main`,
+    'src/first': `
+      import { sharedMain } from './shared'
+      export const firstMain = import.meta.main
+      export { sharedMain }
+    `,
+    'src/second': `
+      import { sharedMain } from './shared'
+      import { firstMain } from './first'
+      export const secondMain = import.meta.main
+      export { firstMain, sharedMain }
+    `,
+  }
+  try {
+    const first = await session.run({ modules, entry: 'src/first' })
+    const second = await session.run({ modules, entry: 'src/second' })
+
+    assert(
+      first.status === 'pass' && second.status === 'pass',
+      `both runs should pass: ${JSON.stringify([first, second])}`,
+    )
+    assertEqual(first.exports, { firstMain: true, sharedMain: false }, 'run with src/first as entry')
+    assertEqual(
+      second.exports,
+      { firstMain: false, secondMain: true, sharedMain: false },
+      'run with src/second as entry',
+    )
+  } finally {
+    session.close()
+  }
+})
+
+test('the .js alias of the entry agrees with its canonical id', async () => {
+  const session = createModuleProjectSession({ ...projectOptions, autoInstall: false })
+  const entrySource = `
+    import * as alias from './main.js'
+    import { utilMain, utilAliasMain } from './util'
+    export const main = import.meta.main
+    export const url = import.meta.url
+    export const aliasMain = alias.main
+    export const aliasIsSeparateInstance = alias.url !== url
+    export { utilMain, utilAliasMain }
+  `
+  const utilSource = `
+    import * as alias from './util.js'
+    export const utilMain = import.meta.main
+    export const utilAliasMain = alias.utilMain
+  `
+  try {
+    const result = await session.run({
+      modules: {
+        'src/main': entrySource,
+        'src/main.js': entrySource,
+        'src/util': utilSource,
+        'src/util.js': utilSource,
+      },
+      entry: 'src/main',
+    })
+
+    assert(result.status === 'pass', `project should pass: ${JSON.stringify(result)}`)
+    assert(result.exports.aliasIsSeparateInstance === true, 'the alias is a separate module instance to the linker')
+    assertEqual(
+      [result.exports.main, result.exports.aliasMain, result.exports.utilMain, result.exports.utilAliasMain],
+      [true, true, false, false],
+      'canonical id and alias agree on main for the entry and for a sibling',
+    )
+  } finally {
+    session.close()
+  }
+})
+
+test('rewriting import.meta keeps stack-trace positions where the author wrote them', async () => {
+  const session = createModuleProjectSession({ ...projectOptions, autoInstall: false })
+  // The control module is the same program with no `import.meta` on line 1,
+  // so nothing is rewritten in it. Browsers disagree on which column of a
+  // `throw` they report, so the rewritten module is held to the control's
+  // position rather than to a fixed number.
+  const boomSource = (firstLine: string): string =>
+    [firstLine, `export const boom = () => {`, `  throw new Error('thrown from line 3')`, `}`].join('\n')
+  const thrownPosition = async (firstLine: string): Promise<[line: number, column: number]> => {
+    const result = await session.run({
+      modules: { 'src/main': `import { boom } from './boom'\nboom()`, 'src/boom': boomSource(firstLine) },
+      entry: 'src/main',
+    })
+    assert(result.error?.message === 'thrown from line 3', `the throw should surface: ${JSON.stringify(result)}`)
+    const position = /src\/boom\.mjs:(\d+):(\d+)/.exec(result.error.stack ?? '')
+    assert(position !== null, `stack should locate the throw in src/boom: ${result.error.stack}`)
+    return [Number(position[1]), Number(position[2])]
+  }
+  try {
+    const control = await thrownPosition(`export const flag = false`)
+    const rewritten = await thrownPosition(`export const flag = import.meta.main`)
+
+    assertEqual(control[0], 3, 'the control run reports the authored line')
+    assertEqual(rewritten, control, 'line and column of the throw after an import.meta rewrite')
+  } finally {
+    session.close()
+  }
+})
