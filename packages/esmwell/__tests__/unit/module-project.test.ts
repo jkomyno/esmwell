@@ -1,4 +1,5 @@
-import { createModuleProjectSession } from 'src/main'
+import { createModuleProjectSession, createTestSession } from 'src/index'
+import type { EsmwellOptions, ModuleProjectSessionOptions } from 'src/main'
 import type { ModuleProjectResult } from 'src/module-project'
 import type { WorkerFactory, WorkerLike } from 'src/main'
 import type { WorkerResponse } from 'src/types'
@@ -125,5 +126,72 @@ describe('module-project session transport', () => {
     workers[1].emitMessage({ kind: 'module-project-result', id: 1, result: okProjectResult })
     await expect(second).resolves.toEqual(okProjectResult)
     expect(workers[1].terminated).toBe(true)
+  })
+
+  describe.each(['project', 'test'] as const)('%s session closure', (kind) => {
+    const create = (options: ModuleProjectSessionOptions & EsmwellOptions) => {
+      options = { serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs', ...options }
+      const modules = { main: 'await new Promise(() => {})' }
+      if (kind === 'project') {
+        const session = createModuleProjectSession(options)
+        return { close: session.close, run: () => session.run({ modules, entry: 'main' }) }
+      }
+      const session = createTestSession(options)
+      return { close: session.close, run: () => session.run({ engine: 'vitest', modules, testFiles: ['main'] }) }
+    }
+
+    it('terminates every active worker and settles runs with graph cleanup', async () => {
+      const workers: FakeWorker[] = []
+      const session = create({
+        workerUrl: 'https://example.test/assets/worker.mjs',
+        workerFactory: () => {
+          const worker = new FakeWorker()
+          workers.push(worker)
+          return worker
+        },
+      })
+      const runs = [session.run(), session.run()]
+      await flushMicrotasks()
+      expect(workers).toHaveLength(2)
+      session.close()
+      session.close()
+      expect(workers.every((worker) => worker.terminated)).toBe(true)
+      for (const run of runs) {
+        await expect(run).resolves.toMatchObject({
+          status: 'error',
+          error: { message: expect.stringContaining('closed') },
+        })
+      }
+      expect(caches.delete).toHaveBeenCalledTimes(2)
+      await expect(session.run()).rejects.toThrow('closed')
+    })
+
+    it.each(['transform', 'registration'] as const)(
+      'settles during pending %s without creating a late worker',
+      async (stage) => {
+        const pending = Promise.withResolvers<string>()
+        const workerFactory = vi.fn<WorkerFactory>(() => new FakeWorker())
+        if (stage === 'registration') {
+          vi.mocked(navigator.serviceWorker.register).mockImplementation(async () => {
+            await pending.promise
+            return { active: {}, scope: 'https://example.test/assets/' } as ServiceWorkerRegistration
+          })
+        }
+        const session = create({
+          workerFactory,
+          ...(stage === 'transform' ? { transform: () => pending.promise } : {}),
+        })
+        const run = session.run()
+        await flushMicrotasks()
+        session.close()
+        await expect(run).resolves.toMatchObject({
+          status: 'error',
+          error: { message: expect.stringContaining('closed') },
+        })
+        pending.resolve('export const value = 1')
+        await flushMicrotasks()
+        expect(workerFactory).not.toHaveBeenCalled()
+      },
+    )
   })
 })

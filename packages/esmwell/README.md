@@ -284,17 +284,17 @@ Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node env
 
 ### `createTestSession(options?)` → `TestSession`
 
-| Method                | Returns                  | Description                                                            |
-| --------------------- | ------------------------ | ---------------------------------------------------------------------- |
-| `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`) in a fresh worker. |
-| `close()`             | `void`                   | Prevents future runs. An in-flight run still settles.                  |
+| Method                | Returns                  | Description                                                                          |
+| --------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`) in a fresh worker.               |
+| `close()`             | `void`                   | Terminates active workers, settles pending runs as errors, and prevents future runs. |
 
 ### `createModuleProjectSession(options?)` → `ModuleProjectSession`
 
-| Method                    | Returns                        | Description                                                                  |
-| ------------------------- | ------------------------------ | ---------------------------------------------------------------------------- |
-| `run(project, handlers?)` | `Promise<ModuleProjectResult>` | Imports a `ModuleProject` (`modules`, `entry`) once in a fresh owned worker. |
-| `close()`                 | `void`                         | Prevents future runs. An in-flight run still settles and cleans up normally. |
+| Method                    | Returns                        | Description                                                                          |
+| ------------------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
+| `run(project, handlers?)` | `Promise<ModuleProjectResult>` | Imports a `ModuleProject` (`modules`, `entry`) once in a fresh owned worker.         |
+| `close()`                 | `void`                         | Terminates active workers, settles pending runs as errors, and prevents future runs. |
 
 ### Options
 

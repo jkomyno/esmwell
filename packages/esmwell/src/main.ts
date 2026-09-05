@@ -212,20 +212,24 @@ export function createReplSession(options: EsmwellOptions = {}): ReplSession {
  * process-wide registration state.
  */
 export function createTestSession(options: TestSessionOptions = {}): TestSession {
-  let closed = false
+  const lifecycle = new AbortController()
 
   return {
     async run(run, handlers): Promise<TestRunResult> {
-      if (closed) {
+      if (lifecycle.signal.aborted) {
         throw new Error('esmwell test session is closed')
       }
       const startedAt = performance.now()
       const timeoutMs = options.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS
       const deadline = startedAt + timeoutMs
       try {
-        const modules = await transformGraphModules(options.transform, run.modules, 'test')
+        const modules = await untilClosed(
+          transformGraphModules(options.transform, run.modules, 'test'),
+          lifecycle.signal,
+        )
         const outcome = await requestModuleGraphWorker({
           options,
+          signal: lifecycle.signal,
           deadline,
           timeoutMs,
           defaultWorkerFile: 'test-worker-entry.mjs',
@@ -254,7 +258,7 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
       }
     },
     close(): void {
-      closed = true
+      lifecycle.abort(new Error('the session was closed while this run was still in progress'))
     },
   }
 }
@@ -264,20 +268,24 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
  * page-owned worker so timeouts and fatal failures discard the entire realm.
  */
 export function createModuleProjectSession(options: ModuleProjectSessionOptions = {}): ModuleProjectSession {
-  let closed = false
+  const lifecycle = new AbortController()
 
   return {
     async run(project, handlers): Promise<ModuleProjectResult> {
-      if (closed) {
+      if (lifecycle.signal.aborted) {
         throw new Error('esmwell module-project session is closed')
       }
       const startedAt = performance.now()
       const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
       const deadline = startedAt + timeoutMs
       try {
-        const modules = await transformGraphModules(options.transform, project.modules, 'project')
+        const modules = await untilClosed(
+          transformGraphModules(options.transform, project.modules, 'project'),
+          lifecycle.signal,
+        )
         const outcome = await requestModuleGraphWorker({
           options,
+          signal: lifecycle.signal,
           deadline,
           timeoutMs,
           defaultWorkerFile: 'project-worker-entry.mjs',
@@ -306,7 +314,7 @@ export function createModuleProjectSession(options: ModuleProjectSessionOptions 
       }
     },
     close(): void {
-      closed = true
+      lifecycle.abort(new Error('the session was closed while this run was still in progress'))
     },
   }
 }
@@ -777,6 +785,7 @@ type ModuleGraphSessionOptions = TestSessionOptions | ModuleProjectSessionOption
 type ModuleGraphRequestFactory = (graphId: string, serviceWorkerScope: string) => Omit<WorkerRequestShape, 'id'>
 
 interface ModuleGraphWorkerRequestOptions {
+  readonly signal: AbortSignal
   readonly options: ModuleGraphSessionOptions
   readonly deadline: number
   readonly timeoutMs: number
@@ -786,8 +795,30 @@ interface ModuleGraphWorkerRequestOptions {
   readonly handlers: ConsoleStreamHandlers | undefined
 }
 
+/** Stop waiting for host transforms or browser setup when the session closes. */
+const untilClosed = <Value>(pending: Promise<Value>, signal: AbortSignal): Promise<Value> =>
+  new Promise((resolve, reject) => {
+    const close = (): void => reject(signal.reason)
+    if (signal.aborted) {
+      close()
+    } else {
+      signal.addEventListener('abort', close, { once: true })
+    }
+    void pending.then(
+      (value) => {
+        signal.removeEventListener('abort', close)
+        resolve(value)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', close)
+        reject(error)
+      },
+    )
+  })
+
 const requestModuleGraphWorker = async ({
   options,
+  signal,
   deadline,
   timeoutMs,
   defaultWorkerFile,
@@ -797,8 +828,11 @@ const requestModuleGraphWorker = async ({
 }: ModuleGraphWorkerRequestOptions): Promise<TransportOutcome> => {
   const graphId = createGraphId()
   let transport: WorkerTransport | undefined
+  const close = (): void => transport?.close()
   try {
-    const serviceWorkerScope = await prepareModuleServiceWorker(options, deadline, timeoutMs)
+    signal.throwIfAborted()
+    const serviceWorkerScope = await prepareModuleServiceWorker(options, deadline, timeoutMs, signal)
+    signal.throwIfAborted()
     const workerUrl = resolveModuleWorkerUrl(options, defaultWorkerFile)
     assertModuleWorkerWithinScope(workerUrl, serviceWorkerScope)
     transport = new WorkerTransport({
@@ -806,8 +840,10 @@ const requestModuleGraphWorker = async ({
       timeoutMs: remainingTimeoutMs(deadline, timeoutMs),
       workerUrl,
     })
+    signal.addEventListener('abort', close, { once: true })
     return await transport.request(createRequest(graphId, serviceWorkerScope), resultKind, handlers)
   } finally {
+    signal.removeEventListener('abort', close)
     transport?.close()
     await deleteModuleGraphCache(graphId)
   }
@@ -817,6 +853,7 @@ const prepareModuleServiceWorker = async (
   options: ModuleGraphSessionOptions,
   deadline: number,
   timeoutMs: number,
+  signal: AbortSignal,
 ): Promise<string> => {
   if (typeof navigator === 'undefined' || navigator.serviceWorker === undefined) {
     throw new Error('virtual module graphs require Service Worker support in a secure browser context')
@@ -833,8 +870,10 @@ const prepareModuleServiceWorker = async (
     navigator.serviceWorker.register(serviceWorkerUrl, { type: 'module', scope }),
     deadline,
     timeoutMs,
+    signal,
   )
-  await waitForActiveWorker(registration, deadline, timeoutMs)
+  signal.throwIfAborted()
+  await waitForActiveWorker(registration, deadline, timeoutMs, signal)
   return registration.scope
 }
 
@@ -842,6 +881,7 @@ const waitForActiveWorker = async (
   registration: ServiceWorkerRegistration,
   deadline: number,
   timeoutMs: number,
+  signal: AbortSignal,
 ): Promise<void> => {
   if (registration.active !== null) {
     return
@@ -863,7 +903,7 @@ const waitForActiveWorker = async (
     onStateChange()
   })
   try {
-    await withinModuleGraphDeadline(activation, deadline, timeoutMs)
+    await withinModuleGraphDeadline(activation, deadline, timeoutMs, signal)
   } finally {
     if (onStateChange !== undefined) {
       worker.removeEventListener('statechange', onStateChange)
@@ -879,18 +919,26 @@ class ModuleGraphRunDeadlineError extends Error {
   }
 }
 
-const withinModuleGraphDeadline = async <T>(promise: Promise<T>, deadline: number, timeoutMs: number): Promise<T> => {
+const withinModuleGraphDeadline = async <T>(
+  promise: Promise<T>,
+  deadline: number,
+  timeoutMs: number,
+  signal: AbortSignal,
+): Promise<T> => {
   const remaining = deadline - performance.now()
   if (remaining <= 0) throw new ModuleGraphRunDeadlineError(timeoutMs)
 
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new ModuleGraphRunDeadlineError(timeoutMs)), remaining)
-      }),
-    ])
+    return await untilClosed(
+      Promise.race([
+        promise,
+        new Promise<T>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new ModuleGraphRunDeadlineError(timeoutMs)), remaining)
+        }),
+      ]),
+      signal,
+    )
   } finally {
     clearTimeout(timer)
   }
