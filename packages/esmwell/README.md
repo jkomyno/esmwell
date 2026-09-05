@@ -164,6 +164,8 @@ The graph uses the browser's native ESM linker, so relative imports, cycles, liv
 
 Each run owns a fresh worker and a fresh versioned graph. A timeout terminates that worker and removes its graph cache before the result settles. See [Hosting module-graph assets](#hosting-module-graph-assets) for deployment requirements.
 
+`import.meta.main` is `true` in the module named by `entry` and `false` in every other module of the project, the same signal Node.js, Deno, and Bun give the module a process started from. A `.js` or `.mjs` twin of the entry registered with the same source reports the same value as the entry. Judge modules see `true`, REPL inputs see `false`, and each test file of a workspace sees `true`. The property is set by rewriting each `import.meta` in place, so line numbers in stack traces stay the author's.
+
 ## TypeScript editor kit
 
 `esmwell/typescript-editor` is an opt-in declaration-acquisition kit for CodeMirror, Monaco, or a custom browser editor. It discovers bare imports in submitted source, resolves their exact npm versions, downloads bounded declaration archives from the npm registry, and follows package exports plus relative and transitive declaration imports. Source packages are acquired automatically; users do not run an install command or maintain a package manifest.
