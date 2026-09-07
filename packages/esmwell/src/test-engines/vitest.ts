@@ -1,7 +1,7 @@
 import { defineEsmwellGlobal } from '../runtime-globals'
 
 const ESM_SH_ORIGIN = 'https://esm.sh'
-const LATEST_RUNNER_URL = `${ESM_SH_ORIGIN}/@vitest/runner@latest`
+const DEFAULT_ENGINE_VERSION = 'latest'
 
 export type VitestImportSource = 'collect' | 'setup'
 
@@ -25,7 +25,24 @@ export interface VitestEngineOptions {
   readonly fetch?: typeof globalThis.fetch
   readonly testTimeoutMs?: number
   readonly hookTimeoutMs?: number
+  /** npm version, range, or dist-tag to resolve from esm.sh. Defaults to `'latest'`. */
+  readonly requestedVersion?: string
 }
+
+/** Probe URL used to resolve the exact `@vitest/runner` version esm.sh selects for `requestedVersion`. */
+export const vitestEngineUrls = (requestedVersion: string): string =>
+  `${ESM_SH_ORIGIN}/@vitest/runner@${requestedVersion}`
+
+/** Turns a resolved exact Vitest version into the vitest/@vitest/runner/@vitest/expect package URLs. */
+export const vitestPackageUrls = (version: string): Omit<VitestEngineImports, 'version'> => ({
+  vitestUrl: `${ESM_SH_ORIGIN}/vitest@${version}`,
+  runnerUrl: `${ESM_SH_ORIGIN}/@vitest/runner@${version}`,
+  expectUrl: `${ESM_SH_ORIGIN}/@vitest/expect@${version}`,
+})
+
+/** Reads the exact resolved Vitest version esm.sh reports through its `x-esm-path` response header. */
+export const parseVitestRunnerVersion = (esmPath: string): string | undefined =>
+  esmPath.match(/^\/@vitest\/runner@([^/]+)\//)?.[1]
 
 export interface VitestSerializedError {
   readonly name: string
@@ -141,7 +158,10 @@ export async function runVitestInRealm(options: VitestEngineOptions): Promise<Vi
   let imports: VitestEngineImports | undefined
 
   try {
-    imports = await resolveLatestVitestImports(options.fetch ?? globalThis.fetch)
+    imports = await resolveVitestImports(
+      options.fetch ?? globalThis.fetch,
+      options.requestedVersion ?? DEFAULT_ENGINE_VERSION,
+    )
     const resolvedImports = imports
     const snapshots = new Map<string, string>()
     const cleanups: Array<() => unknown> = []
@@ -199,25 +219,22 @@ export async function runVitestInRealm(options: VitestEngineOptions): Promise<Vi
   }
 }
 
-async function resolveLatestVitestImports(fetchImplementation: typeof globalThis.fetch): Promise<VitestEngineImports> {
-  const response = await fetchImplementation(LATEST_RUNNER_URL, { method: 'HEAD' })
+async function resolveVitestImports(
+  fetchImplementation: typeof globalThis.fetch,
+  requestedVersion: string,
+): Promise<VitestEngineImports> {
+  const response = await fetchImplementation(vitestEngineUrls(requestedVersion), { method: 'HEAD' })
   if (!response.ok) {
-    throw new Error(`could not resolve the latest Vitest version from esm.sh: HTTP ${response.status}`)
+    throw new Error(`could not resolve Vitest ${requestedVersion} from esm.sh: HTTP ${response.status}`)
   }
 
   const esmPath = response.headers.get('x-esm-path')
-  const match = esmPath?.match(/^\/@vitest\/runner@([^/]+)\//)
-  const version = match?.[1]
+  const version = esmPath === null ? undefined : parseVitestRunnerVersion(esmPath)
   if (version === undefined || version.length === 0) {
-    throw new Error('could not resolve the latest Vitest version from esm.sh: X-ESM-Path was missing or invalid')
+    throw new Error(`could not resolve Vitest ${requestedVersion} from esm.sh: X-ESM-Path was missing or invalid`)
   }
 
-  return {
-    version,
-    vitestUrl: `${ESM_SH_ORIGIN}/vitest@${version}`,
-    runnerUrl: `${ESM_SH_ORIGIN}/@vitest/runner@${version}`,
-    expectUrl: `${ESM_SH_ORIGIN}/@vitest/expect@${version}`,
-  }
+  return { version, ...vitestPackageUrls(version) }
 }
 
 const createRunnerConfig = (
