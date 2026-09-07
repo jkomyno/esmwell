@@ -50,7 +50,12 @@ const writeText = (target: Uint8Array, offset: number, value: string): void => {
   target.set(new TextEncoder().encode(value), offset)
 }
 
-const tar = (files: Readonly<Record<string, string>>): Uint8Array<ArrayBuffer> => {
+interface TarOptions {
+  /** Write atime and ctime where node-tar puts them, inside the ustar prefix area. */
+  readonly nodeTarTimestamps?: boolean
+}
+
+const tar = (files: Readonly<Record<string, string>>, options: TarOptions = {}): Uint8Array<ArrayBuffer> => {
   const encoder = new TextEncoder()
   const entries = Object.entries(files).map(([name, content]) => ({ name, bytes: encoder.encode(content) }))
   const size = entries.reduce((total, entry) => total + 512 + Math.ceil(entry.bytes.length / 512) * 512, 1_024)
@@ -60,6 +65,10 @@ const tar = (files: Readonly<Record<string, string>>): Uint8Array<ArrayBuffer> =
     writeText(archive, offset, entry.name)
     writeText(archive, offset + 124, `${entry.bytes.length.toString(8).padStart(11, '0')}\0`)
     archive[offset + 156] = '0'.charCodeAt(0)
+    if (options.nodeTarTimestamps) {
+      writeText(archive, offset + 476, '15075543223')
+      writeText(archive, offset + 488, '15075543223')
+    }
     archive.set(entry.bytes, offset + 512)
     offset += 512 + Math.ceil(entry.bytes.length / 512) * 512
   }
@@ -272,6 +281,134 @@ describe('TypeScriptTypeAcquirer', () => {
           fileName: '/node_modules/.esmwell-types/@types/node@24.0.0/index.d.ts',
         },
       ],
+    })
+  })
+
+  it('falls back to DefinitelyTyped packages for imports of packages that ship no declarations', async () => {
+    const expecterArchive = await gzip(
+      tar({
+        'package/index.d.ts': "import * as chai from 'chai'\nexport declare const expect: typeof chai.expect",
+      }),
+    )
+    const chaiArchive = await gzip(tar({ 'package/index.js': 'export const expect = () => {}' }))
+    const chaiTypesArchive = await gzip(
+      // DefinitelyTyped tarballs wrap files in the unscoped name, not `package/`,
+      // and carry node-tar's timestamps inside the ustar prefix area.
+      tar(
+        {
+          'chai/index.d.ts':
+            'declare global { namespace Chai { interface Assertion { not: Assertion } } }\nexport declare const expect: () => Chai.Assertion',
+        },
+        { nodeTarTimestamps: true },
+      ),
+    )
+    const responses = new Map<string, () => Response>([
+      ['https://data.jsdelivr.com/v1/package/resolve/npm/expecter@latest', () => jsonResponse({ version: '1.0.0' })],
+      [
+        'https://registry.npmjs.org/expecter/1.0.0',
+        () =>
+          jsonResponse({
+            name: 'expecter',
+            version: '1.0.0',
+            types: './index.d.ts',
+            dependencies: { chai: '^6.0.0', '@types/chai': '5.2.3' },
+            dist: { tarball: 'https://registry.npmjs.org/expecter/-/expecter-1.0.0.tgz' },
+          }),
+      ],
+      ['https://registry.npmjs.org/expecter/-/expecter-1.0.0.tgz', () => new Response(expecterArchive)],
+      ['https://data.jsdelivr.com/v1/package/resolve/npm/chai@%5E6.0.0', () => jsonResponse({ version: '6.2.2' })],
+      [
+        'https://registry.npmjs.org/chai/6.2.2',
+        () =>
+          jsonResponse({
+            name: 'chai',
+            version: '6.2.2',
+            dist: { tarball: 'https://registry.npmjs.org/chai/-/chai-6.2.2.tgz' },
+          }),
+      ],
+      ['https://registry.npmjs.org/chai/-/chai-6.2.2.tgz', () => new Response(chaiArchive)],
+      [
+        'https://registry.npmjs.org/%40types%2Fchai/5.2.3',
+        () =>
+          jsonResponse({
+            name: '@types/chai',
+            version: '5.2.3',
+            types: 'index.d.ts',
+            dist: { tarball: 'https://registry.npmjs.org/@types/chai/-/chai-5.2.3.tgz' },
+          }),
+      ],
+      ['https://registry.npmjs.org/@types/chai/-/chai-5.2.3.tgz', () => new Response(chaiTypesArchive)],
+    ])
+    const fetchType = vi.fn<(input: string | URL) => Promise<Response>>(async (input): Promise<Response> => {
+      const response = responses.get(String(input))
+      return response?.() ?? new Response(null, { status: 404 })
+    })
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
+
+    const graph = await acquirer.acquire("import { expect } from 'expecter'\nexport {}")
+
+    // The consumer pins the DefinitelyTyped version, so no range resolution runs for it.
+    expect(fetchType.mock.calls.map(([input]) => String(input))).not.toContain(
+      'https://data.jsdelivr.com/v1/package/resolve/npm/@types/chai@latest',
+    )
+    expect(graph).toMatchObject({
+      complete: true,
+      resolutions: expect.arrayContaining([
+        {
+          specifier: 'chai',
+          fileName: '/node_modules/.esmwell-types/@types/chai@5.2.3/index.d.ts',
+          containingFilePrefix: '/node_modules/.esmwell-types/expecter@1.0.0/',
+        },
+      ]),
+    })
+    expect(graph.files.map((file) => file.fileName)).toEqual([
+      '/node_modules/.esmwell-types/expecter@1.0.0/index.d.ts',
+      '/node_modules/.esmwell-types/@types/chai@5.2.3/index.d.ts',
+    ])
+  })
+
+  it('falls back to the latest DefinitelyTyped package for a direct import without a pinned range', async () => {
+    const chaiArchive = await gzip(tar({ 'package/index.js': 'export const expect = () => {}' }))
+    const chaiTypesArchive = await gzip(
+      tar({ 'chai/index.d.ts': 'export declare const expect: () => void' }, { nodeTarTimestamps: true }),
+    )
+    const responses = new Map<string, () => Response>([
+      ['https://data.jsdelivr.com/v1/package/resolve/npm/chai@latest', () => jsonResponse({ version: '6.2.2' })],
+      [
+        'https://registry.npmjs.org/chai/6.2.2',
+        () =>
+          jsonResponse({
+            name: 'chai',
+            version: '6.2.2',
+            dist: { tarball: 'https://registry.npmjs.org/chai/-/chai-6.2.2.tgz' },
+          }),
+      ],
+      ['https://registry.npmjs.org/chai/-/chai-6.2.2.tgz', () => new Response(chaiArchive)],
+      ['https://data.jsdelivr.com/v1/package/resolve/npm/@types/chai@latest', () => jsonResponse({ version: '5.2.3' })],
+      [
+        'https://registry.npmjs.org/%40types%2Fchai/5.2.3',
+        () =>
+          jsonResponse({
+            name: '@types/chai',
+            version: '5.2.3',
+            types: 'index.d.ts',
+            dist: { tarball: 'https://registry.npmjs.org/@types/chai/-/chai-5.2.3.tgz' },
+          }),
+      ],
+      ['https://registry.npmjs.org/@types/chai/-/chai-5.2.3.tgz', () => new Response(chaiTypesArchive)],
+    ])
+    const fetchType = vi.fn<(input: string | URL) => Promise<Response>>(async (input): Promise<Response> => {
+      const response = responses.get(String(input))
+      return response?.() ?? new Response(null, { status: 404 })
+    })
+    const acquirer = new TypeScriptTypeAcquirer({ scanner, fetch: fetchType })
+
+    const graph = await acquirer.acquire("import { expect } from 'chai'\nexport {}")
+
+    expect(graph).toMatchObject({
+      complete: true,
+      files: [{ fileName: '/node_modules/.esmwell-types/@types/chai@5.2.3/index.d.ts' }],
+      resolutions: [{ specifier: 'chai', fileName: '/node_modules/.esmwell-types/@types/chai@5.2.3/index.d.ts' }],
     })
   })
 

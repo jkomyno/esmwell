@@ -176,6 +176,8 @@ interface PackageRequest {
   readonly reference: PackageReference
   readonly containingFilePrefix?: string
   readonly required?: boolean
+  /** The DefinitelyTyped range the containing package declares, used when the package itself ships no declarations. */
+  readonly typesFallbackVersion?: string
 }
 
 interface PackageReference {
@@ -288,6 +290,26 @@ const typeReference = (specifier: string): PackageReference | null => {
   return { ...reference, packageName }
 }
 
+/**
+ * The `@types` request to try when a package ships no declarations, as TypeScript's
+ * own resolver does. Undefined when the request already names a DefinitelyTyped
+ * package or a subpath, which DefinitelyTyped does not mirror.
+ */
+const definitelyTypedFallback = (request: PackageRequest): PackageRequest | undefined => {
+  const reference = typeReference(request.reference.original)
+  if (reference === null || reference.packageName === request.reference.packageName) {
+    return undefined
+  }
+  return {
+    ...request,
+    reference: {
+      ...reference,
+      versionReference: request.typesFallbackVersion ?? 'latest',
+      hasInlineVersion: false,
+    },
+  }
+}
+
 const asRecord = (value: unknown): UnknownRecord | undefined =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as UnknownRecord) : undefined
 
@@ -347,7 +369,10 @@ const tarEntries = (bytes: Uint8Array): ReadonlyMap<string, string> => {
       break
     }
     const name = text(header.subarray(0, 100))
-    const prefix = text(header.subarray(345, 500))
+    // node-tar keeps the ustar prefix to 130 bytes and writes atime and ctime at
+    // 476 and 488. Reading the full 155-byte field would glue those timestamps
+    // onto every path of a tarball that carries them, such as DefinitelyTyped's.
+    const prefix = text(header.subarray(345, 475))
     const size = Number.parseInt(text(header.subarray(124, 136)) || '0', 8)
     if (!Number.isFinite(size) || size < 0 || offset + 512 + size > bytes.length) {
       break
@@ -360,7 +385,9 @@ const tarEntries = (bytes: Uint8Array): ReadonlyMap<string, string> => {
     } else if (type === 'L') {
       nextPath = text(body)
     } else if (type === '0' || type === '\0') {
-      const path = (nextPath ?? headerPath).replace(/^package\//u, '')
+      // npm wraps a package in one top-level directory: `package/` for most
+      // publishes, the unscoped name for DefinitelyTyped (`chai/`).
+      const path = (nextPath ?? headerPath).replace(/^[^/]+\//u, '')
       nextPath = undefined
       if (!path.startsWith('/') && !path.split('/').includes('..') && /\.d\.[cm]?ts$/iu.test(path)) {
         declarations.set(path, new TextDecoder().decode(body))
@@ -627,7 +654,12 @@ export class TypeScriptTypeAcquirer {
       }
       const root = rootDeclaration(reference, archive)
       if (root === undefined) {
-        if (request.required) {
+        // The package exists but ships no declarations; a failed fetch stays
+        // incomplete instead, so the graph is retried rather than papered over.
+        const fallback = definitelyTypedFallback(request)
+        if (fallback !== undefined) {
+          enqueue(fallback)
+        } else if (request.required) {
           complete = false
         }
         continue
@@ -703,6 +735,8 @@ export class TypeScriptTypeAcquirer {
             return
           }
           const requestedVersion = archive.metadata.dependencies[dependencyReference.packageName]
+          const typesFallbackVersion =
+            archive.metadata.dependencies[typeReference(dependencyReference.original)?.packageName ?? '']
           enqueue({
             reference: {
               ...dependencyReference,
@@ -713,6 +747,7 @@ export class TypeScriptTypeAcquirer {
             },
             containingFilePrefix: virtualPackagePrefix(archive),
             required,
+            ...(typesFallbackVersion === undefined ? {} : { typesFallbackVersion }),
           })
         }
         for (const file of preprocessed.importedFiles) {
