@@ -1,5 +1,25 @@
 const ESM_SH_ORIGIN = 'https://esm.sh'
-const JEST_CIRCUS_LATEST_PROBE_URL = `${ESM_SH_ORIGIN}/jest-circus@latest`
+const DEFAULT_ENGINE_VERSION = 'latest'
+const BUNDLE_QUERY = '?bundle&target=es2022'
+
+/** Probe URL used to resolve the exact `jest-circus` version esm.sh selects for `requestedVersion`. */
+export const jestEngineUrls = (requestedVersion: string): string => `${ESM_SH_ORIGIN}/jest-circus@${requestedVersion}`
+
+/** Turns a resolved exact Jest version into the jest-circus/expect/jest-mock package URLs. */
+export const jestPackageUrls = (version: string): Readonly<{ circus: string; expect: string; mock: string }> => ({
+  circus: `${ESM_SH_ORIGIN}/jest-circus@${version}${BUNDLE_QUERY}`,
+  expect: `${ESM_SH_ORIGIN}/expect@${version}${BUNDLE_QUERY}`,
+  mock: `${ESM_SH_ORIGIN}/jest-mock@${version}${BUNDLE_QUERY}`,
+})
+
+/** Reads the exact resolved Jest version esm.sh reports through its `x-esm-path` response header. */
+export const parseJestVersion = (modulePath: string): string => {
+  const match = /^\/jest-circus@([^/]+)\//.exec(modulePath)
+  if (match?.[1] === undefined) {
+    throw new Error(`esm.sh returned an unexpected Jest module path: ${modulePath}`)
+  }
+  return match[1]
+}
 
 interface TestFunction {
   (name: string, implementation?: (...args: readonly unknown[]) => unknown, timeout?: number): void
@@ -106,7 +126,7 @@ export interface JestBrowserRunResult {
   readonly ok: boolean
   readonly runner: {
     readonly name: 'jest-circus'
-    readonly requestedVersion: 'latest'
+    readonly requestedVersion: string
     readonly resolvedVersion: string
   }
   readonly tests: readonly JestTestResult[]
@@ -122,37 +142,29 @@ interface ResolvedJestEngine {
   readonly version: string
 }
 
-const parseVersion = (modulePath: string): string => {
-  const match = /^\/jest-circus@([^/]+)\//.exec(modulePath)
-  if (match?.[1] === undefined) {
-    throw new Error(`esm.sh returned an unexpected Jest module path: ${modulePath}`)
-  }
-  return match[1]
-}
-
-const resolveLatestJestVersion = async (): Promise<string> => {
+const resolveJestVersion = async (requestedVersion: string): Promise<string> => {
   // HEAD only reads the version header; GET would download a discarded bundle.
-  const response = await fetch(JEST_CIRCUS_LATEST_PROBE_URL, { method: 'HEAD' })
+  const response = await fetch(jestEngineUrls(requestedVersion), { method: 'HEAD' })
   if (!response.ok) {
-    throw new Error(`could not resolve the latest Jest version from esm.sh (${response.status})`)
+    throw new Error(`could not resolve Jest ${requestedVersion} from esm.sh: HTTP ${response.status}`)
   }
   const modulePath = response.headers.get('x-esm-path')
   if (modulePath === null) {
-    throw new Error('esm.sh did not report the resolved Jest module path')
+    throw new Error(`could not resolve Jest ${requestedVersion} from esm.sh: X-ESM-Path was missing`)
   }
-  return parseVersion(modulePath)
+  return parseJestVersion(modulePath)
 }
 
 const importEngineModule = async <Module>(specifier: string): Promise<Module> =>
   import(/* @vite-ignore */ specifier) as Promise<Module>
 
-const loadJestEngine = async (): Promise<ResolvedJestEngine> => {
-  const version = await resolveLatestJestVersion()
-  const query = '?bundle&target=es2022'
+const loadJestEngine = async (requestedVersion: string): Promise<ResolvedJestEngine> => {
+  const version = await resolveJestVersion(requestedVersion)
+  const urls = jestPackageUrls(version)
   const [circus, expect, mock] = await Promise.all([
-    importEngineModule<CircusModule>(`${ESM_SH_ORIGIN}/jest-circus@${version}${query}`),
-    importEngineModule<ExpectModule>(`${ESM_SH_ORIGIN}/expect@${version}${query}`),
-    importEngineModule<JestMockModule>(`${ESM_SH_ORIGIN}/jest-mock@${version}${query}`),
+    importEngineModule<CircusModule>(urls.circus),
+    importEngineModule<ExpectModule>(urls.expect),
+    importEngineModule<JestMockModule>(urls.mock),
   ])
   return { circus, expect, mock, version }
 }
@@ -192,10 +204,13 @@ const normalizeTestResult = (result: CircusTestResult): JestTestResult => {
  * The callback owns test-module loading so the surrounding worker can resolve
  * virtual workspace imports and expose these globals through `@jest/globals`.
  */
-export const runJestTests = async (importTestFile: ImportJestTestFile): Promise<JestBrowserRunResult> => {
+export const runJestTests = async (
+  importTestFile: ImportJestTestFile,
+  requestedVersion: string = DEFAULT_ENGINE_VERSION,
+): Promise<JestBrowserRunResult> => {
   let resolvedVersion = 'unknown'
   try {
-    const engine = await loadJestEngine()
+    const engine = await loadJestEngine(requestedVersion)
     resolvedVersion = engine.version
     engine.circus.resetState()
 
@@ -217,7 +232,7 @@ export const runJestTests = async (importTestFile: ImportJestTestFile): Promise<
     const unhandledErrors = result.unhandledErrors.map(serializeError)
     return {
       ok: tests.every((test) => test.status !== 'failed') && unhandledErrors.length === 0,
-      runner: { name: 'jest-circus', requestedVersion: 'latest', resolvedVersion },
+      runner: { name: 'jest-circus', requestedVersion, resolvedVersion },
       tests,
       unhandledErrors,
     }
@@ -225,7 +240,7 @@ export const runJestTests = async (importTestFile: ImportJestTestFile): Promise<
     return {
       error: serializeError(error),
       ok: false,
-      runner: { name: 'jest-circus', requestedVersion: 'latest', resolvedVersion },
+      runner: { name: 'jest-circus', requestedVersion, resolvedVersion },
       tests: [],
       unhandledErrors: [],
     }
