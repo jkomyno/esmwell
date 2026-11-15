@@ -128,6 +128,139 @@ describe('module-project session transport', () => {
     expect(workers[1].terminated).toBe(true)
   })
 
+  describe.each(['project', 'test'] as const)('%s session transforms', (kind) => {
+    const create = (options: ModuleProjectSessionOptions) => {
+      options = {
+        workerUrl: 'https://example.test/assets/worker.mjs',
+        serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs',
+        ...options,
+      }
+      if (kind === 'project') {
+        const session = createModuleProjectSession(options)
+        return {
+          close: session.close,
+          run: (modules: Readonly<Record<string, string>>) => session.run({ modules, entry: 'main' }),
+          complete: (worker: FakeWorker) =>
+            worker.emitMessage({ kind: 'module-project-result', id: 1, result: okProjectResult }),
+        }
+      }
+      const session = createTestSession(options)
+      return {
+        close: session.close,
+        run: (modules: Readonly<Record<string, string>>) =>
+          session.run({ engine: 'vitest', modules, testFiles: ['main'] }),
+        complete: (worker: FakeWorker) =>
+          worker.emitMessage({
+            kind: 'test-result',
+            id: 1,
+            result: { status: 'pass', ok: true, tests: [], console: [], dependencies: [], durationMs: 1 },
+          }),
+      }
+    }
+
+    it('finishes transforming each submission before the next, while run workers can overlap', async () => {
+      const workers: FakeWorker[] = []
+      const gates = new Map<string, ReturnType<typeof Promise.withResolvers<string>>>()
+      const session = create({
+        workerFactory: () => {
+          const worker = new FakeWorker()
+          workers.push(worker)
+          return worker
+        },
+        transform: (source) => {
+          const gate = Promise.withResolvers<string>()
+          gates.set(source, gate)
+          return gate.promise
+        },
+      })
+      try {
+        const first = session.run({ main: 'first', helper: 'helper' })
+        const second = session.run({ main: 'second' })
+        await flushMicrotasks()
+        expect([...gates.keys()]).toEqual(['first', 'helper'])
+
+        gates.get('helper')!.resolve('compiled helper')
+        await flushMicrotasks()
+        expect([...gates.keys()]).toEqual(['first', 'helper'])
+
+        gates.get('first')!.resolve('compiled first')
+        await flushMicrotasks()
+        expect([...gates.keys()]).toEqual(['first', 'helper', 'second'])
+        expect(workers).toHaveLength(1)
+        expect(workers[0]!.sent[0]).toMatchObject(
+          kind === 'project'
+            ? { project: { modules: { main: 'compiled first', helper: 'compiled helper' } } }
+            : { run: { modules: { main: 'compiled first', helper: 'compiled helper' } } },
+        )
+
+        gates.get('second')!.resolve('compiled second')
+        await flushMicrotasks()
+        expect(workers).toHaveLength(2)
+        expect(workers[0]!.terminated).toBe(false)
+        for (const worker of workers) session.complete(worker)
+        await expect(Promise.all([first, second])).resolves.toMatchObject([{ ok: true }, { ok: true }])
+      } finally {
+        session.close()
+        for (const gate of gates.values()) gate.resolve('')
+      }
+    })
+
+    it('waits for sibling transforms after a failure before advancing the queue', async () => {
+      const pending = Promise.withResolvers<string>()
+      const worker = new FakeWorker()
+      const sources: string[] = []
+      const session = create({
+        workerFactory: () => worker,
+        transform: async (source) => {
+          sources.push(source)
+          if (source === 'broken') throw new Error('compile failed')
+          if (source === 'slow') return pending.promise
+          return source
+        },
+      })
+      try {
+        const first = session.run({ main: 'broken', helper: 'slow' })
+        const second = session.run({ main: 'next' })
+        await flushMicrotasks()
+        expect(sources).toEqual(['broken', 'slow'])
+        expect(worker.sent).toHaveLength(0)
+
+        pending.resolve('compiled slow')
+        await expect(first).resolves.toMatchObject({ ok: false, error: { message: 'compile failed' } })
+        await flushMicrotasks()
+        expect(sources).toEqual(['broken', 'slow', 'next'])
+        expect(worker.sent).toHaveLength(1)
+        session.complete(worker)
+        await expect(second).resolves.toMatchObject({ ok: true })
+      } finally {
+        session.close()
+        pending.resolve('')
+      }
+    })
+
+    it('settles queued runs on close without starting their transforms', async () => {
+      const pending = Promise.withResolvers<string>()
+      const transform = vi.fn<() => Promise<string>>(() => pending.promise)
+      const workerFactory = vi.fn<WorkerFactory>(() => new FakeWorker())
+      const session = create({ transform, workerFactory })
+      const runs = [session.run({ main: 'first' }), session.run({ main: 'second' })]
+      try {
+        await flushMicrotasks()
+        session.close()
+        for (const run of runs) {
+          await expect(run).resolves.toMatchObject({ ok: false, error: { message: expect.stringContaining('closed') } })
+        }
+        pending.resolve('compiled first')
+        await flushMicrotasks()
+        expect(transform).toHaveBeenCalledTimes(1)
+        expect(workerFactory).not.toHaveBeenCalled()
+      } finally {
+        session.close()
+        pending.resolve('')
+      }
+    })
+  })
+
   describe.each(['project', 'test'] as const)('%s session closure', (kind) => {
     const create = (options: ModuleProjectSessionOptions & EsmwellOptions) => {
       options = { serviceWorkerUrl: 'https://example.test/assets/module-service-worker.mjs', ...options }
