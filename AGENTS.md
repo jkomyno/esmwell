@@ -77,7 +77,7 @@ when touching the runner, its build output, or the browser path:
 ```bash
 pnpm -C packages/esmwell run test:browser  # real-browser suite; needs bun (pinned in .mise.toml) and a Chrome backend, and reaches esm.sh
 pnpm -C packages/esmwell run check:size    # 30 KB gzip budget over built runner-core ESM output; run after pnpm build
-pnpm -C packages/esmwell run test:pack     # builds, then installs the tarball in a temporary Vite consumer and builds every public worker entrypoint
+pnpm -C packages/esmwell run test:pack     # builds, installs the tarball in a temporary Vite consumer (fetching missing dependencies), and builds every public worker entrypoint
 ```
 
 For documentation-only changes, `pnpm lint:ci` is sufficient unless the documentation describes executable commands or configuration that also needs validation.

@@ -35,7 +35,8 @@ try {
   manifest.dependencies.esmwell = `file:${join(temporaryRoot, tarballs[0])}`
   writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
 
-  run('pnpm', ['install', '--offline', '--ignore-scripts'], consumerRoot)
+  // A clean consumer has no lockfile; the workspace install may not cache registry metadata.
+  run('pnpm', ['install', '--prefer-offline', '--ignore-scripts'], consumerRoot)
   run(join(workspaceRoot, 'node_modules/.bin/vite'), ['build', '.'], consumerRoot)
 
   console.log('test-pack: packed esmwell installed and built in a clean Vite consumer')
