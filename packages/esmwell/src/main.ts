@@ -213,6 +213,7 @@ export function createReplSession(options: EsmwellOptions = {}): ReplSession {
  */
 export function createTestSession(options: TestSessionOptions = {}): TestSession {
   const lifecycle = new AbortController()
+  const transformModules = createGraphModuleTransform(options.transform, 'test', lifecycle.signal)
 
   return {
     async run(run, handlers): Promise<TestRunResult> {
@@ -223,10 +224,7 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
       const timeoutMs = options.timeoutMs ?? DEFAULT_TEST_TIMEOUT_MS
       const deadline = startedAt + timeoutMs
       try {
-        const modules = await untilClosed(
-          transformGraphModules(options.transform, run.modules, 'test'),
-          lifecycle.signal,
-        )
+        const modules = await untilClosed(transformModules(run.modules), lifecycle.signal)
         const outcome = await requestModuleGraphWorker({
           options,
           signal: lifecycle.signal,
@@ -269,6 +267,7 @@ export function createTestSession(options: TestSessionOptions = {}): TestSession
  */
 export function createModuleProjectSession(options: ModuleProjectSessionOptions = {}): ModuleProjectSession {
   const lifecycle = new AbortController()
+  const transformModules = createGraphModuleTransform(options.transform, 'project', lifecycle.signal)
 
   return {
     async run(project, handlers): Promise<ModuleProjectResult> {
@@ -279,10 +278,7 @@ export function createModuleProjectSession(options: ModuleProjectSessionOptions 
       const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
       const deadline = startedAt + timeoutMs
       try {
-        const modules = await untilClosed(
-          transformGraphModules(options.transform, project.modules, 'project'),
-          lifecycle.signal,
-        )
+        const modules = await untilClosed(transformModules(project.modules), lifecycle.signal)
         const outcome = await requestModuleGraphWorker({
           options,
           signal: lifecycle.signal,
@@ -346,22 +342,36 @@ const applyTransform = async (
   return transformed
 }
 
-const transformGraphModules = async (
+/** Orders a session's transform batches independently of its concurrent run workers. */
+const createGraphModuleTransform = (
   transform: SourceTransform | undefined,
-  modules: TestModules | ModuleProjectModules,
   kind: 'test' | 'project',
-): Promise<Readonly<Record<string, string>>> => {
-  if (transform === undefined) {
-    return modules
+  signal: AbortSignal,
+): ((modules: TestModules | ModuleProjectModules) => Promise<Readonly<Record<string, string>>>) => {
+  let queue: Promise<unknown> = Promise.resolve()
+  return (modules) => {
+    const run = queue.then(async () => {
+      signal.throwIfAborted()
+      if (transform === undefined) {
+        return modules
+      }
+      // Wait for every module, including siblings of a failed transform,
+      // before the next submission can mutate the host's compiler state.
+      const transformed = await Promise.allSettled(
+        Object.entries(modules).map(
+          async ([id, source]) => [id, await applyTransform(transform, source, { kind, id })] as const,
+        ),
+      )
+      return Object.fromEntries(
+        transformed.map((result) => {
+          if (result.status === 'rejected') throw result.reason
+          return result.value
+        }),
+      )
+    })
+    queue = run.catch(() => undefined)
+    return run
   }
-  // One run submits its modules together, so they transform concurrently;
-  // submission order only sequences separate runs.
-  const transformed = await Promise.all(
-    Object.entries(modules).map(
-      async ([id, source]) => [id, await applyTransform(transform, source, { kind, id })] as const,
-    ),
-  )
-  return Object.fromEntries(transformed)
 }
 
 interface PendingRequest {
