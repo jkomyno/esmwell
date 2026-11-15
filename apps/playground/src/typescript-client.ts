@@ -104,14 +104,12 @@ export class TypeScriptClient {
       }
       return {
         from: Math.min(Math.max(result.from - prefix.length, 0), context.pos),
-        options: result.options.map(
-          (option): Completion => ({
-            label: option.label,
-            type: option.type,
-            detail: option.detail,
-            ...(option.apply === undefined ? {} : { apply: option.apply }),
-          }),
-        ),
+        options: result.options.map((option): Completion => ({
+          label: option.label,
+          type: option.type,
+          detail: option.detail,
+          ...(option.apply === undefined ? {} : { apply: option.apply }),
+        })),
         validFor: /^[\p{L}\p{N}_$]*$/u,
       }
     }

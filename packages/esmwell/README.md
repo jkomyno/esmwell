@@ -111,7 +111,7 @@ The persistent scope is an internal object, so its declaration semantics deliber
 
 Every session accepts a `transform` that rewrites submitted source on the main thread before it is posted to the worker: the judge module, each REPL input, and each module in a module project or test workspace. The worker only ever sees the returned text, so a transform changes what gets isolated, never how. Transforms run in submission order. A thrown error becomes an error result whose `error` keeps the thrown `name`, `message`, and `line`/`column` when the error exposes them.
 
-`esmwell/typescript` ships a transform built on `ts.transpileModule` without depending on the compiler. You hand over the import, so the `.ts` path exists only where `typescript` is installed, and a bundler without it still builds:
+`esmwell/typescript` ships a transform built on `ts.transpileModule` without depending on the compiler. Install TypeScript 6 (`pnpm add typescript@^6`) for this browser-compatible API; TypeScript 7's native CLI does not expose `transpileModule`. You hand over the import, so a bundler without the compiler still builds:
 
 ```ts
 import { createEsmwell } from 'esmwell'
@@ -126,7 +126,7 @@ await session.runJudge(`export const solve = (value: number): number => value * 
 ])
 ```
 
-`transpileModule` strips types and compiles syntax one file at a time with `module: ESNext`, `target: ES2023`, and `verbatimModuleSyntax`. Pass `compilerOptions` to override. It never type-checks, so type errors run, while syntax errors come back as a `TypeScriptError` result with the diagnostic's line and column. If `load` rejects or resolves to something that is not the compiler, the run reports a `TypeScriptUnavailableError` and the next run retries the load.
+`transpileModule` strips types and compiles syntax one file at a time with `module: ESNext`, `target: ES2023`, and `verbatimModuleSyntax`. TypeScript 6 adds a `"use strict"` prologue to inputs without imports or exports. Pass `compilerOptions` to override. It never type-checks, so type errors run, while syntax errors come back as a `TypeScriptError` result with the diagnostic's line and column. If `load` rejects or resolves to something that is not the compiler, the run reports a `TypeScriptUnavailableError` and the next run retries the load.
 
 The same hook takes any other compiler with the shape `(source, context) => string | Promise<string>`. `context.kind` is `'judge'`, `'repl'`, `'project'`, or `'test'` (the latter two include the module `id`).
 

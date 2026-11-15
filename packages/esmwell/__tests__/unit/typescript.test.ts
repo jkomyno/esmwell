@@ -41,12 +41,12 @@ export const user: User = { name: 'a' }`,
     expect(output).not.toContain('interface')
   })
 
-  it('emits expression statements unchanged for REPL inputs', async () => {
+  it('preserves REPL expressions after the strict-mode prologue', async () => {
     const transform = typescriptTransform({ load: loadTypeScript })
 
-    await expect(transform('1 + 1', { kind: 'repl' })).resolves.toBe('1 + 1;\n')
+    await expect(transform('1 + 1', { kind: 'repl' })).resolves.toBe('"use strict";\n1 + 1;\n')
     await expect(transform('((value: number) => value + 1)(41)', { kind: 'repl' })).resolves.toBe(
-      '((value) => value + 1)(41);\n',
+      '"use strict";\n((value) => value + 1)(41);\n',
     )
   })
 
@@ -54,14 +54,14 @@ export const user: User = { name: 'a' }`,
     const fromObject = typescriptTransform({ load: loadCompilerObject })
     const fromNamespace = typescriptTransform({ load: async () => ({ default: await loadCompilerObject() }) })
 
-    await expect(fromObject('let n: number = 1', { kind: 'repl' })).resolves.toBe('let n = 1;\n')
-    await expect(fromNamespace('let n: number = 1', { kind: 'repl' })).resolves.toBe('let n = 1;\n')
+    await expect(fromObject('let n: number = 1', { kind: 'repl' })).resolves.toBe('"use strict";\nlet n = 1;\n')
+    await expect(fromNamespace('let n: number = 1', { kind: 'repl' })).resolves.toBe('"use strict";\nlet n = 1;\n')
   })
 
   it('merges caller compiler options over the defaults', async () => {
     const transform = typescriptTransform({ load: loadTypeScript, compilerOptions: { removeComments: true } })
 
-    await expect(transform('// gone\nconst a = 1', { kind: 'repl' })).resolves.toBe('const a = 1;\n')
+    await expect(transform('// gone\nconst a = 1', { kind: 'repl' })).resolves.toBe('"use strict";\nconst a = 1;\n')
   })
 
   it('loads the compiler once for many inputs', async () => {
@@ -94,7 +94,9 @@ describe('typescriptTransform: failures', () => {
   it('does not block a run on type errors, since transpileModule never type-checks', async () => {
     const transform = typescriptTransform({ load: loadTypeScript })
 
-    await expect(transform('const n: number = "text"', { kind: 'judge' })).resolves.toBe('const n = "text";\n')
+    await expect(transform('const n: number = "text"', { kind: 'judge' })).resolves.toBe(
+      '"use strict";\nconst n = "text";\n',
+    )
   })
 
   it('names the missing compiler when load rejects, and retries on the next run', async () => {
@@ -111,7 +113,7 @@ describe('typescriptTransform: failures', () => {
     expect((failure as Error).message).toContain('install the `typescript` package')
     expect((failure as Error).cause).toMatchObject({ message: 'Cannot find module typescript' })
 
-    await expect(transform('const a = 1', { kind: 'judge' })).resolves.toBe('const a = 1;\n')
+    await expect(transform('const a = 1', { kind: 'judge' })).resolves.toBe('"use strict";\nconst a = 1;\n')
     expect(attempts).toBe(2)
   })
 

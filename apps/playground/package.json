@@ -10,27 +10,27 @@
     "build": "vite build && node scripts/check-base.mjs",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "pnpm --workspace-root exec tsc --noEmit -p apps/playground/tsconfig.json",
     "demo": "tcut demo.video.ts --from 200ms",
     "demo:social": "node scripts/export-social.mjs"
   },
   "dependencies": {
-    "@codemirror/autocomplete": "^6.20.3",
-    "@codemirror/commands": "^6.11.0",
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-javascript": "^6.2.5",
-    "@codemirror/language": "^6.12.4",
-    "@codemirror/lint": "^6.9.7",
-    "@codemirror/search": "^6.7.1",
-    "@codemirror/state": "^6.7.1",
-    "@codemirror/view": "^6.43.9",
-    "@lezer/highlight": "^1.2.3",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/lint": "^6.9.8",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@lezer/highlight": "^1.2.5",
     "esmwell": "workspace:*",
-    "typescript-legacy": "npm:typescript@5.9.3"
+    "typescript-legacy": "npm:typescript@6.0.3"
   },
   "devDependencies": {
     "@fontsource-variable/archivo": "5.3.0",
     "@fontsource-variable/martian-mono": "5.3.0",
-    "termcut": "^1.1.2",
+    "termcut": "^1.4.7",
     "vite": "catalog:",
     "vitest": "catalog:"
   }

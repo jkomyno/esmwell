@@ -37,6 +37,8 @@ The private playground uses CodeMirror 6 for both source and REPL input. Its `.t
 
 - Treat `.mise.toml` as the source of truth for Node.js and pnpm versions. Keep the root `packageManager` version aligned with it.
 - Use pnpm for dependency and workspace commands. Reuse existing root and package scripts before inventing ad hoc commands.
+- Keep `typescript-legacy` on the latest TypeScript 6 release for its browser-compatible compiler and language-service APIs. Use `pnpm --workspace-root exec tsc` with a root-relative project path for TypeScript 7 checks; the compatibility package's local `tsc` would otherwise take precedence.
+- Changesets action v2 uses `version-script`, `publish-script`, `commit-message`, and `pr-title`; pass its GitHub token through `github-token`.
 - Keep shared configuration at the repository root and package-specific configuration beside the owning package.
 - Keep the pre-commit hook in `lefthook.yml` and its staged-file checks in the root `lint-staged` configuration.
 - Let oxfmt and oxlint enforce formatting and lint style.

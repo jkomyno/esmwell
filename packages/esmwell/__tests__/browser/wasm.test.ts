@@ -6,7 +6,7 @@ test('@cf-wasm/og renders a PNG through browser-initialized WebAssembly dependen
     deps: {
       '@cf-wasm/og': '0.5.0',
       '@cf-wasm/resvg': '0.4.0',
-      '@cf-wasm/satori': '0.4.0',
+      '@cf-wasm/satori': '0.4.2',
     },
     autoInstall: false,
     timeoutMs: 60_000,
@@ -20,7 +20,7 @@ test('@cf-wasm/og renders a PNG through browser-initialized WebAssembly dependen
 
        await Promise.all([
          initResvg(fetch('https://esm.sh/@cf-wasm/resvg@0.4.0/legacy/resvg.wasm?raw')),
-         initSatori(fetch('https://esm.sh/@cf-wasm/satori@0.4.0/yoga.wasm?raw')),
+         initSatori(fetch('https://esm.sh/@cf-wasm/satori@0.4.2/yoga.wasm?raw')),
        ])
 
        export const renderPng = async () => {

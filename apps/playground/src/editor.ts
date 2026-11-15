@@ -374,16 +374,17 @@ export interface ReplEditor {
   destroy(): void
 }
 
+const setHistoryValue = (view: EditorView, value: string | undefined): boolean => {
+  if (value === undefined) {
+    return false
+  }
+  replaceDocument(view, value)
+  return true
+}
+
 export const createReplEditor = (options: ReplEditorOptions): ReplEditor => {
   const commandHistory = new ReplCommandHistory()
   const language = new Compartment()
-  const setHistoryValue = (view: EditorView, value: string | undefined): boolean => {
-    if (value === undefined) {
-      return false
-    }
-    replaceDocument(view, value)
-    return true
-  }
   const commandKeys: readonly KeyBinding[] = [
     {
       key: 'Enter',

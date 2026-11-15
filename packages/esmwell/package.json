@@ -122,8 +122,8 @@
     "build:watch": "tsdown --watch",
     "check:exports": "attw --pack . --profile esm-only",
     "typecheck": "pnpm typecheck:src && pnpm typecheck:test",
-    "typecheck:src": "tsc --noEmit -p tsconfig.build.json",
-    "typecheck:test": "tsc --noEmit -p tsconfig.json",
+    "typecheck:src": "pnpm --workspace-root exec tsc --noEmit -p packages/esmwell/tsconfig.build.json",
+    "typecheck:test": "pnpm --workspace-root exec tsc --noEmit -p packages/esmwell/tsconfig.json",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
@@ -142,6 +142,6 @@
     "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
-    "typescript-legacy": "npm:typescript@5.9.3"
+    "typescript-legacy": "npm:typescript@6.0.3"
   }
 }
