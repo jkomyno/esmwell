@@ -13,6 +13,12 @@ export interface TestRun {
   readonly modules: TestModules
   /** Canonical ids from `modules` to import as test entries, in order. */
   readonly testFiles: readonly string[]
+  /**
+   * npm version, range, or dist-tag passed to esm.sh for the engine packages
+   * (for example `'5'` or `'5.0.0'` to stay on Vitest 5.x). Defaults to
+   * `'latest'`. Selects the engine, not the workspace's own dependencies.
+   */
+  readonly engineVersion?: string
 }
 
 /** Status shared by normalized Vitest and Jest test cases. */

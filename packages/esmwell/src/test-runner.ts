@@ -1,7 +1,7 @@
 import { installConsoleCapture } from './console'
 import { serializeError } from './bootstrap'
 import { TEST_API_GLOBAL } from './test-engine'
-import { runJestTests } from './test-engines/jest'
+import { jestPackageUrls, runJestTests } from './test-engines/jest'
 import { runVitestInRealm } from './test-engines/vitest'
 import { defineEsmwellGlobal } from './runtime-globals'
 import { materializeTestGraph } from './test-workspace'
@@ -37,7 +37,9 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
       autoInstall: options.autoInstall,
     })
     const outcome = requireRegisteredTests(
-      run.engine === 'vitest' ? await executeVitest(graph.entryUrls) : await executeJest(graph.entryUrls),
+      run.engine === 'vitest'
+        ? await executeVitest(graph.entryUrls, run.engineVersion)
+        : await executeJest(graph.entryUrls, run.engineVersion),
     )
 
     return {
@@ -94,9 +96,13 @@ export const requireRegisteredTests = (outcome: NormalizedEngineOutcome): Normal
   }
 }
 
-const executeVitest = async (entryUrls: readonly string[]): Promise<NormalizedEngineOutcome> => {
+const executeVitest = async (
+  entryUrls: readonly string[],
+  engineVersion: string | undefined,
+): Promise<NormalizedEngineOutcome> => {
   const result = await runVitestInRealm({
     files: entryUrls,
+    requestedVersion: engineVersion,
     importTestFile: async (filepath, context) => {
       installTestApi(await importUrl(context.vitestUrl))
       return importUrl(filepath)
@@ -129,26 +135,29 @@ const executeVitest = async (entryUrls: readonly string[]): Promise<NormalizedEn
   }
 }
 
-const executeJest = async (entryUrls: readonly string[]): Promise<NormalizedEngineOutcome> => {
+const executeJest = async (
+  entryUrls: readonly string[],
+  engineVersion: string | undefined,
+): Promise<NormalizedEngineOutcome> => {
   const result = await runJestTests(async (globals) => {
     installTestApi(globals)
     for (const entryUrl of entryUrls) {
       await importUrl(entryUrl)
     }
-  })
+  }, engineVersion)
   const version = result.runner.resolvedVersion
-  const query = '?bundle&target=es2022'
+  const urls = jestPackageUrls(version)
   const unhandledError = result.unhandledErrors[0]
   return {
     ok: result.ok,
     engine: {
       name: 'jest',
       version,
-      packages: ['jest-circus', 'expect', 'jest-mock'].map((name) => ({
-        name,
-        version,
-        url: `https://esm.sh/${name}@${version}${query}`,
-      })),
+      packages: [
+        { name: 'jest-circus', version, url: urls.circus },
+        { name: 'expect', version, url: urls.expect },
+        { name: 'jest-mock', version, url: urls.mock },
+      ],
     },
     tests: result.tests.map((test, index) => ({
       id: `jest:${index}:${test.fullName}`,

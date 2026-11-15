@@ -262,6 +262,7 @@ const result = await tests.run({
     `,
   },
   testFiles: ['tests/impl.test'],
+  engineVersion: '5', // optional; npm version, range, or dist-tag for the engine packages, defaults to 'latest'
 })
 
 // result.engine.version is the exact version selected from esm.sh.
@@ -308,10 +309,10 @@ Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node env
 
 ### `createTestSession(options?)` → `TestSession`
 
-| Method                | Returns                  | Description                                                                          |
-| --------------------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`) in a fresh worker.               |
-| `close()`             | `void`                   | Terminates active workers, settles pending runs as errors, and prevents future runs. |
+| Method                | Returns                  | Description                                                                                                          |
+| --------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `run(run, handlers?)` | `Promise<TestRunResult>` | Runs a `TestRun` (`engine`, `modules`, `testFiles`, optional `engineVersion`, default `'latest'`) in a fresh worker. |
+| `close()`             | `void`                   | Terminates active workers, settles pending runs as errors, and prevents future runs.                                 |
 
 ### `createModuleProjectSession(options?)` → `ModuleProjectSession`
 
