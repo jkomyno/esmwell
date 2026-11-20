@@ -1,5 +1,17 @@
 # esmwell
 
+## 0.4.0
+
+### Minor Changes
+
+- 4e8dc8b: Add opt-in worker-to-host tools for judge, REPL, module-project, and test sessions. Register named handlers on the host and optionally observe completed, denied, failed, or cancelled calls.
+- 8764829: Include the last observed execution phase on run-level errors, including worker timeouts. Apply deadlines to async host transforms while keeping later transforms ordered.
+- d930c1b: Add an optional `engineVersion` field to `TestRun` so a host can pin the upstream Vitest or Jest engine to a specific npm version, range, or dist-tag (for example `'5'` to stay on Vitest 5.x) instead of always resolving `latest` from esm.sh. Omitting it keeps the existing `latest` behavior.
+
+### Patch Changes
+
+- 9bf04c6: Keep module-project and test-workspace source transforms in submission order within each session, including when a transform fails. Modules within a submission still transform concurrently, and run workers can overlap.
+
 ## 0.3.1
 
 ### Patch Changes
