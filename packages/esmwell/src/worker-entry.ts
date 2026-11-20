@@ -1,7 +1,7 @@
 import { createWorkerSupervisor } from './supervisor'
 import type { SupervisedRequestKind } from './supervisor'
 import type { WorkerRequest } from './types'
-import { adaptWorker } from './worker-like'
+import { createModuleWorker } from './worker-like'
 
 interface CoordinatorWorkerScope {
   postMessage(message: unknown): void
@@ -13,7 +13,7 @@ const allowedRequestKinds = new Set<SupervisedRequestKind>(['judge', 'repl-input
 const postToPage = scope.postMessage.bind(scope)
 const supervisor = createWorkerSupervisor({
   host: { send: postToPage },
-  createWorker: (url) => adaptWorker(new Worker(url, { type: 'module' })),
+  createWorker: createModuleWorker,
   defaultExecutionWorkerUrl: new URL(/* @vite-ignore */ 'execution-worker-entry.mjs', import.meta.url).href,
   allowedRequestKinds,
 })

@@ -1,21 +1,19 @@
 import { importModule } from './loader'
 import { installConsoleCapture } from './console'
-import { elapsedMs, serializeError } from './bootstrap'
+import { elapsedMs, serializeError, type ReplEvaluateHandlers } from './bootstrap'
 import { TEST_API_GLOBAL } from './test-engine'
 import { jestPackageUrls, runJestTests } from './test-engines/jest'
 import { runVitestInRealm } from './test-engines/vitest'
 import { defineEsmwellGlobal } from './runtime-globals'
 import { materializeTestGraph } from './test-workspace'
 import type { ResolveOptions } from './resolve'
-import type { ExecutionPhase, ConsoleChunk } from './types'
+import type { ConsoleChunk } from './types'
 import type { TestCaseResult, TestEngineInfo, TestEnginePackage, TestRun, TestRunResult } from './test-types'
 
 /** Worker-realm options supplied by the main-thread test session. */
-export interface TestRealmOptions extends ResolveOptions {
+export interface TestRealmOptions extends ResolveOptions, ReplEvaluateHandlers {
   readonly graphId: string
   readonly serviceWorkerScope: string
-  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
-  readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
 /** Runs one virtual ESM workspace with official upstream test-engine packages. */

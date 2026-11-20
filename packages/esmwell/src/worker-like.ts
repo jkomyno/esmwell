@@ -25,3 +25,8 @@ export function adaptWorker(worker: Worker): WorkerLike {
     },
   }
 }
+
+export const createModuleWorker = (url: string): WorkerLike => adaptWorker(new Worker(url, { type: 'module' }))
+
+export const executionTimeoutMessage = (timeoutMs: number): string =>
+  `execution timed out after ${timeoutMs}ms and its worker was terminated`

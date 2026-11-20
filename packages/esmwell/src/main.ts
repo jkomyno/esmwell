@@ -12,7 +12,7 @@ import type { ModuleProject, ModuleProjectModules, ModuleProjectResult } from '.
 import type { TestModules, TestRun, TestRunResult } from './test-types'
 import type { HostTools, HostToolsConnection } from './host-tools-protocol'
 import type { SourceTransform, SourceTransformContext } from './transform'
-import { adaptWorker, type WorkerLike } from './worker-like'
+import { adaptWorker, createModuleWorker, executionTimeoutMessage, type WorkerLike } from './worker-like'
 
 export { adaptWorker }
 export type { WorkerLike }
@@ -321,12 +321,14 @@ export function createModuleProjectSession(options: ModuleProjectSessionOptions 
   }
 }
 
-/** What a transport request resolved to. */
+type WorkerOutcome =
+  | { kind: 'delivered'; payload: unknown }
+  | { kind: 'execution-timeout' }
+  | { kind: 'supervisor-timeout' }
+  | { kind: 'worker-error'; message: string }
+
 type TransportOutcome = (
-  | { kind: 'delivered'; payload: unknown; console: ConsoleChunk[] }
-  | { kind: 'execution-timeout'; console: ConsoleChunk[] }
-  | { kind: 'supervisor-timeout'; console: ConsoleChunk[] }
-  | { kind: 'worker-error'; message: string; console: ConsoleChunk[] }
+  | (WorkerOutcome & { console: ConsoleChunk[] })
   | { kind: 'preparation-error'; error: unknown; durationMs: number }
 ) & { phase?: ExecutionPhase }
 
@@ -355,21 +357,42 @@ const applyTransform = async (
   return transformed
 }
 
-/** Expired submissions settle without letting another transform overlap the host's work. */
 const createTransformQueue = (signal: AbortSignal) => {
-  let queue: Promise<unknown> = Promise.resolve()
+  const waiting = new Set<() => void>()
+  let active: (() => void) | undefined
+
+  const startNext = (): void => {
+    active = waiting.values().next().value
+    if (active === undefined) return
+    waiting.delete(active)
+    active()
+  }
+
   return <T>(transform: () => Promise<T>, deadline: number, timeoutMs: number): Promise<T> => {
-    const task = queue.then(() => {
-      signal.throwIfAborted()
-      remainingTimeoutMs(deadline, timeoutMs, 'transform')
-      return transform()
+    let start: () => void
+    const task = new Promise<T>((resolve, reject) => {
+      start = () => {
+        void Promise.resolve()
+          .then(() => {
+            signal.throwIfAborted()
+            remainingTimeoutMs(deadline, timeoutMs, 'transform')
+            return transform()
+          })
+          .then(resolve, reject)
+          .then(startNext)
+      }
+      waiting.add(start)
+      if (active === undefined) startNext()
     })
-    queue = task.catch(() => undefined)
-    return withinRunDeadline(task, deadline, timeoutMs, signal, 'transform')
+    const result = withinRunDeadline(task, deadline, timeoutMs, signal, 'transform')
+    const remove = (): void => {
+      waiting.delete(start)
+    }
+    void result.then(remove, remove)
+    return result
   }
 }
 
-/** Batch ordering is independent of the project and test execution workers. */
 const createGraphModuleTransform = (
   transform: SourceTransform | undefined,
   kind: 'test' | 'project',
@@ -401,11 +424,10 @@ const createGraphModuleTransform = (
   }
 }
 
-type ResultKind = 'result' | 'repl-result' | 'repl-ack' | 'test-result' | 'module-project-result'
+type ResultKind = Exclude<WorkerResponse['kind'], 'console' | 'phase'>
 
 interface PendingRequest {
-  readonly console: ConsoleChunk[]
-  readonly finish: (outcome: TransportOutcome) => void
+  readonly finish: (outcome: WorkerOutcome) => void
 }
 
 /**
@@ -430,7 +452,7 @@ class WorkerTransport {
   constructor(options: EsmwellOptions, watchdogGraceMs: number = 0) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     this.watchdogGraceMs = watchdogGraceMs
-    this.workerFactory = options.workerFactory ?? defaultWorkerFactory
+    this.workerFactory = options.workerFactory ?? createModuleWorker
     this.hostTools = options.hostTools
     this.workerUrl =
       options.workerUrl !== undefined
@@ -475,7 +497,6 @@ class WorkerTransport {
       active.finish({
         kind: 'worker-error',
         message: 'the session was closed while this run was still in progress',
-        console: active.console,
       })
     }
     this.terminateWorker()
@@ -525,28 +546,22 @@ class WorkerTransport {
         }
         if (response.kind === resultKind) {
           const payload = response.kind === 'repl-ack' ? undefined : response.result
-          finish({ kind: 'delivered', payload, console: pendingChunks })
+          finish({ kind: 'delivered', payload })
           return
         }
-        // A response for this id whose kind is neither a stream event nor matches
-        // what this request expects (for example a worker bundle from a
-        // different cache generation replying with a kind this main-thread
-        // bundle doesn't recognize as the pairing). Settle promptly instead
-        // of leaving the caller to time out.
         finish({
           kind: 'worker-error',
           message: `worker responded with unexpected message kind '${String(response.kind)}' for this request`,
-          console: pendingChunks,
         })
       }
 
       const onError = (event: unknown): void => {
         const failure = (event as ErrorEvent).message
         this.terminateWorker()
-        finish({ kind: 'worker-error', message: String(failure), console: pendingChunks })
+        finish({ kind: 'worker-error', message: String(failure) })
       }
 
-      const finish = (outcome: TransportOutcome): void => {
+      const finish = (outcome: WorkerOutcome): void => {
         if (settled) {
           return
         }
@@ -558,16 +573,15 @@ class WorkerTransport {
           this.pending = null
         }
         tools?.close()
-        resolve({ ...outcome, phase })
+        resolve({ ...outcome, console: pendingChunks, phase })
       }
 
-      const pending = { finish, console: pendingChunks }
+      const pending = { finish }
       this.pending = pending
       const timer = setTimeout(() => {
         this.terminateWorker()
         finish({
           kind: this.watchdogGraceMs === 0 ? 'execution-timeout' : 'supervisor-timeout',
-          console: pendingChunks,
         })
       }, this.timeoutMs + this.watchdogGraceMs)
 
@@ -582,7 +596,6 @@ class WorkerTransport {
         finish({
           kind: 'worker-error',
           message: `could not send the request to the worker: ${error instanceof Error ? error.message : String(error)} — request payloads must contain only structured-cloneable values (no functions, symbols, or proxies)`,
-          console: pendingChunks,
         })
       }
     })
@@ -599,7 +612,6 @@ class WorkerTransport {
           active.finish({
             kind: 'worker-error',
             message: 'the worker sent a message the main thread could not decode (messageerror)',
-            console: active.console,
           })
         }
       }
@@ -624,11 +636,6 @@ interface WorkerRequestShape {
   [extra: string]: unknown
 }
 
-const defaultWorkerFactory = (url: string): WorkerLike => {
-  const worker = new Worker(url, { type: 'module' })
-  return adaptWorker(worker)
-}
-
 type DeliveredOutcome = Extract<TransportOutcome, { kind: 'delivered' }>
 
 const asRunResult = <Result extends ReplResult>(
@@ -650,7 +657,7 @@ const transportFailure = (outcome: Exclude<TransportOutcome, DeliveredOutcome>, 
     outcome.kind === 'preparation-error'
       ? serializedMainError(outcome.error)
       : outcome.kind === 'execution-timeout'
-        ? { name: 'TimeoutError', message: `execution timed out after ${timeoutMs}ms and its worker was terminated` }
+        ? { name: 'TimeoutError', message: executionTimeoutMessage(timeoutMs) }
         : {
             name: 'EsmwellError',
             message: outcome.kind === 'worker-error' ? outcome.message : supervisorTimeoutMessage(timeoutMs),

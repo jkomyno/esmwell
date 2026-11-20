@@ -50,7 +50,7 @@ scope.addEventListener('message', (event: MessageEvent<WorkerRequest>): void => 
         postResponse({ kind: 'repl-result', id: request.id, result })
       })
       .catch((error: unknown) => {
-        postResponse({ kind: 'repl-result', id: request.id, result: replErrorResult(error) })
+        postResponse({ kind: 'repl-result', id: request.id, result: workerFailure(error) })
       })
     return
   }
@@ -110,8 +110,6 @@ const fallbackResponse = (response: WorkerResponse): WorkerResponse => ({
 })
 
 const judgeErrorResult = (error: unknown): JudgeRunResult => ({ ...workerFailure(error), status: 'error', cases: [] })
-
-const replErrorResult = (error: unknown): ReplResult => workerFailure(error)
 
 const judgeResultWithPreviews = (result: JudgeRunResult): JudgeRunResult => ({
   ...result,

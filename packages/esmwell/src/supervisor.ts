@@ -1,6 +1,6 @@
 import type { ConsoleChunk, JudgeRequest, ReplInputRequest, WorkerRequest, WorkerResponse } from './types'
 
-import type { WorkerLike } from './worker-like'
+import { executionTimeoutMessage, type WorkerLike } from './worker-like'
 
 /** Worker surface used by a supervisor to control one execution realm. */
 export type ExecutionWorkerLike = WorkerLike
@@ -239,10 +239,4 @@ const failureResponse = (
 }
 
 const timeoutResponse = (request: ExecutableRequest, consoleChunks: readonly ConsoleChunk[]): FinalResponse =>
-  failureResponse(
-    request,
-    `execution timed out after ${request.timeoutMs}ms and its worker was terminated`,
-    consoleChunks,
-    'TimeoutError',
-    request.timeoutMs,
-  )
+  failureResponse(request, executionTimeoutMessage(request.timeoutMs), consoleChunks, 'TimeoutError', request.timeoutMs)

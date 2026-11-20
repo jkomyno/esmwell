@@ -21,11 +21,8 @@ import type {
 } from './types'
 
 /** Options for one in-realm judge run. */
-export interface JudgeRealmOptions extends ResolveOptions {
+export interface JudgeRealmOptions extends ResolveOptions, ReplEvaluateHandlers {
   readonly cases: readonly JudgeCase[]
-  /** Streamed per console call, in addition to being collected in the result. */
-  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
-  readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
 /**
@@ -254,9 +251,6 @@ export const __esmwell = new Proxy(__esmwellScope, {
     if (key in target) return target[key]
     if (!(key in globalThis)) throw new ReferenceError(String(key) + ' is not defined')
     const value = globalThis[key]
-    // Preserve identity for prototype-bearing global callables, which do not
-    // need receiver rebinding. Wrap receiver-sensitive non-prototype callables
-    // so WebIDL operations receive the real global object as their receiver.
     if (typeof value !== 'function' || Object.hasOwn(value, 'prototype')) return value
     let bound = __esmwellBoundGlobals.get(value)
     if (bound === undefined) {
@@ -292,7 +286,6 @@ export interface ReplEvaluateHandlers {
   readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
-/** Reports worker progress and opens host tools only for opted-in runs. */
 export function runWithWorkerBindings<Result>(
   request: { readonly id: number; readonly hostToolsPort?: MessagePort },
   send: (response: WorkerResponse) => void,

@@ -1,10 +1,10 @@
 import { importModule } from './loader'
-import { elapsedMs, serializeError } from './bootstrap'
+import { elapsedMs, serializeError, type ReplEvaluateHandlers } from './bootstrap'
 import { installConsoleCapture, serializeValue } from './console'
 import { materializeModuleGraph } from './module-graph'
 import type { ResolveOptions } from './resolve'
 import type { ResolvedDependency } from './resolve'
-import type { ExecutionPhase, ConsoleChunk, SerializedError } from './types'
+import type { ConsoleChunk, SerializedError } from './types'
 
 /** Canonical ESM module id to JavaScript source. */
 export type ModuleProjectModules = Readonly<Record<string, string>>
@@ -32,11 +32,9 @@ export interface ModuleProjectResult {
 }
 
 /** Worker-realm options supplied by the main-thread project session. */
-export interface ModuleProjectRealmOptions extends ResolveOptions {
+export interface ModuleProjectRealmOptions extends ResolveOptions, ReplEvaluateHandlers {
   readonly graphId: string
   readonly serviceWorkerScope: string
-  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
-  readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
 /** Materializes and imports one virtual ESM project inside its owned worker. */
