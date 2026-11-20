@@ -270,7 +270,7 @@ const result = await tests.run({
 tests.close()
 ```
 
-Test sessions default to `timeoutMs: 60000` because the same budget covers service-worker setup, the engine download, and the test run. Both graph session types count host transforms toward their run deadline. Judge and REPL sessions keep the 5-second default and give each host transform a separate budget of the same length. An expired async transform can finish in the background. The session preserves transform ordering and skips queued transforms whose budgets expire before they start.
+Test sessions default to `timeoutMs: 60000` because the same budget covers service-worker setup, the engine download, and the test run. Both graph session types count host transforms toward their run deadline. Judge and REPL sessions keep the 5-second default and give each host transform a separate budget of the same length, starting at submission. An expired async transform can finish in the background. The session preserves transform ordering and skips queued transforms whose budgets expire before they start.
 
 For Jest, import the same globals from `@jest/globals`. `jest.fn` and `jest.spyOn` use the official `jest-mock` package. Both engines and their assertion libraries load lazily from esm.sh, so judge and REPL users do not pay their download cost. The browser test payload is a few megabytes uncompressed, so start the download when a user opens or runs a test playground, not during initial page load.
 

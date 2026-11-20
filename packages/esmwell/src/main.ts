@@ -368,11 +368,16 @@ const createTransformQueue = (signal: AbortSignal) => {
     active()
   }
 
-  return <T>(transform: () => Promise<T>, deadline: number, timeoutMs: number): Promise<T> => {
+  return <T>(
+    transform: () => Promise<T>,
+    deadline: number,
+    timeoutMs: number,
+    ready?: Promise<unknown>,
+  ): Promise<T> => {
     let start: () => void
     const task = new Promise<T>((resolve, reject) => {
       start = () => {
-        void Promise.resolve()
+        void (ready ?? Promise.resolve())
           .then(() => {
             signal.throwIfAborted()
             remainingTimeoutMs(deadline, timeoutMs, 'transform')
@@ -464,30 +469,20 @@ class WorkerTransport {
   }
 
   request(input: RequestInput, resultKind: ResultKind, handlers?: ConsoleStreamHandlers): Promise<TransportOutcome> {
-    const run = this.queue.then(
-      () => this.prepareAndDispatch(input, resultKind, handlers),
-      () => this.prepareAndDispatch(input, resultKind, handlers),
-    )
-    this.queue = run.catch(() => undefined)
-    return run
-  }
+    const turn = this.queue
+    const dispatch = (message: Omit<WorkerRequestShape, 'id'>): Promise<TransportOutcome> =>
+      this.dispatch(message, resultKind, handlers)
 
-  /**
-   * Builds the payload inside the queue, so an asynchronous transform for one
-   * request cannot let a later request overtake it.
-   */
-  private prepareAndDispatch(
-    input: RequestInput,
-    resultKind: ResultKind,
-    handlers: ConsoleStreamHandlers | undefined,
-  ): Promise<TransportOutcome> {
-    if (typeof input !== 'function') {
-      return this.dispatch(input, resultKind, handlers)
-    }
-    return this.enqueueTransform(input, performance.now() + this.timeoutMs, this.timeoutMs).then(
-      (message) => this.dispatch(message, resultKind, handlers),
-      (error: unknown) => preparationFailure(error, 'transform'),
-    )
+    const hasTransform = typeof input === 'function'
+    const run = hasTransform
+      ? this.enqueueTransform(input, performance.now() + this.timeoutMs, this.timeoutMs, turn).then(
+          dispatch,
+          (error: unknown) => preparationFailure(error, 'transform'),
+        )
+      : turn.then(() => dispatch(input))
+    // A transform can time out while the earlier worker still owns the session.
+    this.queue = (hasTransform ? turn.then(() => run) : run).catch(() => undefined)
+    return run
   }
 
   close(): void {
