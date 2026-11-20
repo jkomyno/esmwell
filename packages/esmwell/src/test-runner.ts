@@ -6,7 +6,7 @@ import { runVitestInRealm } from './test-engines/vitest'
 import { defineEsmwellGlobal } from './runtime-globals'
 import { materializeTestGraph } from './test-workspace'
 import type { ResolveOptions } from './resolve'
-import type { ConsoleChunk } from './types'
+import type { ExecutionPhase, ConsoleChunk } from './types'
 import type { TestCaseResult, TestEngineInfo, TestEnginePackage, TestRun, TestRunResult } from './test-types'
 
 /** Worker-realm options supplied by the main-thread test session. */
@@ -14,6 +14,7 @@ export interface TestRealmOptions extends ResolveOptions {
   readonly graphId: string
   readonly serviceWorkerScope: string
   readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
+  readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
 /** Runs one virtual ESM workspace with official upstream test-engine packages. */
@@ -29,6 +30,7 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
   let graph: Awaited<ReturnType<typeof materializeTestGraph>> | undefined
 
   try {
+    options.onPhase?.('module-graph')
     graph = await materializeTestGraph({
       ...run,
       graphId: options.graphId,
@@ -36,6 +38,7 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
       deps: options.deps,
       autoInstall: options.autoInstall,
     })
+    options.onPhase?.('test-workspace')
     const outcome = requireRegisteredTests(
       run.engine === 'vitest'
         ? await executeVitest(graph.entryUrls, run.engineVersion)

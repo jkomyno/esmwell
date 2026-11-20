@@ -28,6 +28,17 @@ export interface JudgeCase {
 /** Per-case outcome. */
 export type JudgeCaseStatus = 'pass' | 'fail' | 'error'
 
+/** Last observed phase of a run when it failed. */
+export type ExecutionPhase =
+  | 'transform'
+  | 'service-worker'
+  | 'worker-start'
+  | 'prepare-source'
+  | 'module-graph'
+  | 'module-import'
+  | 'judge-cases'
+  | 'test-workspace'
+
 /**
  * An error crossing the transport boundary, message plus stack when present.
  * `name` is the reliable discriminator. The remaining fields are only present
@@ -39,6 +50,7 @@ export interface SerializedError {
   readonly name: string
   readonly message: string
   readonly stack?: string
+  readonly phase?: ExecutionPhase
   /** Present for a `PolicyViolation`: the rule that fired. */
   readonly rule?: PolicyRule
   /** 1-based. Present for a `PolicyViolation` or a `UserSyntaxError`. */
@@ -163,6 +175,7 @@ export interface ModuleProjectRequest {
 export type WorkerRequest = JudgeRequest | ReplInputRequest | ReplResetRequest | TestRequest | ModuleProjectRequest
 
 export type WorkerResponse =
+  | { readonly kind: 'phase'; readonly id: number; readonly phase: ExecutionPhase }
   | { readonly kind: 'console'; readonly id: number; readonly chunk: ConsoleChunk }
   | { readonly kind: 'result'; readonly id: number; readonly result: JudgeRunResult }
   | { readonly kind: 'repl-result'; readonly id: number; readonly result: ReplResult }

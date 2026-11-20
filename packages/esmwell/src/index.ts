@@ -24,6 +24,7 @@ export type { SourceTransform, SourceTransformContext } from './transform'
 export type {
   ConsoleChunk,
   ConsoleLevel,
+  ExecutionPhase,
   JudgeCase,
   JudgeCaseResult,
   JudgeCaseStatus,

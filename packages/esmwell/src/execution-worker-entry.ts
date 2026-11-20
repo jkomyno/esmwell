@@ -2,7 +2,7 @@ import { createReplSessionInRealm, runJudgeInRealm, serializeError } from './boo
 import type { ReplRealmSession } from './bootstrap'
 import { installBrowserProcess } from './browser-process'
 import { protectConsole, serializeValue } from './console'
-import type { JudgeRunResult, ReplResult, WorkerRequest, WorkerResponse } from './types'
+import type { ExecutionPhase, JudgeRunResult, ReplResult, WorkerRequest, WorkerResponse } from './types'
 
 /** The minimal execution-worker scope this entry needs. */
 interface ExecutionWorkerScope {
@@ -22,12 +22,16 @@ let replSession: ReplRealmSession | null = null
 
 scope.addEventListener('message', (event: MessageEvent<WorkerRequest>): void => {
   const request = event.data
+  const onPhase = (phase: ExecutionPhase): void => {
+    postToSupervisor({ kind: 'phase', id: request.id, phase } satisfies WorkerResponse)
+  }
 
   if (request.kind === 'judge') {
     void runJudgeInRealm(request.code, {
       cases: request.cases,
       deps: request.deps,
       autoInstall: request.autoInstall,
+      onPhase,
       onConsoleChunk: (chunk) => {
         postResponse({ kind: 'console', id: request.id, chunk })
       },
@@ -47,6 +51,7 @@ scope.addEventListener('message', (event: MessageEvent<WorkerRequest>): void => 
     }
     void replSession
       .evaluate(request.input, {
+        onPhase,
         onConsoleChunk: (chunk) => {
           postResponse({ kind: 'console', id: request.id, chunk })
         },

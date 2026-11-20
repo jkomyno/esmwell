@@ -117,6 +117,7 @@ test('terminates a synchronous project loop and removes its virtual graph', asyn
     })
 
     assert(result.error?.name === 'TimeoutError', `hung project should time out: ${JSON.stringify(result)}`)
+    assert(result.error?.phase === 'module-import', 'the timeout should retain the last observed phase')
     const cacheNames = await caches.keys()
     assert(
       cacheNames.every((name) => !name.startsWith('esmwell:test-graph:')),

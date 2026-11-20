@@ -28,6 +28,9 @@ scope.addEventListener('message', (event): void => {
     serviceWorkerScope: request.serviceWorkerScope,
     deps: request.deps,
     autoInstall: request.autoInstall,
+    onPhase: (phase) => {
+      postToMain({ kind: 'phase', id: request.id, phase } satisfies WorkerResponse)
+    },
     onConsoleChunk: (chunk) => {
       postToMain({ kind: 'console', id: request.id, chunk } satisfies WorkerResponse)
     },

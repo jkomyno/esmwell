@@ -9,13 +9,22 @@ import type { ResolveOptions } from './resolve'
 import type { ResolvedDependency } from './resolve'
 import { transformJudgeModule } from './transform-judge'
 import { RESULT_EXPORT, transformReplInput } from './transform-repl'
-import type { ConsoleChunk, JudgeCase, JudgeCaseResult, JudgeRunResult, ReplResult, SerializedError } from './types'
+import type {
+  ExecutionPhase,
+  ConsoleChunk,
+  JudgeCase,
+  JudgeCaseResult,
+  JudgeRunResult,
+  ReplResult,
+  SerializedError,
+} from './types'
 
 /** Options for one in-realm judge run. */
 export interface JudgeRealmOptions extends ResolveOptions {
   readonly cases: readonly JudgeCase[]
   /** Streamed per console call, in addition to being collected in the result. */
   readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
+  readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
 /**
@@ -38,6 +47,7 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
   let dependencies: ResolvedDependency[] = []
 
   try {
+    options.onPhase?.('prepare-source')
     const ast = parseUserModule(code)
     const violations = checkPolicy(ast)
     const firstViolation = violations[0]
@@ -48,8 +58,10 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
     dependencies = transformed.dependencies
     const rewritten = transformed.code
     moduleUrl = createModuleUrl(rewritten)
+    options.onPhase?.('module-import')
     const module = await importSubmittedModule(moduleUrl, dependencies)
 
+    options.onPhase?.('judge-cases')
     const caseResults: JudgeCaseResult[] = []
     for (const testCase of options.cases) {
       caseResults.push(await runJudgeCase(module, testCase))
@@ -260,6 +272,7 @@ export const __esmwellTypeof = new Proxy(__esmwellScope, {
 export interface ReplEvaluateHandlers {
   /** Console chunks as they stream in, before the result. */
   readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
+  readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
 /** An in-realm REPL session: one persistent scope across evaluations. */
@@ -300,6 +313,7 @@ export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSess
       let dependencies: ResolvedDependency[] = []
 
       try {
+        handlers?.onPhase?.('prepare-source')
         const ast = parseUserModule(input)
         const firstViolation = checkPolicy(ast)[0]
         if (firstViolation !== undefined) {
@@ -312,6 +326,7 @@ export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSess
         // cache by URL, so every evaluation gets a unique one.
         generation += 1
         moduleUrl = createModuleUrl(`${code}\n/* evaluation ${generation} */`)
+        handlers?.onPhase?.('module-import')
         const module = await importSubmittedModule(moduleUrl, dependencies)
         return {
           ok: true,

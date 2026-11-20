@@ -34,7 +34,7 @@ export interface WorkerSupervisor {
 }
 
 type ExecutableRequest = JudgeRequest | ReplInputRequest
-type FinalResponse = Exclude<WorkerResponse, { readonly kind: 'console' }>
+type FinalResponse = Exclude<WorkerResponse, { readonly kind: 'console' | 'phase' }>
 
 interface ActiveExecution {
   readonly worker: ExecutionWorkerLike
@@ -97,6 +97,10 @@ export function createWorkerSupervisor(options: SupervisorOptions): WorkerSuperv
     const onMessage = (event: unknown): void => {
       const response = (event as MessageEvent<WorkerResponse>).data
       if (response?.id !== request.id) {
+        return
+      }
+      if (response.kind === 'phase') {
+        options.host.send(response)
         return
       }
       if (response.kind === 'console') {
@@ -217,92 +221,31 @@ const failureResponse = (
   request: WorkerRequest,
   message: string,
   consoleChunks: readonly ConsoleChunk[] = [],
+  name: 'EsmwellError' | 'TimeoutError' = 'EsmwellError',
+  durationMs: number = 0,
 ): FinalResponse => {
-  const error = { name: 'EsmwellError', message }
-  if (request.kind === 'repl-input') {
-    return {
-      kind: 'repl-result',
-      id: request.id,
-      result: { ok: false, error, console: consoleChunks, dependencies: [], durationMs: 0 },
-    }
+  const { id, kind } = request
+  const result = { ok: false, error: { name, message }, console: consoleChunks, dependencies: [], durationMs }
+  if (kind === 'repl-input') {
+    return { kind: 'repl-result', id, result }
   }
-  if (request.kind === 'repl-reset') {
-    return { kind: 'repl-ack', id: request.id }
+  if (kind === 'repl-reset') {
+    return { kind: 'repl-ack', id }
   }
-  if (request.kind === 'test') {
-    return {
-      kind: 'test-result',
-      id: request.id,
-      result: {
-        status: 'error',
-        ok: false,
-        tests: [],
-        error,
-        console: consoleChunks,
-        dependencies: [],
-        durationMs: 0,
-      },
-    }
+  if (kind === 'test') {
+    return { kind: 'test-result', id, result: { ...result, status: 'error', tests: [] } }
   }
-  if (request.kind === 'module-project') {
-    return {
-      kind: 'module-project-result',
-      id: request.id,
-      result: {
-        status: 'error',
-        ok: false,
-        exports: {},
-        error,
-        console: consoleChunks,
-        dependencies: [],
-        durationMs: 0,
-      },
-    }
+  if (kind === 'module-project') {
+    return { kind: 'module-project-result', id, result: { ...result, status: 'error', exports: {} } }
   }
-  return {
-    kind: 'result',
-    id: request.id,
-    result: {
-      status: 'error',
-      ok: false,
-      cases: [],
-      error,
-      console: consoleChunks,
-      dependencies: [],
-      durationMs: 0,
-    },
-  }
+  return { kind: 'result', id, result: { ...result, status: 'error', cases: [] } }
 }
 
-const timeoutResponse = (request: ExecutableRequest, consoleChunks: readonly ConsoleChunk[]): FinalResponse => {
-  const error = {
-    name: 'TimeoutError',
-    message: `execution timed out after ${request.timeoutMs}ms and its worker was terminated`,
-  }
-  if (request.kind === 'repl-input') {
-    return {
-      kind: 'repl-result',
-      id: request.id,
-      result: {
-        ok: false,
-        error,
-        console: consoleChunks,
-        dependencies: [],
-        durationMs: request.timeoutMs,
-      },
-    }
-  }
-  return {
-    kind: 'result',
-    id: request.id,
-    result: {
-      status: 'error',
-      ok: false,
-      cases: [],
-      error,
-      console: consoleChunks,
-      dependencies: [],
-      durationMs: request.timeoutMs,
-    },
-  }
-}
+const timeoutResponse = (request: ExecutableRequest, consoleChunks: readonly ConsoleChunk[]): FinalResponse =>
+  failureResponse(
+    request,
+    `execution timed out after ${request.timeoutMs}ms and its worker was terminated`,
+    consoleChunks,
+    'TimeoutError',
+    request.timeoutMs,
+  )

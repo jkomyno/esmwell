@@ -3,7 +3,7 @@ import { installConsoleCapture, serializeValue } from './console'
 import { materializeModuleGraph } from './module-graph'
 import type { ResolveOptions } from './resolve'
 import type { ResolvedDependency } from './resolve'
-import type { ConsoleChunk, SerializedError } from './types'
+import type { ExecutionPhase, ConsoleChunk, SerializedError } from './types'
 
 /** Canonical ESM module id to JavaScript source. */
 export type ModuleProjectModules = Readonly<Record<string, string>>
@@ -35,6 +35,7 @@ export interface ModuleProjectRealmOptions extends ResolveOptions {
   readonly graphId: string
   readonly serviceWorkerScope: string
   readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
+  readonly onPhase?: (phase: ExecutionPhase) => void
 }
 
 /** Materializes and imports one virtual ESM project inside its owned worker. */
@@ -53,6 +54,7 @@ export async function runModuleProjectInRealm(
   let graph: Awaited<ReturnType<typeof materializeModuleGraph>> | undefined
 
   try {
+    options.onPhase?.('module-graph')
     graph = await materializeModuleGraph({
       modules: project.modules,
       entries: [project.entry],
@@ -63,6 +65,7 @@ export async function runModuleProjectInRealm(
       reservedLocalPrefixes: ['src/', 'tests/'],
       entryLabel: 'entry',
     })
+    options.onPhase?.('module-import')
     const entry = await importUrl(graph.entryUrls[0]!)
     return {
       status: 'pass',
