@@ -1,7 +1,7 @@
 {
   "private": false,
   "name": "esmwell",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Run unbundled ESM in the browser with hard timeouts and normalized results",
   "keywords": [
     "esm",
