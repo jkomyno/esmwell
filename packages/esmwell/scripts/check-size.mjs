@@ -7,7 +7,11 @@ import { fileURLToPath } from 'node:url'
 
 const buildDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'build')
 const budgetBytes = 30 * 1024
-const nonRunnerOutputs = new Set(['typescript-editor.mjs'])
+const nonRunnerOutputs = new Map([
+  ['typescript-editor.mjs', 'opt-in editor kit'],
+  ['host-tools.mjs', 'opt-in host tool registration'],
+  ['host-tools-worker.mjs', 'opt-in host tool client'],
+])
 
 const outputs = readdirSync(buildDir).filter((file) => file.endsWith('.mjs'))
 if (outputs.length === 0) {
@@ -18,8 +22,9 @@ if (outputs.length === 0) {
 let totalBytes = 0
 for (const file of outputs) {
   const gzipped = gzipSync(readFileSync(join(buildDir, file))).length
-  if (nonRunnerOutputs.has(file)) {
-    console.log(`  ${file}: ${(gzipped / 1024).toFixed(2)} KB gzipped (excluded: opt-in editor kit)`)
+  const exclusion = nonRunnerOutputs.get(file)
+  if (exclusion !== undefined) {
+    console.log(`  ${file}: ${(gzipped / 1024).toFixed(2)} KB gzipped (excluded: ${exclusion})`)
     continue
   }
   totalBytes += gzipped

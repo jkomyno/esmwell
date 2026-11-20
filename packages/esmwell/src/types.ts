@@ -110,6 +110,7 @@ export interface SupervisedExecutionOptions {
   readonly timeoutMs: number
   /** Same-origin child worker that owns submitted code. */
   readonly executionWorkerUrl?: string
+  readonly hostToolsPort?: MessagePort
 }
 
 /** Main-thread → supervisor request: run user code as a judged module. */
@@ -154,6 +155,7 @@ export interface ReplResetRequest {
 export interface TestRequest {
   readonly kind: 'test'
   readonly id: number
+  readonly hostToolsPort?: MessagePort
   readonly run: TestRun
   readonly graphId: string
   readonly serviceWorkerScope: string
@@ -165,6 +167,7 @@ export interface TestRequest {
 export interface ModuleProjectRequest {
   readonly kind: 'module-project'
   readonly id: number
+  readonly hostToolsPort?: MessagePort
   readonly project: ModuleProject
   readonly graphId: string
   readonly serviceWorkerScope: string

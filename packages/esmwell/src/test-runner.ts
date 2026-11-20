@@ -1,5 +1,6 @@
+import { importModule } from './loader'
 import { installConsoleCapture } from './console'
-import { serializeError } from './bootstrap'
+import { elapsedMs, serializeError } from './bootstrap'
 import { TEST_API_GLOBAL } from './test-engine'
 import { jestPackageUrls, runJestTests } from './test-engines/jest'
 import { runVitestInRealm } from './test-engines/vitest'
@@ -107,8 +108,8 @@ const executeVitest = async (
     files: entryUrls,
     requestedVersion: engineVersion,
     importTestFile: async (filepath, context) => {
-      installTestApi(await importUrl(context.vitestUrl))
-      return importUrl(filepath)
+      installTestApi(await importModule(context.vitestUrl))
+      return importModule(filepath)
     },
   })
   const packages: TestEnginePackage[] =
@@ -145,7 +146,7 @@ const executeJest = async (
   const result = await runJestTests(async (globals) => {
     installTestApi(globals)
     for (const entryUrl of entryUrls) {
-      await importUrl(entryUrl)
+      await importModule(entryUrl)
     }
   }, engineVersion)
   const version = result.runner.resolvedVersion
@@ -184,8 +185,3 @@ const executeJest = async (
 const installTestApi = (value: unknown): void => {
   defineEsmwellGlobal(TEST_API_GLOBAL, value)
 }
-
-const importUrl = async (url: string): Promise<Record<string, unknown>> =>
-  (await import(/* @vite-ignore */ url)) as Record<string, unknown>
-
-const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100

@@ -1,12 +1,9 @@
 import type { ConsoleChunk, JudgeRequest, ReplInputRequest, WorkerRequest, WorkerResponse } from './types'
 
+import type { WorkerLike } from './worker-like'
+
 /** Worker surface used by a supervisor to control one execution realm. */
-export interface ExecutionWorkerLike {
-  send(message: unknown): void
-  terminate(): void
-  addEventListener(type: string, listener: (event: unknown) => void): void
-  removeEventListener(type: string, listener: (event: unknown) => void): void
-}
+export type ExecutionWorkerLike = WorkerLike
 
 /** Creates one child execution worker. */
 export type ExecutionWorkerFactory = (url: string) => ExecutionWorkerLike
@@ -157,7 +154,7 @@ export function createWorkerSupervisor(options: SupervisorOptions): WorkerSuperv
     worker.addEventListener('error', onError)
     worker.addEventListener('messageerror', onMessageError)
     try {
-      worker.send(request)
+      worker.send(request, request.hostToolsPort === undefined ? undefined : [request.hostToolsPort])
     } catch (error) {
       finish(
         failureResponse(

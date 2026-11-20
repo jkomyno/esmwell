@@ -1,8 +1,8 @@
-import { createReplSessionInRealm, runJudgeInRealm, serializeError } from './bootstrap'
+import { createReplSessionInRealm, runJudgeInRealm, runWithWorkerBindings, workerFailure } from './bootstrap'
 import type { ReplRealmSession } from './bootstrap'
 import { installBrowserProcess } from './browser-process'
 import { protectConsole, serializeValue } from './console'
-import type { ExecutionPhase, JudgeRunResult, ReplResult, WorkerRequest, WorkerResponse } from './types'
+import type { JudgeRunResult, ReplResult, WorkerRequest, WorkerResponse } from './types'
 
 /** The minimal execution-worker scope this entry needs. */
 interface ExecutionWorkerScope {
@@ -22,20 +22,15 @@ let replSession: ReplRealmSession | null = null
 
 scope.addEventListener('message', (event: MessageEvent<WorkerRequest>): void => {
   const request = event.data
-  const onPhase = (phase: ExecutionPhase): void => {
-    postToSupervisor({ kind: 'phase', id: request.id, phase } satisfies WorkerResponse)
-  }
-
   if (request.kind === 'judge') {
-    void runJudgeInRealm(request.code, {
-      cases: request.cases,
-      deps: request.deps,
-      autoInstall: request.autoInstall,
-      onPhase,
-      onConsoleChunk: (chunk) => {
-        postResponse({ kind: 'console', id: request.id, chunk })
-      },
-    })
+    void runWithWorkerBindings(request, postResponse, (handlers) =>
+      runJudgeInRealm(request.code, {
+        cases: request.cases,
+        deps: request.deps,
+        autoInstall: request.autoInstall,
+        ...handlers,
+      }),
+    )
       .then((result) => {
         postResponse({ kind: 'result', id: request.id, result })
       })
@@ -49,13 +44,8 @@ scope.addEventListener('message', (event: MessageEvent<WorkerRequest>): void => 
     if (replSession === null) {
       replSession = createReplSessionInRealm({ deps: request.deps, autoInstall: request.autoInstall })
     }
-    void replSession
-      .evaluate(request.input, {
-        onPhase,
-        onConsoleChunk: (chunk) => {
-          postResponse({ kind: 'console', id: request.id, chunk })
-        },
-      })
+    const repl = replSession
+    void runWithWorkerBindings(request, postResponse, (handlers) => repl.evaluate(request.input, handlers))
       .then((result) => {
         postResponse({ kind: 'repl-result', id: request.id, result })
       })
@@ -119,23 +109,9 @@ const fallbackResponse = (response: WorkerResponse): WorkerResponse => ({
   result: judgeErrorResult(new Error('execution worker response could not be sent to the supervisor')),
 })
 
-const judgeErrorResult = (error: unknown): JudgeRunResult => ({
-  status: 'error',
-  ok: false,
-  cases: [],
-  console: [],
-  error: serializeError(error),
-  dependencies: [],
-  durationMs: 0,
-})
+const judgeErrorResult = (error: unknown): JudgeRunResult => ({ ...workerFailure(error), status: 'error', cases: [] })
 
-const replErrorResult = (error: unknown): ReplResult => ({
-  ok: false,
-  error: serializeError(error),
-  console: [],
-  dependencies: [],
-  durationMs: 0,
-})
+const replErrorResult = (error: unknown): ReplResult => workerFailure(error)
 
 const judgeResultWithPreviews = (result: JudgeRunResult): JudgeRunResult => ({
   ...result,

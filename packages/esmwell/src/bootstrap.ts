@@ -17,6 +17,7 @@ import type {
   JudgeRunResult,
   ReplResult,
   SerializedError,
+  WorkerResponse,
 } from './types'
 
 /** Options for one in-realm judge run. */
@@ -214,6 +215,22 @@ const importSubmittedModule = async (
   }
 }
 
+interface WorkerFailure {
+  readonly ok: false
+  readonly error: SerializedError
+  readonly console: readonly ConsoleChunk[]
+  readonly dependencies: readonly ResolvedDependency[]
+  readonly durationMs: number
+}
+
+export const workerFailure = (error: unknown): WorkerFailure => ({
+  ok: false,
+  error: serializeError(error),
+  console: [],
+  dependencies: [],
+  durationMs: 0,
+})
+
 export const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100
 
 /**
@@ -273,6 +290,23 @@ export interface ReplEvaluateHandlers {
   /** Console chunks as they stream in, before the result. */
   readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
   readonly onPhase?: (phase: ExecutionPhase) => void
+}
+
+/** Reports worker progress and opens host tools only for opted-in runs. */
+export function runWithWorkerBindings<Result>(
+  request: { readonly id: number; readonly hostToolsPort?: MessagePort },
+  send: (response: WorkerResponse) => void,
+  run: (handlers: ReplEvaluateHandlers) => Promise<Result>,
+): Promise<Result> {
+  const { id, hostToolsPort } = request
+  const handlers: ReplEvaluateHandlers = {
+    onConsoleChunk: (chunk) => send({ kind: 'console', id, chunk }),
+    onPhase: (phase) => send({ kind: 'phase', id, phase }),
+  }
+  if (hostToolsPort === undefined) return run(handlers)
+  return import('./host-tools-worker').then(({ runWithHostTools }) =>
+    runWithHostTools(hostToolsPort, () => run(handlers)),
+  )
 }
 
 /** An in-realm REPL session: one persistent scope across evaluations. */

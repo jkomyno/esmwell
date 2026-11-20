@@ -1,3 +1,4 @@
+import { importModule } from './loader'
 import { elapsedMs, serializeError } from './bootstrap'
 import { installConsoleCapture, serializeValue } from './console'
 import { materializeModuleGraph } from './module-graph'
@@ -66,7 +67,7 @@ export async function runModuleProjectInRealm(
       entryLabel: 'entry',
     })
     options.onPhase?.('module-import')
-    const entry = await importUrl(graph.entryUrls[0]!)
+    const entry = await importModule(graph.entryUrls[0]!)
     return {
       status: 'pass',
       ok: true,
@@ -94,9 +95,6 @@ export async function runModuleProjectInRealm(
     restoreConsole()
   }
 }
-
-const importUrl = async (url: string): Promise<Record<string, unknown>> =>
-  (await import(/* @vite-ignore */ url)) as Record<string, unknown>
 
 const serializeModuleExports = (module: Record<string, unknown>): Readonly<Record<string, unknown>> =>
   Object.fromEntries(Object.entries(module).map(([name, value]) => [name, cloneableOrPreview(value)]))

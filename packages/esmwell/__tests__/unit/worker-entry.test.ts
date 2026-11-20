@@ -1,20 +1,15 @@
 import type { createReplSessionInRealm, runJudgeInRealm } from 'src/bootstrap'
 import type { JudgeRunResult, WorkerRequest, WorkerResponse } from 'src/types'
 
-// execution-worker-entry.ts reads `self` at module load time, so the worker scope
-// shim must be in place before the module is imported, and every test
-// needs its own fresh module instance (`replSession` is module-level
-// state). `vi.mock` replaces bootstrap for the whole file so judge and
-// REPL failures can be forced deterministically instead of depending on
-// real parse/policy/import failures.
-vi.mock('src/bootstrap', () => ({
-  runJudgeInRealm: vi.fn<typeof runJudgeInRealm>(),
-  createReplSessionInRealm: vi.fn<typeof createReplSessionInRealm>(),
-  serializeError: (error: unknown): { name: string; message: string } => ({
-    name: error instanceof Error ? error.name : 'Error',
-    message: error instanceof Error ? error.message : String(error),
-  }),
-}))
+// Force failures at the user-code execution boundary while keeping the worker protocol real.
+vi.mock('src/bootstrap', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('src/bootstrap')>()
+  return {
+    ...actual,
+    runJudgeInRealm: vi.fn<typeof runJudgeInRealm>(),
+    createReplSessionInRealm: vi.fn<typeof createReplSessionInRealm>(),
+  }
+})
 
 vi.mock('src/console', async (importOriginal) => {
   const actual = await importOriginal<typeof import('src/console')>()

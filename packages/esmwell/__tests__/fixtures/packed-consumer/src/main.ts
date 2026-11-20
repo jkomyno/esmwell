@@ -1,4 +1,5 @@
 import { adaptWorker, createEsmwell, createModuleProjectSession, createTestSession } from 'esmwell'
+import { createHostTools } from 'esmwell/host-tools'
 import { typescriptTransform } from 'esmwell/typescript'
 import { createTypeScriptModuleScanner, TypeScriptTypeAcquirer } from 'esmwell/typescript-editor'
 import { isBareSpecifier } from 'esmwell/utils'
@@ -11,6 +12,7 @@ import EsmwellWorker from './worker?worker'
 const session = createEsmwell({
   workerFactory: () => adaptWorker(new EsmwellWorker()),
   executionWorkerUrl: ExecutionWorkerUrl,
+  hostTools: createHostTools({ tools: { add: ([left, right]) => Number(left) + Number(right) } }),
   // The consumer has no `typescript` package; the transform must still bundle
   // and simply report the compiler as unavailable when a run needs it.
   transform: typescriptTransform({ load: () => Promise.reject(new Error('typescript is not installed here')) }),

@@ -1,5 +1,5 @@
 import { installBrowserProcess } from './browser-process'
-import { serializeError } from './bootstrap'
+import { runWithWorkerBindings, workerFailure } from './bootstrap'
 import { protectConsole } from './console'
 import { runModuleProjectInRealm } from './module-project'
 import type { ModuleProjectResult } from './module-project'
@@ -26,18 +26,15 @@ scope.addEventListener('message', (event): void => {
     return
   }
 
-  void runModuleProjectInRealm(request.project, {
-    graphId: request.graphId,
-    serviceWorkerScope: request.serviceWorkerScope,
-    deps: request.deps,
-    autoInstall: request.autoInstall,
-    onPhase: (phase) => {
-      postToMain({ kind: 'phase', id: request.id, phase } satisfies WorkerResponse)
-    },
-    onConsoleChunk: (chunk) => {
-      postToMain({ kind: 'console', id: request.id, chunk } satisfies WorkerResponse)
-    },
-  })
+  void runWithWorkerBindings(request, postToMain, (handlers) =>
+    runModuleProjectInRealm(request.project, {
+      graphId: request.graphId,
+      serviceWorkerScope: request.serviceWorkerScope,
+      deps: request.deps,
+      autoInstall: request.autoInstall,
+      ...handlers,
+    }),
+  )
     .then((result) => {
       postResult(request.id, result)
     })
@@ -68,11 +65,7 @@ const tryPost = (response: WorkerResponse): boolean => {
 }
 
 const projectErrorResult = (error: unknown): ModuleProjectResult => ({
+  ...workerFailure(error),
   status: 'error',
-  ok: false,
   exports: {},
-  console: [],
-  dependencies: [],
-  error: serializeError(error),
-  durationMs: 0,
 })
