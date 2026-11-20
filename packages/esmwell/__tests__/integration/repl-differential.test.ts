@@ -19,12 +19,17 @@ const programs = [
     expression: '[observed, ((observed) => observed + 1)(10)]',
   },
   {
-    name: 'a nested update and a reference error',
+    name: 'nested updates through a persisted closure',
     inputs: (value: number) => [
       `let count = ${value}\nconst add = () => (${value % 2 === 0 ? '++count' : 'count += 2'})`,
       'const snapshot = [add(), add()]',
     ],
-    expression: 'snapshot[0] + missingBinding',
+    expression: '[snapshot, count]',
+  },
+  {
+    name: 'a reference error after reading a persisted binding',
+    inputs: (value: number) => [`const observed = ${value}`],
+    expression: 'observed + missingBinding',
   },
 ]
 
