@@ -104,13 +104,19 @@ export interface JudgeRunResult {
   readonly durationMs: number
 }
 
+/** Optional features understood by newer execution workers. */
+export interface WorkerRunBindings {
+  readonly hostToolsPort?: MessagePort
+  /** Enables phase messages when the receiver can handle them. */
+  readonly reportPhase?: true
+}
+
 /** Main-thread → worker request: run user code as a judged module. */
-export interface SupervisedExecutionOptions {
+export interface SupervisedExecutionOptions extends WorkerRunBindings {
   /** Execution deadline enforced by the supervisor worker. */
   readonly timeoutMs: number
   /** Same-origin child worker that owns submitted code. */
   readonly executionWorkerUrl?: string
-  readonly hostToolsPort?: MessagePort
 }
 
 /** Main-thread → supervisor request: run user code as a judged module. */
@@ -152,10 +158,9 @@ export interface ReplResetRequest {
 }
 
 /** Main-thread → supervisor request: run a virtual ESM test workspace. */
-export interface TestRequest {
+export interface TestRequest extends WorkerRunBindings {
   readonly kind: 'test'
   readonly id: number
-  readonly hostToolsPort?: MessagePort
   readonly run: TestRun
   readonly graphId: string
   readonly serviceWorkerScope: string
@@ -164,10 +169,9 @@ export interface TestRequest {
 }
 
 /** Main-thread → worker request: run one virtual ESM module project. */
-export interface ModuleProjectRequest {
+export interface ModuleProjectRequest extends WorkerRunBindings {
   readonly kind: 'module-project'
   readonly id: number
-  readonly hostToolsPort?: MessagePort
   readonly project: ModuleProject
   readonly graphId: string
   readonly serviceWorkerScope: string

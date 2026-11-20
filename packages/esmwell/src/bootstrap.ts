@@ -18,6 +18,7 @@ import type {
   ReplResult,
   SerializedError,
   WorkerResponse,
+  WorkerRunBindings,
 } from './types'
 
 /** Options for one in-realm judge run. */
@@ -287,14 +288,14 @@ export interface ReplEvaluateHandlers {
 }
 
 export function runWithWorkerBindings<Result>(
-  request: { readonly id: number; readonly hostToolsPort?: MessagePort },
+  request: WorkerRunBindings & { readonly id: number },
   send: (response: WorkerResponse) => void,
   run: (handlers: ReplEvaluateHandlers) => Promise<Result>,
 ): Promise<Result> {
   const { id, hostToolsPort } = request
   const handlers: ReplEvaluateHandlers = {
     onConsoleChunk: (chunk) => send({ kind: 'console', id, chunk }),
-    onPhase: (phase) => send({ kind: 'phase', id, phase }),
+    onPhase: request.reportPhase ? (phase) => send({ kind: 'phase', id, phase }) : undefined,
   }
   if (hostToolsPort === undefined) return run(handlers)
   return import('./host-tools-worker').then(({ runWithHostTools }) =>

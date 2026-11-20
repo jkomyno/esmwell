@@ -90,6 +90,27 @@ describe('execution-worker-entry: judge path failure', () => {
   })
 })
 
+it.each([false, true])('streams phases only for requests that opt in (%s)', async (reportPhase) => {
+  const { listener, postMessage, runJudgeInRealm } = await loadWorkerEntry()
+  runJudgeInRealm.mockImplementation(async (_code, options) => {
+    options.onPhase?.('module-import')
+    return { status: 'pass', ok: true, cases: [], console: [], dependencies: [], durationMs: 1 }
+  })
+  deliver(listener, {
+    kind: 'judge',
+    id: 1,
+    code: '',
+    cases: [],
+    timeoutMs: 5000,
+    ...(reportPhase ? { reportPhase: true } : {}),
+  })
+  await flushMicrotasks()
+
+  expect(postMessage.mock.calls.map(([response]) => response.kind)).toEqual(
+    reportPhase ? ['phase', 'result'] : ['result'],
+  )
+})
+
 describe('execution-worker-entry: unrecognized request kind', () => {
   it('produces a response instead of staying silent', async () => {
     const { listener, postMessage } = await loadWorkerEntry()

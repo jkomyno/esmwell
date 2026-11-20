@@ -584,7 +584,7 @@ class WorkerTransport {
       sessionWorker.addEventListener('error', onError)
       try {
         tools = message.kind === 'repl-reset' ? undefined : this.hostTools?.open()
-        const request = { ...message, id }
+        const request = { ...message, id, reportPhase: true }
         if (tools === undefined) sessionWorker.send(request)
         else sessionWorker.send({ ...request, hostToolsPort: tools.port }, [tools.port])
       } catch (error) {
