@@ -418,7 +418,7 @@ describe('test-session transport timeout', () => {
 
       await expect(pending).resolves.toMatchObject({
         status: 'error',
-        error: { name: 'TimeoutError', message: expect.stringContaining('50ms') },
+        error: { name: 'TimeoutError', message: expect.stringContaining('50ms'), phase: 'service-worker' },
       })
       expect(workerFactory).not.toHaveBeenCalled()
     } finally {
@@ -790,6 +790,7 @@ describe('session transport: transform', () => {
     expect(result.status).toBe('error')
     expect(result.error).toMatchObject({
       name: 'TypeScriptError',
+      phase: 'transform',
       message: "TS1005: ',' expected.",
       line: 3,
       column: 7,
@@ -810,6 +811,67 @@ describe('session transport: transform', () => {
     expect(worker.sent[0]).toMatchObject({ kind: 'repl-input', id: 1, input: '1 + 1' })
     worker.emitMessage({ kind: 'repl-result', id: 1, result: { ...okReplResult, value: 2 } })
     await expect(next).resolves.toMatchObject({ ok: true, value: 2 })
+  })
+
+  it('settles expired transforms without dispatching them or overlapping later submissions', async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = new FakeWorker()
+      const slow = Promise.withResolvers<string>()
+      const transform = vi.fn<SourceTransform>((source) => (source === 'slow' ? slow.promise : source))
+      const session = createReplSessionForTests([worker], { transform, timeoutMs: 50 })
+
+      const first = session.evaluate('slow')
+      const second = session.evaluate('expires in queue')
+      await vi.advanceTimersByTimeAsync(50)
+      for (const expired of [first, second]) {
+        await expect(expired).resolves.toMatchObject({
+          ok: false,
+          error: { name: 'TimeoutError', phase: 'transform' },
+        })
+      }
+      expect(transform.mock.calls.map(([source]) => source)).toEqual(['slow'])
+      expect(worker.sent).toEqual([])
+
+      slow.resolve('too late to dispatch')
+      const next = session.evaluate('recovered')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(worker.sent).toEqual([expect.objectContaining({ kind: 'repl-input', id: 1, input: 'recovered' })])
+      worker.emitMessage({ kind: 'repl-result', id: 1, result: okReplResult })
+      await expect(next).resolves.toEqual(okReplResult)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('expires a queued transform while a previous worker request still owns the session', async () => {
+    vi.useFakeTimers()
+    try {
+      const worker = new FakeWorker()
+      const transform = vi.fn<SourceTransform>((source) => source)
+      const session = createReplSessionForTests([worker], { transform, timeoutMs: 50 })
+
+      const running = session.evaluate('first')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(worker.sent).toEqual([expect.objectContaining({ kind: 'repl-input', id: 1, input: 'first' })])
+
+      const expired = session.evaluate('second')
+      const reset = session.reset()
+      await vi.advanceTimersByTimeAsync(50)
+      await expect(expired).resolves.toMatchObject({ ok: false, error: { name: 'TimeoutError', phase: 'transform' } })
+      expect(worker.sent).toHaveLength(1)
+      expect(worker.terminated).toBe(false)
+
+      worker.emitMessage({ kind: 'repl-result', id: 1, result: okReplResult })
+      await expect(running).resolves.toEqual(okReplResult)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(worker.sent[1]).toMatchObject({ kind: 'repl-reset', id: 2 })
+      worker.emitMessage({ kind: 'repl-ack', id: 2 })
+      await expect(reset).resolves.toBeUndefined()
+      expect(transform.mock.calls.map(([source]) => source)).toEqual(['first'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects a transform that does not return a string', async () => {

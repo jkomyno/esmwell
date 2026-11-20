@@ -156,6 +156,7 @@ test('terminates a synchronous test loop and cleans its virtual graph', async ()
     })
 
     assert(result.error?.name === 'TimeoutError', `hung test should time out: ${JSON.stringify(result)}`)
+    assert(result.error?.phase === 'test-workspace', 'the timeout should retain the last observed phase')
     const cacheNames = await caches.keys()
     assert(
       cacheNames.every((name) => !name.startsWith('esmwell:test-graph:')),

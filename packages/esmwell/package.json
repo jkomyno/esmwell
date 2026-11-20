@@ -69,6 +69,13 @@
         "default": "./build/utils.mjs"
       }
     },
+    "./host-tools": {
+      "import": {
+        "@jkomyno/source": "./src/host-tools.ts",
+        "types": "./build/host-tools.d.mts",
+        "default": "./build/host-tools.mjs"
+      }
+    },
     "./typescript": {
       "import": {
         "@jkomyno/source": "./src/typescript.ts",

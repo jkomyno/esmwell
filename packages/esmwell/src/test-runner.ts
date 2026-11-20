@@ -1,5 +1,6 @@
+import { importModule } from './loader'
 import { installConsoleCapture } from './console'
-import { serializeError } from './bootstrap'
+import { elapsedMs, serializeError, type ReplEvaluateHandlers } from './bootstrap'
 import { TEST_API_GLOBAL } from './test-engine'
 import { jestPackageUrls, runJestTests } from './test-engines/jest'
 import { runVitestInRealm } from './test-engines/vitest'
@@ -10,10 +11,9 @@ import type { ConsoleChunk } from './types'
 import type { TestCaseResult, TestEngineInfo, TestEnginePackage, TestRun, TestRunResult } from './test-types'
 
 /** Worker-realm options supplied by the main-thread test session. */
-export interface TestRealmOptions extends ResolveOptions {
+export interface TestRealmOptions extends ResolveOptions, ReplEvaluateHandlers {
   readonly graphId: string
   readonly serviceWorkerScope: string
-  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
 }
 
 /** Runs one virtual ESM workspace with official upstream test-engine packages. */
@@ -29,6 +29,7 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
   let graph: Awaited<ReturnType<typeof materializeTestGraph>> | undefined
 
   try {
+    options.onPhase?.('module-graph')
     graph = await materializeTestGraph({
       ...run,
       graphId: options.graphId,
@@ -36,6 +37,7 @@ export async function runTestsInRealm(run: TestRun, options: TestRealmOptions): 
       deps: options.deps,
       autoInstall: options.autoInstall,
     })
+    options.onPhase?.('test-workspace')
     const outcome = requireRegisteredTests(
       run.engine === 'vitest'
         ? await executeVitest(graph.entryUrls, run.engineVersion)
@@ -104,8 +106,8 @@ const executeVitest = async (
     files: entryUrls,
     requestedVersion: engineVersion,
     importTestFile: async (filepath, context) => {
-      installTestApi(await importUrl(context.vitestUrl))
-      return importUrl(filepath)
+      installTestApi(await importModule(context.vitestUrl))
+      return importModule(filepath)
     },
   })
   const packages: TestEnginePackage[] =
@@ -142,7 +144,7 @@ const executeJest = async (
   const result = await runJestTests(async (globals) => {
     installTestApi(globals)
     for (const entryUrl of entryUrls) {
-      await importUrl(entryUrl)
+      await importModule(entryUrl)
     }
   }, engineVersion)
   const version = result.runner.resolvedVersion
@@ -181,8 +183,3 @@ const executeJest = async (
 const installTestApi = (value: unknown): void => {
   defineEsmwellGlobal(TEST_API_GLOBAL, value)
 }
-
-const importUrl = async (url: string): Promise<Record<string, unknown>> =>
-  (await import(/* @vite-ignore */ url)) as Record<string, unknown>
-
-const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100

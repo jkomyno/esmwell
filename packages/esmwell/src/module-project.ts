@@ -1,4 +1,5 @@
-import { elapsedMs, serializeError } from './bootstrap'
+import { importModule } from './loader'
+import { elapsedMs, serializeError, type ReplEvaluateHandlers } from './bootstrap'
 import { installConsoleCapture, serializeValue } from './console'
 import { materializeModuleGraph } from './module-graph'
 import type { ResolveOptions } from './resolve'
@@ -31,10 +32,9 @@ export interface ModuleProjectResult {
 }
 
 /** Worker-realm options supplied by the main-thread project session. */
-export interface ModuleProjectRealmOptions extends ResolveOptions {
+export interface ModuleProjectRealmOptions extends ResolveOptions, ReplEvaluateHandlers {
   readonly graphId: string
   readonly serviceWorkerScope: string
-  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
 }
 
 /** Materializes and imports one virtual ESM project inside its owned worker. */
@@ -53,6 +53,7 @@ export async function runModuleProjectInRealm(
   let graph: Awaited<ReturnType<typeof materializeModuleGraph>> | undefined
 
   try {
+    options.onPhase?.('module-graph')
     graph = await materializeModuleGraph({
       modules: project.modules,
       entries: [project.entry],
@@ -63,7 +64,8 @@ export async function runModuleProjectInRealm(
       reservedLocalPrefixes: ['src/', 'tests/'],
       entryLabel: 'entry',
     })
-    const entry = await importUrl(graph.entryUrls[0]!)
+    options.onPhase?.('module-import')
+    const entry = await importModule(graph.entryUrls[0]!)
     return {
       status: 'pass',
       ok: true,
@@ -91,9 +93,6 @@ export async function runModuleProjectInRealm(
     restoreConsole()
   }
 }
-
-const importUrl = async (url: string): Promise<Record<string, unknown>> =>
-  (await import(/* @vite-ignore */ url)) as Record<string, unknown>
 
 const serializeModuleExports = (module: Record<string, unknown>): Readonly<Record<string, unknown>> =>
   Object.fromEntries(Object.entries(module).map(([name, value]) => [name, cloneableOrPreview(value)]))

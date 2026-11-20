@@ -1,6 +1,6 @@
 /** The worker surface the session transport needs; satisfied by a real module Worker. */
 export interface WorkerLike {
-  send(message: unknown): void
+  send(message: unknown, transfer?: Transferable[]): void
   terminate(): void
   addEventListener(type: string, listener: (event: unknown) => void): void
   removeEventListener(type: string, listener: (event: unknown) => void): void
@@ -13,9 +13,7 @@ export interface WorkerLike {
 export function adaptWorker(worker: Worker): WorkerLike {
   const postToWorker = worker.postMessage.bind(worker)
   return {
-    send: (message: unknown) => {
-      postToWorker(message)
-    },
+    send: postToWorker,
     terminate: () => {
       worker.terminate()
     },
@@ -27,3 +25,8 @@ export function adaptWorker(worker: Worker): WorkerLike {
     },
   }
 }
+
+export const createModuleWorker = (url: string): WorkerLike => adaptWorker(new Worker(url, { type: 'module' }))
+
+export const executionTimeoutMessage = (timeoutMs: number): string =>
+  `execution timed out after ${timeoutMs}ms and its worker was terminated`

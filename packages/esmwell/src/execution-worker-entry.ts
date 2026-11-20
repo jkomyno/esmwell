@@ -1,4 +1,4 @@
-import { createReplSessionInRealm, runJudgeInRealm, serializeError } from './bootstrap'
+import { createReplSessionInRealm, runJudgeInRealm, runWithWorkerBindings, workerFailure } from './bootstrap'
 import type { ReplRealmSession } from './bootstrap'
 import { installBrowserProcess } from './browser-process'
 import { protectConsole, serializeValue } from './console'
@@ -22,16 +22,15 @@ let replSession: ReplRealmSession | null = null
 
 scope.addEventListener('message', (event: MessageEvent<WorkerRequest>): void => {
   const request = event.data
-
   if (request.kind === 'judge') {
-    void runJudgeInRealm(request.code, {
-      cases: request.cases,
-      deps: request.deps,
-      autoInstall: request.autoInstall,
-      onConsoleChunk: (chunk) => {
-        postResponse({ kind: 'console', id: request.id, chunk })
-      },
-    })
+    void runWithWorkerBindings(request, postResponse, (handlers) =>
+      runJudgeInRealm(request.code, {
+        cases: request.cases,
+        deps: request.deps,
+        autoInstall: request.autoInstall,
+        ...handlers,
+      }),
+    )
       .then((result) => {
         postResponse({ kind: 'result', id: request.id, result })
       })
@@ -45,17 +44,13 @@ scope.addEventListener('message', (event: MessageEvent<WorkerRequest>): void => 
     if (replSession === null) {
       replSession = createReplSessionInRealm({ deps: request.deps, autoInstall: request.autoInstall })
     }
-    void replSession
-      .evaluate(request.input, {
-        onConsoleChunk: (chunk) => {
-          postResponse({ kind: 'console', id: request.id, chunk })
-        },
-      })
+    const repl = replSession
+    void runWithWorkerBindings(request, postResponse, (handlers) => repl.evaluate(request.input, handlers))
       .then((result) => {
         postResponse({ kind: 'repl-result', id: request.id, result })
       })
       .catch((error: unknown) => {
-        postResponse({ kind: 'repl-result', id: request.id, result: replErrorResult(error) })
+        postResponse({ kind: 'repl-result', id: request.id, result: workerFailure(error) })
       })
     return
   }
@@ -114,23 +109,7 @@ const fallbackResponse = (response: WorkerResponse): WorkerResponse => ({
   result: judgeErrorResult(new Error('execution worker response could not be sent to the supervisor')),
 })
 
-const judgeErrorResult = (error: unknown): JudgeRunResult => ({
-  status: 'error',
-  ok: false,
-  cases: [],
-  console: [],
-  error: serializeError(error),
-  dependencies: [],
-  durationMs: 0,
-})
-
-const replErrorResult = (error: unknown): ReplResult => ({
-  ok: false,
-  error: serializeError(error),
-  console: [],
-  dependencies: [],
-  durationMs: 0,
-})
+const judgeErrorResult = (error: unknown): JudgeRunResult => ({ ...workerFailure(error), status: 'error', cases: [] })
 
 const judgeResultWithPreviews = (result: JudgeRunResult): JudgeRunResult => ({
   ...result,

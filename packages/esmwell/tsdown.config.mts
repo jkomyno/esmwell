@@ -7,6 +7,8 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/utils.ts',
+    'src/host-tools.ts',
+    'src/host-tools-worker.ts',
     'src/typescript.ts',
     'src/typescript-editor.ts',
     'src/worker-entry.ts',

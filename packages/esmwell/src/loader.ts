@@ -41,7 +41,7 @@ const toBase64 = (code: string): string => {
 
 /** Dynamically imports a module from `url` and returns its namespace. */
 export async function importModule(url: string): Promise<ModuleNamespace> {
-  return (await import(url)) as ModuleNamespace
+  return (await import(/* @vite-ignore */ url)) as ModuleNamespace
 }
 
 /** Looks up a named export in a module namespace without throwing. */

@@ -14,7 +14,12 @@ test('infinite loop times out, terminates, and the session recovers', async () =
 
     assert(timedOut.status === 'error', 'a hung run reports an error status')
     assert(timedOut.error?.name === 'TimeoutError', `expected TimeoutError, got ${timedOut.error?.name}`)
+    assert(timedOut.error?.phase === 'judge-cases', 'the timeout should retain the last observed phase')
     assert(timedOut.error?.message.includes('terminated') === true, 'the error explains the termination')
+
+    const importTimedOut = await session.runJudge('await new Promise(() => {})', [])
+    assert(importTimedOut.error?.name === 'TimeoutError', 'a pending top-level await should time out')
+    assert(importTimedOut.error?.phase === 'module-import', 'top-level await is part of the module import')
 
     const recovered = await session.runJudge('export const solve = () => 7', [
       { name: 'recovers', exportName: 'solve', expected: 7 },

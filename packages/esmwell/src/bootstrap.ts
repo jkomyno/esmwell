@@ -9,13 +9,21 @@ import type { ResolveOptions } from './resolve'
 import type { ResolvedDependency } from './resolve'
 import { transformJudgeModule } from './transform-judge'
 import { RESULT_EXPORT, transformReplInput } from './transform-repl'
-import type { ConsoleChunk, JudgeCase, JudgeCaseResult, JudgeRunResult, ReplResult, SerializedError } from './types'
+import type {
+  ExecutionPhase,
+  ConsoleChunk,
+  JudgeCase,
+  JudgeCaseResult,
+  JudgeRunResult,
+  ReplResult,
+  SerializedError,
+  WorkerResponse,
+  WorkerRunBindings,
+} from './types'
 
 /** Options for one in-realm judge run. */
-export interface JudgeRealmOptions extends ResolveOptions {
+export interface JudgeRealmOptions extends ResolveOptions, ReplEvaluateHandlers {
   readonly cases: readonly JudgeCase[]
-  /** Streamed per console call, in addition to being collected in the result. */
-  readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
 }
 
 /**
@@ -38,6 +46,7 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
   let dependencies: ResolvedDependency[] = []
 
   try {
+    options.onPhase?.('prepare-source')
     const ast = parseUserModule(code)
     const violations = checkPolicy(ast)
     const firstViolation = violations[0]
@@ -48,8 +57,10 @@ export async function runJudgeInRealm(code: string, options: JudgeRealmOptions):
     dependencies = transformed.dependencies
     const rewritten = transformed.code
     moduleUrl = createModuleUrl(rewritten)
+    options.onPhase?.('module-import')
     const module = await importSubmittedModule(moduleUrl, dependencies)
 
+    options.onPhase?.('judge-cases')
     const caseResults: JudgeCaseResult[] = []
     for (const testCase of options.cases) {
       caseResults.push(await runJudgeCase(module, testCase))
@@ -202,6 +213,22 @@ const importSubmittedModule = async (
   }
 }
 
+interface WorkerFailure {
+  readonly ok: false
+  readonly error: SerializedError
+  readonly console: readonly ConsoleChunk[]
+  readonly dependencies: readonly ResolvedDependency[]
+  readonly durationMs: number
+}
+
+export const workerFailure = (error: unknown): WorkerFailure => ({
+  ok: false,
+  error: serializeError(error),
+  console: [],
+  dependencies: [],
+  durationMs: 0,
+})
+
 export const elapsedMs = (startedAt: number): number => Math.round((performance.now() - startedAt) * 100) / 100
 
 /**
@@ -225,9 +252,6 @@ export const __esmwell = new Proxy(__esmwellScope, {
     if (key in target) return target[key]
     if (!(key in globalThis)) throw new ReferenceError(String(key) + ' is not defined')
     const value = globalThis[key]
-    // Preserve identity for prototype-bearing global callables, which do not
-    // need receiver rebinding. Wrap receiver-sensitive non-prototype callables
-    // so WebIDL operations receive the real global object as their receiver.
     if (typeof value !== 'function' || Object.hasOwn(value, 'prototype')) return value
     let bound = __esmwellBoundGlobals.get(value)
     if (bound === undefined) {
@@ -260,6 +284,23 @@ export const __esmwellTypeof = new Proxy(__esmwellScope, {
 export interface ReplEvaluateHandlers {
   /** Console chunks as they stream in, before the result. */
   readonly onConsoleChunk?: (chunk: ConsoleChunk) => void
+  readonly onPhase?: (phase: ExecutionPhase) => void
+}
+
+export function runWithWorkerBindings<Result>(
+  request: WorkerRunBindings & { readonly id: number },
+  send: (response: WorkerResponse) => void,
+  run: (handlers: ReplEvaluateHandlers) => Promise<Result>,
+): Promise<Result> {
+  const { id, hostToolsPort } = request
+  const handlers: ReplEvaluateHandlers = {
+    onConsoleChunk: (chunk) => send({ kind: 'console', id, chunk }),
+    onPhase: request.reportPhase ? (phase) => send({ kind: 'phase', id, phase }) : undefined,
+  }
+  if (hostToolsPort === undefined) return run(handlers)
+  return import('./host-tools-worker').then(({ runWithHostTools }) =>
+    runWithHostTools(hostToolsPort, () => run(handlers)),
+  )
 }
 
 /** An in-realm REPL session: one persistent scope across evaluations. */
@@ -300,6 +341,7 @@ export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSess
       let dependencies: ResolvedDependency[] = []
 
       try {
+        handlers?.onPhase?.('prepare-source')
         const ast = parseUserModule(input)
         const firstViolation = checkPolicy(ast)[0]
         if (firstViolation !== undefined) {
@@ -312,6 +354,7 @@ export function createReplSessionInRealm(options: ResolveOptions): ReplRealmSess
         // cache by URL, so every evaluation gets a unique one.
         generation += 1
         moduleUrl = createModuleUrl(`${code}\n/* evaluation ${generation} */`)
+        handlers?.onPhase?.('module-import')
         const module = await importSubmittedModule(moduleUrl, dependencies)
         return {
           ok: true,

@@ -270,7 +270,7 @@ const result = await tests.run({
 tests.close()
 ```
 
-Test sessions default to `timeoutMs: 60000` because the same budget covers service-worker setup, the engine download, and the test run. Judge and REPL sessions keep the 5-second default.
+Test sessions default to `timeoutMs: 60000` because the same budget covers service-worker setup, the engine download, and the test run. Both graph session types count host transforms toward their run deadline. Judge and REPL sessions keep the 5-second default and give each host transform a separate budget of the same length, starting at submission. An expired async transform can finish in the background. The session preserves transform ordering and skips queued transforms whose budgets expire before they start.
 
 For Jest, import the same globals from `@jest/globals`. `jest.fn` and `jest.spyOn` use the official `jest-mock` package. Both engines and their assertion libraries load lazily from esm.sh, so judge and REPL users do not pay their download cost. The browser test payload is a few megabytes uncompressed, so start the download when a user opens or runs a test playground, not during initial page load.
 
@@ -329,8 +329,9 @@ Config files, plugins, watch mode, coverage, filesystem discovery, CJS, Node env
 | -------------------- | ----------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `deps`               | `Record<string, string>`      | `{}`                                  | Package name to pinned version for bare-import resolution. Inline versions in the source take precedence.                |
 | `autoInstall`        | `boolean`                     | `true`                                | Resolve unpinned bare imports to the CDN's latest. When `false`, an unpinned bare import is an error.                    |
-| `timeoutMs`          | `number`                      | `5000` (`60000` for test sessions)    | Hard timeout per run. Exceeding it terminates the execution worker and returns a `TimeoutError` result.                  |
+| `timeoutMs`          | `number`                      | `5000` (`60000` for test sessions)    | Timeout in milliseconds. Exceeding it returns a `TimeoutError` result and terminates any active execution worker.        |
 | `transform`          | `SourceTransform`             | none                                  | Rewrites submitted source on the main thread before it reaches the worker. See [TypeScript input](#typescript-input).    |
+| `hostTools`          | `HostTools`                   | none                                  | Named main-thread functions the execution worker can call. See [Host tools](#host-tools).                                |
 | `workerUrl`          | `string \| URL`               | mode-specific entry beside the module | URL of the coordinator, project-worker, or test-worker entry.                                                            |
 | `executionWorkerUrl` | `string \| URL`               | `execution-worker-entry.mjs`          | Same-origin child worker that owns submitted judge and REPL code.                                                        |
 | `workerFactory`      | `(url: string) => WorkerLike` | `new Worker(url, { type: 'module' })` | Builds the workers. Wrap a bundler-emitted worker with `adaptWorker`. See [Workers and bundlers](#workers-and-bundlers). |
@@ -354,6 +355,7 @@ Every result carries `status`, `console` (the collected `ConsoleChunk`s), `depen
 | Import                           | Contents                                                                                                                            |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `esmwell`                        | The four session factories, `adaptWorker`, the composition primitives, and every public type                                        |
+| `esmwell/host-tools`             | `createHostTools` for named worker-to-host calls and optional audit records                                                         |
 | `esmwell/typescript`             | `typescriptTransform` and `TypeScriptUnavailableError`                                                                              |
 | `esmwell/typescript-editor`      | Editor-neutral import scanning and automatic exact-version npm declaration acquisition                                              |
 | `esmwell/utils`                  | `isBareSpecifier`, `formatConsoleArguments`, `serializeValue`, `createWorkerRpc`, and `serveWorkerRpc`. Pulls in none of the runner |
@@ -362,6 +364,33 @@ Every result carries `status`, `console` (the collected `ConsoleChunk`s), `depen
 | `esmwell/project-worker-entry`   | Fresh page-owned worker entry for module-project sessions                                                                           |
 | `esmwell/test-worker-entry`      | Worker entry for test sessions                                                                                                      |
 | `esmwell/module-service-worker`  | Service worker backing module-project and test-session graphs                                                                       |
+
+## Host tools
+
+All four session factories accept `hostTools`. Register the exact functions submitted code may call, then use `globalThis.esmwellHostCall(name, ...args)` in submitted code.
+
+```ts
+import { createReplSession } from 'esmwell'
+import { createHostTools } from 'esmwell/host-tools'
+
+const repl = createReplSession({
+  hostTools: createHostTools({
+    tools: {
+      lookup: ([sku]) => {
+        if (typeof sku !== 'string') throw new TypeError('expected a SKU')
+        return sku === 'book' ? { inStock: true } : null
+      },
+    },
+    onCall: ({ runId, id, tool, status }) => console.info(runId, id, tool, status),
+  }),
+})
+
+const result = await repl.evaluate("await globalThis.esmwellHostCall('lookup', 'book')")
+```
+
+Arguments and results must be structured-cloneable. Calls to unregistered names and failures reject with `HostToolError`. Handlers should validate arguments and can use their second argument's `signal` to cancel outstanding work when the run settles. A run allows up to 32 pending calls. The host records completed, failed, denied, and cancelled calls through `onCall`; the records omit arguments and results.
+
+The configured tools are callable while a run is active, including by code retained in the same REPL realm. Each run closes its channel on settlement. A handler that has already started must observe its signal to stop its own work. Tool registration controls access to those host functions. Submitted code also retains the ordinary browser APIs allowed by its worker. Custom worker adapters used with host tools must forward the second, transfer-list argument of `send`. `adaptWorker` does this for native workers.
 
 ## Workers and bundlers
 
@@ -424,6 +453,8 @@ Worker isolation makes execution disposable and lets the host recover from synch
 Submitted code is rejected with line numbers for `var` declarations, `eval` references, and `Function` constructor calls before anything executes. Runtime property descriptors protect esmwell-owned globals even when code reaches them through aliases or reflection.
 
 `SerializedError` (on `JudgeCaseResult.error`, `JudgeRunResult.error`, `ReplResult.error`, `ModuleProjectResult.error`, and each `TestCaseResult.errors` entry) always carries `name` and `message`, plus `stack` when the source error had one. `name` is the reliable discriminator. Branch on it rather than parsing `message`:
+
+Run-level errors carry `phase` when the session knows how far the run got. For example, `transform` identifies host source preparation, `module-import` includes native module loading and top-level evaluation, and `judge-cases` means the judge started invoking exports. Test workspaces report `test-workspace` from engine loading through test execution. A worker timeout reports the last phase the host received.
 
 | `name`                       | Extra fields                                  | Cause                                                   |
 | ---------------------------- | --------------------------------------------- | ------------------------------------------------------- |
